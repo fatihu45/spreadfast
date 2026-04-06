@@ -1,0 +1,24 @@
+[
+  {
+    "id": "57447651-b11f-48da-9976-28ef2c674d7f",
+    "name": "spreadfast",
+    "description": "first test campaign",
+    "image": "https://via.placeholder.com/300x200?text=Campaign+Image",
+    "caption": "check out my amazing product",
+    "platform": "Instagram",
+    "budget": "100",
+    "duration": "7",
+    "createdAt": "2026-04-03T19:37:32.140Z"
+  },
+  {
+    "id": "11f11ac1-92dd-46e2-820b-2a686b541152",
+    "name": "spreadfast",
+    "description": "testing",
+    "image": "https://via.placeholder.com/300x200?text=Campaign+Image",
+    "caption": "do this with all you got",
+    "platform": "Instagram",
+    "budget": "499998",
+    "duration": "3",
+    "createdAt": "2026-04-06T11:15:14.565Z"
+  }
+]

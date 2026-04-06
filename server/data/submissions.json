@@ -1,0 +1,32 @@
+[
+  {
+    "id": "58381fdd-19b3-4e79-b331-52240ba70f4c",
+    "campaignId": "57447651-b11f-48da-9976-28ef2c674d7f",
+    "userName": "fatihu",
+    "platform": "Instagram",
+    "screenshot": "",
+    "postLink": "https://instagram.com/p/ABC123XYZ",
+    "status": "Approved",
+    "createdAt": "2026-04-03T19:43:53.843Z"
+  },
+  {
+    "id": "cd9e72ad-5e23-4465-a615-df216dd57513",
+    "campaignId": "57447651-b11f-48da-9976-28ef2c674d7f",
+    "userName": "zaksy",
+    "platform": "Instagram",
+    "screenshot": "",
+    "postLink": "https://instagram.com/p/ABC123XYZ",
+    "status": "Rejected",
+    "createdAt": "2026-04-03T20:34:18.978Z"
+  },
+  {
+    "id": "497c5a00-401f-4e0c-9314-5086957fa85a",
+    "campaignId": "11f11ac1-92dd-46e2-820b-2a686b541152",
+    "userName": "fatihu",
+    "platform": "Instagram",
+    "screenshot": "",
+    "postLink": "https://instagram.com/p/ABC123XYZ",
+    "status": "Pending",
+    "createdAt": "2026-04-06T11:15:47.220Z"
+  }
+]

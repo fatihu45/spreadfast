@@ -1,0 +1,19 @@
+{
+  "name": "spreadfast",
+  "version": "1.0.0",
+  "description": "Crowd-powered marketing MVP platform",
+  "private": true,
+  "scripts": {
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm start",
+    "install-all": "cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": [
+    "marketing",
+    "social-media",
+    "platform",
+    "promoters"
+  ],
+  "author": "",
+  "license": "MIT"
+}
