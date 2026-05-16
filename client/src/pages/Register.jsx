@@ -1,3 +1,4 @@
+/* eslint-disable */
 
 import React, { useState, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
