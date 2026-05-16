@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const API_ENDPOINT = `${API_BASE_URL}/api`;
 
 /**
  * Make an API request with proper error handling

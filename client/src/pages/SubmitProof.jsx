@@ -37,7 +37,7 @@ export default function SubmitProof() {
   // Fetch user's submissions on mount
   useEffect(() => {
     fetchSubmissions();
-  }, [token]);
+  }, [fetchSubmissions]); // add fetchsubmissions here
 
   const fetchSubmissions = async () => {
     if (!token) {
