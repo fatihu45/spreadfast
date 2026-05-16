@@ -1,0 +1,56 @@
+[
+  {
+    "id": "a8f751ba-666f-4952-94a8-8637418a8656",
+    "campaignId": "6ccfa930-81aa-444a-80a5-a37eee39137b",
+    "userId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "userName": "broski",
+    "platforms": [
+      "twitter"
+    ],
+    "proof": "{\"twitter\":\"http://x.com/xxx\"}",
+    "proofUrl": "{\"twitter\":\"http://x.com/xxx\"}",
+    "proofDescription": "twitter - fatihu",
+    "screenshot": "",
+    "status": "approved",
+    "approvalAmount": 4000,
+    "createdAt": "2026-05-06T20:58:11.519Z",
+    "reviewedAt": "2026-05-11T17:13:55.553Z"
+  },
+  {
+    "id": "ace28c49-47f4-4c27-b6dd-376f1d575c19",
+    "campaignId": "d120d292-1dd6-4021-ac63-0986ad0e2d89",
+    "userId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "userName": "broski",
+    "platforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "proof": "{\"tiktok\":\"http://tiktok.com/xxxx\",\"instagram\":\"http://instagram.com/xxx\"}",
+    "proofUrl": "{\"tiktok\":\"http://tiktok.com/xxxx\",\"instagram\":\"http://instagram.com/xxx\"}",
+    "proofDescription": "tiktok, instagram - testing",
+    "screenshot": "",
+    "status": "approved",
+    "approvalAmount": 500000,
+    "createdAt": "2026-05-13T21:04:04.956Z",
+    "reviewedAt": "2026-05-13T21:10:58.812Z"
+  },
+  {
+    "id": "7b92d2f6-282d-4c16-89db-98cd4f928728",
+    "campaignId": "3ab3aa1c-bfcf-4da6-91a5-e3dc308b057b",
+    "userId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "userName": "broski",
+    "platforms": [
+      "tiktok",
+      "instagram",
+      "facebook"
+    ],
+    "proof": "{\"tiktok\":\"http://tiktik.com/post/xxxxxx\",\"instagram\":\"http://instagram.com/post/xxxxxx\",\"facebook\":\"http://facebook.com/post/xxxxxx\"}",
+    "proofUrl": "{\"tiktok\":\"http://tiktik.com/post/xxxxxx\",\"instagram\":\"http://instagram.com/post/xxxxxx\",\"facebook\":\"http://facebook.com/post/xxxxxx\"}",
+    "proofDescription": "tiktok, instagram, facebook - testing",
+    "screenshot": "",
+    "status": "rejected",
+    "approvalAmount": 0,
+    "createdAt": "2026-05-13T21:07:39.148Z",
+    "reviewedAt": "2026-05-13T21:11:02.602Z"
+  }
+]

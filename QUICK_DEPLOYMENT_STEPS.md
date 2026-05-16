@@ -151,13 +151,13 @@ In Railway dashboard:
 https://spreadfast-production.up.railway.app
 ```
 
-**Save this as:** `BACKEND_URL`
+**Save this as:** `BACKEND_URL` spreadfast-production.up.railway.app
 
 ### Test it works:
 
 ```powershell
 # Replace with your actual URL
-curl https://your-backend-url/api/health
+curl https://spreadfast-production.up.railway.app/api/health
 ```
 
 Should return:
@@ -201,7 +201,7 @@ After deployment, Vercel shows your URL:
 https://spreadfast.vercel.app
 ```
 
-**Save this as:** `FRONTEND_URL`
+**Save this as:** `FRONTEND_URL` spreadfast-woad.vercel.app
 
 ---
 

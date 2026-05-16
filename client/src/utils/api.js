@@ -1,6 +1,72 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_ENDPOINT = `${API_BASE_URL}/api`;
+
+/**
+ * Make an API request with proper error handling
+ * @param {string} endpoint - API endpoint (e.g., '/api/auth/login')
+ * @param {object} options - Fetch options (method, headers, body, etc.)
+ * @returns {Promise} - Response data
+ */
+export async function apiCall(endpoint, options = {}) {
+  try {
+    const url = `${API_BASE_URL}${endpoint}`;
+    
+    // Add timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds
+
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('API call error:', error);
+    
+    if (error.name === 'AbortError') {
+      return { 
+        success: false, 
+        message: 'Request timeout. Backend may be down.' 
+      };
+    }
+    
+    return { 
+      success: false, 
+      message: error.message || 'API request failed' 
+    };
+  }
+}
+
+/**
+ * Make an authenticated API request
+ * @param {string} endpoint - API endpoint
+ * @param {string} token - JWT token
+ * @param {object} options - Fetch options
+ * @returns {Promise} - Response data
+ */
+export async function apiCallAuth(endpoint, token, options = {}) {
+  return apiCall(endpoint, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      ...options.headers
+    }
+  });
+}
 
 // Campaign API calls
 export const getCampaigns = async () => {

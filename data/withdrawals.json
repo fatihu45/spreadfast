@@ -1,0 +1,33 @@
+[
+  {
+    "id": "421965d5-45bc-4419-885e-5107ea068871",
+    "userId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "userName": "broski",
+    "email": "broskixyz6@gmail.com",
+    "amount": 2000,
+    "bankDetails": {
+      "bankName": "Gtbank",
+      "accountName": "MUAZ ABDULLAHI FATIHU",
+      "accountNumber": "0000000000",
+      "updatedAt": "2026-05-11T06:20:21.087Z"
+    },
+    "status": "completed",
+    "createdAt": "2026-05-11T17:15:29.751Z",
+    "reviewedAt": "2026-05-13T21:10:32.609Z"
+  },
+  {
+    "id": "f7b96a15-8a7f-4475-ac72-54e3330d1e8b",
+    "userId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "userName": "broski",
+    "email": "broskixyz6@gmail.com",
+    "amount": 20000,
+    "bankDetails": {
+      "bankName": "Gtbank",
+      "accountName": "MUAZ ABDULLAHI FATIHU",
+      "accountNumber": "0000000000",
+      "updatedAt": "2026-05-11T06:20:21.087Z"
+    },
+    "status": "pending",
+    "createdAt": "2026-05-14T06:34:05.695Z"
+  }
+]

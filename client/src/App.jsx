@@ -1,33 +1,123 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import Landing from './pages/Landing';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
 import CompanyDashboard from './pages/CompanyDashboard';
-import PromoteSignup from './pages/PromoteSignup';
-import Campaigns from './pages/Campaigns';
-import SubmitProof from './pages/SubmitProof';
 import AdminDashboard from './pages/AdminDashboard';
-import './index.css';
+import Wallet from './pages/Wallet';
+import PaymentCallback from './pages/PaymentCallback';
+import PromotionDashboard from './pages/PromotionDashboard';
+import AvailableCampaigns from './pages/AvailableCampaigns';
+import SubmitProof from './pages/SubmitProof';
+import './App.css';
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = React.useContext(AuthContext);
+
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = React.useContext(AuthContext);
+
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  
+  // Check if user is admin (compare with env variable)
+  const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
+  if (user.email !== adminEmail) {
+    // Redirect based on user role
+    if (user.role === 'promoter') {
+      return <Navigate to="/promoter-dashboard" />;
+    } else if (user.role === 'company') {
+      return <Navigate to="/company" />;
+    }
+    return <Navigate to="/" />;
+  }
+  return children;
+}
 
 function App() {
   return (
-    <Router>
-      <div className="flex flex-col min-h-screen">
-        <Navbar />
-        <main className="flex-grow">
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/company" element={<CompanyDashboard />} />
-            <Route path="/signup" element={<PromoteSignup />} />
-            <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/submit" element={<SubmitProof />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-          </Routes>
-        </main>
-        <Footer />
-      </div>
-    </Router>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/payment-callback" element={<PaymentCallback />} />
+          
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/company"
+            element={
+              <ProtectedRoute>
+                <CompanyDashboard />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/wallet"
+            element={
+              <ProtectedRoute>
+                <Wallet />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/promoter-dashboard"
+            element={
+              <ProtectedRoute>
+                <PromotionDashboard />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/available-campaigns"
+            element={
+              <ProtectedRoute>
+                <AvailableCampaigns />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/submit-proof"
+            element={
+              <ProtectedRoute>
+                <SubmitProof />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Hidden Admin Portal - Only accessible to admin email */}
+          <Route
+            path="/admin-portal"
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

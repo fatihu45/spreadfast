@@ -1,0 +1,39 @@
+[
+  {
+    "id": "3ab3aa1c-bfcf-4da6-91a5-e3dc308b057b",
+    "title": "spreadfast",
+    "description": "create a video explaining how spreadfast works. check site for more info",
+    "budget": "100000",
+    "amountPaid": 100000,
+    "companyId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram",
+      "facebook"
+    ],
+    "status": "active",
+    "paystackReference": "2ymmypzp1z",
+    "createdAt": "2026-05-13T21:00:56.591Z",
+    "subscribedPromoters": [
+      {
+        "promoterId": "12bac686-90a9-4784-a9b7-150924cdea0b",
+        "promoterName": "broski",
+        "subscribedAt": "2026-05-13T21:02:15.835Z"
+      }
+    ]
+  },
+  {
+    "id": "54f11d3b-851e-4de2-8ecd-dc816bf106a2",
+    "title": "ABAYA",
+    "description": "CREATE A CAMPAIGN ABOUT OUR ABAYA",
+    "budget": "30000",
+    "amountPaid": 30000,
+    "companyId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "socialMediaPlatforms": [
+      "tiktok"
+    ],
+    "status": "active",
+    "paystackReference": "qji9ox122u",
+    "createdAt": "2026-05-15T15:09:15.584Z"
+  }
+]

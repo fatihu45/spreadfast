@@ -1,0 +1,57 @@
+[
+  {
+    "id": "8acbf566-f8b1-402e-839b-93d660a3fd56",
+    "name": "user test",
+    "email": "fatihu45@gmail.com",
+    "password": "$2b$10$ZDqGb7qlZTQwQqlIa.pwsOIEOdqbhaoHUrta/moL5ObuFx2osam7K",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-04-23T15:01:19.203Z"
+  },
+  {
+    "id": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "name": "testing",
+    "email": "fatihum25@gmail.com",
+    "password": "$2b$10$4aXA5HBUrf5lTOpJF7VCoOirD9/rF6UOUbh3ZX96JhUZYzbJzNB12",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-03T21:12:24.201Z"
+  },
+  {
+    "id": "12bac686-90a9-4784-a9b7-150924cdea0b",
+    "name": "broski",
+    "email": "broskixyz6@gmail.com",
+    "password": "$2b$10$9Sc8EKUfq4eafwP9YXemFufESxWtHj2ibIYPX6jQsia30x8Loll8.",
+    "role": "promoter",
+    "walletBalance": 482000,
+    "bankDetails": {
+      "bankName": "Gtbank",
+      "accountName": "MUAZ ABDULLAHI FATIHU",
+      "accountNumber": "0000000000",
+      "updatedAt": "2026-05-11T06:20:21.087Z"
+    },
+    "createdAt": "2026-05-03T21:31:41.901Z"
+  },
+  {
+    "id": "d7a9c3bf-e22c-489d-8f0a-f7ba346fa0aa",
+    "name": "spreadfastadmin",
+    "email": "admin@spreadfast.com",
+    "password": "$2b$10$UEFU542jeRj8KLUHiD3gO.VOetxTXtU4..720vn0AFSWGlXF71Lyy",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-11T06:57:00.737Z"
+  },
+  {
+    "id": "c23be649-e9a0-4eab-a09c-ce883199e934",
+    "name": "spreadfastAdmin",
+    "email": "tryspreadfast@gmail.com",
+    "password": "$2b$10$O.K0zYh6QElUfPAlkUQpLe3t1pRbpaUVXaORFwtzCnKx7f9wCYEAK",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-11T15:50:16.800Z"
+  }
+]

@@ -1,0 +1,460 @@
+[
+  {
+    "id": "8d7142b2-4016-47e4-b96c-c1712c98308c",
+    "reference": "ksvq4zx1jf",
+    "userId": "8acbf566-f8b1-402e-839b-93d660a3fd56",
+    "email": "fatihu45@gmail.com",
+    "amount": 200000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-04-23T15:03:06.148Z"
+  },
+  {
+    "id": "e1df4d78-d181-4215-a12e-27205224405c",
+    "reference": "a8xrxc557u",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 10000,
+    "campaignName": "bread campaign",
+    "status": "pending",
+    "createdAt": "2026-05-03T21:26:48.726Z"
+  },
+  {
+    "id": "1c4c0c43-4cb8-4aa5-8fa6-e188fb9d67a7",
+    "reference": "pwsc6ulcry",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 50000,
+    "campaignName": "testing campaign",
+    "status": "pending",
+    "createdAt": "2026-05-04T17:45:49.804Z"
+  },
+  {
+    "id": "05533a1c-0bbf-42d8-ab76-b544c9e596a4",
+    "reference": "hihqhhxv9u",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 50000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-05T08:03:38.454Z"
+  },
+  {
+    "id": "68f3fb3b-2cf7-48c1-b3c9-07f32ee00f58",
+    "reference": "kjwn2syp9s",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 200000,
+    "campaignName": "testing campaign",
+    "status": "pending",
+    "createdAt": "2026-05-06T09:55:54.341Z"
+  },
+  {
+    "id": "74c4ece7-6257-4633-8830-2369234efbe4",
+    "reference": "rg86gpa8lk",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 100000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-06T20:40:27.765Z"
+  },
+  {
+    "id": "ea627b0b-ee1b-4eea-b4b3-94ae0e4f0f81",
+    "reference": "0mrp3k9en7",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 100000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-06T20:42:13.965Z"
+  },
+  {
+    "id": "5354dced-21b5-43d0-83e8-f82172d7e7a8",
+    "reference": "vscezwlulu",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 100000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-06T21:50:25.188Z"
+  },
+  {
+    "id": "9eb941c1-37ab-42bf-a884-8c567fdd9920",
+    "reference": "dg4y8e87ce",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 180000,
+    "campaignName": "airtime purchase",
+    "status": "pending",
+    "createdAt": "2026-05-07T08:09:13.279Z"
+  },
+  {
+    "id": "02d41035-3929-4bde-8773-bfc82616c6dc",
+    "reference": "r5zyb97uy7",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 30000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-08T08:34:15.150Z"
+  },
+  {
+    "id": "37dd9476-5e5d-4a16-af03-8b5a2377210f",
+    "reference": "42agbma6ok",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 400000,
+    "campaignName": "testing ",
+    "status": "pending",
+    "createdAt": "2026-05-08T08:57:20.652Z"
+  },
+  {
+    "id": "b3346952-3d49-41b5-ae79-fb18dc86fa8d",
+    "reference": "3aqn3fx7o8",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 330000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T06:38:03.426Z"
+  },
+  {
+    "id": "58418cce-ae43-4321-90b3-6623b3a7d939",
+    "reference": "z569kw34g9",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 290000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T06:45:42.052Z"
+  },
+  {
+    "id": "abf173cb-0eb0-4bf1-b2dd-451e0ee177bd",
+    "reference": "gew69uzrel",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 210000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T15:58:47.755Z"
+  },
+  {
+    "id": "d21d17de-5854-4609-8f06-af779e936989",
+    "reference": "sk2yuxjb16",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 220000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:16:41.641Z"
+  },
+  {
+    "id": "92382e78-affd-4464-ab00-6379ae78f386",
+    "reference": "fgn8sxhm7n",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 220000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:17:18.584Z"
+  },
+  {
+    "id": "543dda05-1a17-4d73-bd67-a205ac548824",
+    "reference": "xviow1peuk",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 220000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:17:51.667Z"
+  },
+  {
+    "id": "0c28f0f8-e87e-4faa-91a4-b8a854625542",
+    "reference": "a9n3siktq5",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 380000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:22:16.682Z"
+  },
+  {
+    "id": "0ccaa3a0-a01b-4b21-83c2-56a1ef16e2df",
+    "reference": "licccolote",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 380000,
+    "campaignName": "testing",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:25:36.893Z"
+  },
+  {
+    "id": "ec1fa63e-c28b-4fe9-bd84-cfd66d6e6dd6",
+    "reference": "5osr41zfwt",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 1000000,
+    "campaignName": "testing013",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:36:11.294Z"
+  },
+  {
+    "id": "60a038a0-bc2b-418e-8d73-c5326f6af294",
+    "reference": "qlwwda5uq6",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 1000000,
+    "campaignName": "testing015",
+    "status": "pending",
+    "createdAt": "2026-05-11T16:53:17.069Z"
+  },
+  {
+    "id": "4b143f4c-bde4-4bc1-8248-208ce3925f86",
+    "reference": "7m5jog5gsy",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 1180000,
+    "campaignName": "testing 016",
+    "status": "pending",
+    "createdAt": "2026-05-11T17:08:48.927Z"
+  },
+  {
+    "id": "8147a192-89a6-4abe-b256-8e9126f73e60",
+    "reference": "ukwkor5fhy",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 270000,
+    "campaignName": "testing 017",
+    "status": "pending",
+    "createdAt": "2026-05-12T06:11:24.765Z"
+  },
+  {
+    "id": "23ea9796-01c4-4940-8ad6-8b119d80d339",
+    "reference": "jokf157wl8",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 2370000,
+    "campaignName": "testing 018",
+    "status": "pending",
+    "createdAt": "2026-05-12T06:20:19.267Z"
+  },
+  {
+    "id": "7f7112ca-9674-491d-b890-427b2c559c36",
+    "reference": "h4xzbbmj6c",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 520000,
+    "campaignName": "testing 019",
+    "status": "pending",
+    "createdAt": "2026-05-12T06:29:56.486Z"
+  },
+  {
+    "id": "3cc60a0f-0fb8-4449-ace7-291d4889adad",
+    "reference": "mlu4hsebrd",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 320000,
+    "campaignName": "testing 020",
+    "status": "pending",
+    "createdAt": "2026-05-12T06:46:01.008Z"
+  },
+  {
+    "id": "7842924c-2da2-447d-8496-301f5bb69b15",
+    "reference": "5m3al619lw",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 12000000,
+    "campaignName": "testing 021",
+    "status": "pending",
+    "createdAt": "2026-05-12T17:56:31.536Z"
+  },
+  {
+    "id": "f7234a4a-8bfc-47ae-9244-694a48cff2a1",
+    "reference": "9telfy7wtk",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 320000,
+    "campaignName": "testing 023",
+    "status": "pending",
+    "createdAt": "2026-05-13T09:09:26.417Z"
+  },
+  {
+    "id": "9203c98c-46fe-4df8-81a1-ff047cee5f91",
+    "reference": "gqjmv2wf0f",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 3940000,
+    "campaignName": "testing 024",
+    "status": "pending",
+    "createdAt": "2026-05-13T09:33:57.274Z"
+  },
+  {
+    "id": "eeb4ff52-61be-4e20-aab2-14d7f6ffaaad",
+    "reference": "6myfhofe0h",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 3460000,
+    "campaignName": "testing 025",
+    "status": "pending",
+    "createdAt": "2026-05-13T09:58:32.681Z"
+  },
+  {
+    "id": "b25c0ec1-c9a6-426c-9ebe-573bf735be34",
+    "reference": "8q3mam9qkl",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 20000000,
+    "campaignName": "testing 026",
+    "status": "pending",
+    "createdAt": "2026-05-13T10:22:27.104Z"
+  },
+  {
+    "id": "5d65e922-3058-4a75-ad9e-ebacd3a519f0",
+    "reference": "bhnl4ddist",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 230000,
+    "campaignName": "testing 027",
+    "status": "pending",
+    "createdAt": "2026-05-13T10:37:52.736Z"
+  },
+  {
+    "id": "87c7db11-6307-4df6-aa05-c55975e610ff",
+    "reference": "ln4z2zqb2g",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 4000000,
+    "campaignName": "testing 027",
+    "status": "pending",
+    "createdAt": "2026-05-13T10:56:52.109Z"
+  },
+  {
+    "id": "b0d55342-5623-4630-b831-f28eca4a3b75",
+    "reference": "lnbcklohf4",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 31950000,
+    "campaignName": "testing 028",
+    "status": "pending",
+    "createdAt": "2026-05-13T19:32:56.891Z"
+  },
+  {
+    "id": "42e61692-830d-42fa-84fa-517fbefb85cc",
+    "reference": "qqd1jsc7ml",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 12000000,
+    "campaignName": "testing 029",
+    "description": "create a promotional video explaining our product. be creative. check website for more info: tryspreadfast.com",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-13T20:57:16.712Z",
+    "campaignId": "d120d292-1dd6-4021-ac63-0986ad0e2d89"
+  },
+  {
+    "id": "ae72bade-57bf-4a94-b64f-e55a8c2b319a",
+    "reference": "2ymmypzp1z",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 100000,
+    "campaignName": "spreadfast",
+    "description": "create a video explaining how spreadfast works. check site for more info",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram",
+      "facebook"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-13T21:00:00.854Z",
+    "campaignId": "3ab3aa1c-bfcf-4da6-91a5-e3dc308b057b"
+  },
+  {
+    "id": "1eff747b-f4d0-493e-bfd8-3def71b94899",
+    "reference": "3jf0t8uqzk",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 50000,
+    "campaignName": "ABAYA by fatiha",
+    "description": "create a video about my abaya business",
+    "socialMediaPlatforms": [
+      "tiktok"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-14T06:36:29.958Z",
+    "campaignId": "430937c0-4bee-4e3c-88b3-12d10f44bfd9"
+  },
+  {
+    "id": "193952db-9a14-4cdc-9f77-59657141c191",
+    "reference": "jirwj81sx1",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 10000,
+    "campaignName": "halils fashion",
+    "description": "make a video abour our brand",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram",
+      "twitter",
+      "facebook",
+      "youtube"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-15T06:57:06.186Z",
+    "campaignId": "3b3418e5-83b1-4954-be19-c869364b9482"
+  },
+  {
+    "id": "2524908d-46f0-4d0f-bb4b-4ebbbdc41e43",
+    "reference": "8civwmzjzp",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 30000,
+    "campaignName": "ABAYA",
+    "description": "make a video explaining our product",
+    "socialMediaPlatforms": [
+      "tiktok"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-15T14:41:28.934Z"
+  },
+  {
+    "id": "f452afa3-9b15-4d0b-8925-5743b9398e94",
+    "reference": "znbuwu0qh2",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 30000,
+    "campaignName": "ABAYA",
+    "description": "we sell best abaya in lagos. make a video explaining our product",
+    "socialMediaPlatforms": [
+      "tiktok"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-15T14:45:51.784Z",
+    "campaignId": "c7a9419b-5418-48a7-8c8d-7eed98a9959b"
+  },
+  {
+    "id": "644b93c0-7e12-49d5-b311-19d85ae4e94e",
+    "reference": "qji9ox122u",
+    "userId": "61b7f815-92c6-4361-8083-efad3a41506e",
+    "email": "fatihum25@gmail.com",
+    "amount": 30000,
+    "campaignName": "ABAYA",
+    "description": "CREATE A CAMPAIGN ABOUT OUR ABAYA",
+    "socialMediaPlatforms": [
+      "tiktok"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-15T15:08:55.061Z",
+    "campaignId": "54f11d3b-851e-4de2-8ecd-dc816bf106a2"
+  }
+]

@@ -5,7 +5,7 @@ export default function Navbar() {
   return (
     <nav className="bg-primary text-white shadow-lg">
       <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-        <Link to="/" className="text-2xl font-bold">SpreadFast</Link>
+        <span className="text-2xl font-bold cursor-default">SpreadFast</span>
         <div className="flex gap-4">
           <Link to="/" className="hover:text-green-200 transition">Home</Link>
           <Link to="/campaigns" className="hover:text-green-200 transition">Campaigns</Link>
