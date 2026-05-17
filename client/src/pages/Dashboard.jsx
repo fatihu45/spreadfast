@@ -12,31 +12,29 @@ export default function Dashboard() {
 
   // Guard: Redirect if not authenticated
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/login');
-    }
-  }, [authLoading, user, navigate]);
+  if (!authLoading && !user) {
+    navigate('/login');
+    return;
+  }
 
-  useEffect(() => {
-    if (user) {
-      fetchCampaigns();
+  if (!authLoading && user) {
+    // Admin redirect
+    if (user.email === process.env.REACT_APP_ADMIN_EMAIL) {
+      navigate('/admin');
+      return;
     }
-  }, [user]);
-
-  const fetchCampaigns = async () => {
-    try {
-      setLoading(true);
-      const data = await apiCall('/api/campaigns');
-      if (data?.success) {
-        setCampaigns(data.campaigns || []);
-      }
-    } catch (error) {
-      console.error('Fetch error:', error);
-      setCampaigns([]);
-    } finally {
-      setLoading(false);
+    // Company redirect
+    if (user.role === 'company') {
+      navigate('/company');
+      return;
     }
-  };
+    // Promoter redirect
+    if (user.role === 'promoter') {
+      navigate('/promoter-dashboard');
+      return;
+    }
+  }
+}, [authLoading, user, navigate]);
 
   // Loading state from AuthContext
   if (authLoading) {

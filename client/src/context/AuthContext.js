@@ -18,25 +18,37 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const fetchUser = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUser(data.user);
-      } else {
-        localStorage.removeItem('token');
-        setToken(null);
-      }
-    } catch (error) {
-      console.error('Fetch user error:', error);
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    const data = await response.json();
+
+    if (data.success) {
+      setUser(data.user);
+    } else {
       localStorage.removeItem('token');
       setToken(null);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Fetch user error:', error);
+    if (error.name === 'AbortError') {
+      console.log('Server waking up - retrying in 5 seconds...');
+      setTimeout(() => fetchUser(), 5000);
+      return;
+    }
+    localStorage.removeItem('token');
+    setToken(null);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const register = async (name, email, password, role, socialMedia = {}) => {
     try {
