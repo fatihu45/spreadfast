@@ -103,18 +103,8 @@ const paystackTransactionSchema = new mongoose.Schema({
 const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransactionSchema);
 
 // ==================== NODEMAILER ====================
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000
-});
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 
@@ -288,7 +278,12 @@ const sendWelcomeEmail = async (name, email, role) => {
       </div>
     `
   };
-  await transporter.sendMail(mailOptions);
+  await resend.emails.send({
+  from: 'SpreadFast <onboarding@resend.dev>',
+  to: email,
+  subject: mailOptions.subject,
+  html: mailOptions.html
+});
   console.log('Welcome email sent to:', email);
 };
 
@@ -331,7 +326,12 @@ const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign
       </div>
     `
   };
-  await transporter.sendMail(mailOptions);
+  await resend.emails.send({
+  from: 'SpreadFast <onboarding@resend.dev>',
+  to: email,
+  subject: mailOptions.subject,
+  html: mailOptions.html
+});
   console.log('Campaign confirmation email sent to:', companyEmail);
 };
 
@@ -389,8 +389,12 @@ const sendNewCampaignAlertToPromoters = async (campaign) => {
           </div>
         `
       };
-      return transporter.sendMail(mailOptions);
-    });
+      await resend.emails.send({
+  from: 'SpreadFast <onboarding@resend.dev>',
+  to: email,
+  subject: mailOptions.subject,
+  html: mailOptions.html
+});
     await Promise.allSettled(emailPromises);
     console.log(`Campaign alert sent to ${promoters.length} promoters`);
   } catch (error) {
