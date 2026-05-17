@@ -17,10 +17,10 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const fetchUser = async () => {
+  const fetchUser = async (retryCount = 0) => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 40000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -38,9 +38,9 @@ export function AuthProvider({ children }) {
     }
   } catch (error) {
     console.error('Fetch user error:', error);
-    if (error.name === 'AbortError') {
-      console.log('Server waking up - retrying in 7 seconds...');
-      setTimeout(() => fetchUser(), 7000);
+    if (error.name === 'AbortError' && retryCount < 3) {
+      console.log(`Server waking up - retry ${retryCount + 1}/3`);
+      setTimeout(() => fetchUser(retryCount + 1), 15000);
       return;
     }
     localStorage.removeItem('token');
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
   const register = async (name, email, password, role, socialMedia = {}) => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
       const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
@@ -85,38 +85,52 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
+  try {
+    // Wake up Render first
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        signal: controller.signal
+      await fetch(`${API_URL}/api/health`, { 
+        signal: AbortSignal.timeout(5000) 
       });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        localStorage.setItem('token', data.token);
-        setToken(data.token);
-        setUser(data.user);
-      }
-      return data;
-    } catch (error) {
-      console.error('Login error:', error);
-      if (error.name === 'AbortError') {
-        return { success: false, message: 'Login timeout. Backend may be down.' };
-      }
-      return { success: false, message: error.message || 'Login failed' };
+    } catch (e) {
+      // ignore - just waking up server
     }
-  };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      localStorage.setItem('token', data.token);
+      setToken(data.token);
+      setUser(data.user);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Login error:', error);
+    if (error.name === 'AbortError') {
+      return { 
+        success: false, 
+        message: 'Server is waking up, please try again in 30 seconds.' 
+      };
+    }
+    return { success: false, message: error.message || 'Login failed' };
+  }
+};
 
   const logout = () => {
     localStorage.removeItem('token');
