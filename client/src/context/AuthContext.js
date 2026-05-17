@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
   const fetchUser = async () => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 40000);
 
     const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -39,8 +39,8 @@ export function AuthProvider({ children }) {
   } catch (error) {
     console.error('Fetch user error:', error);
     if (error.name === 'AbortError') {
-      console.log('Server waking up - retrying in 5 seconds...');
-      setTimeout(() => fetchUser(), 5000);
+      console.log('Server waking up - retrying in 7 seconds...');
+      setTimeout(() => fetchUser(), 7000);
       return;
     }
     localStorage.removeItem('token');
