@@ -102,7 +102,7 @@ const paystackTransactionSchema = new mongoose.Schema({
 });
 const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransactionSchema);
 
-// ==================== NODEMAILER ====================
+// ==================== resent mailer ====================
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -343,7 +343,7 @@ const sendNewCampaignAlertToPromoters = async (campaign) => {
       return;
     }
     const promoterSlots = Math.floor(parseFloat(campaign.budget) / 2000);
-    const emailPromises = promoters.map(promoter => {
+    const emailPromises = promoters.map(async promoter => {
       const mailOptions = {
         from: `"SpreadFast" <${process.env.EMAIL_USER}>`,
         to: promoter.email,
@@ -389,12 +389,13 @@ const sendNewCampaignAlertToPromoters = async (campaign) => {
           </div>
         `
       };
-      await resend.emails.send({
-  from: 'SpreadFast <onboarding@resend.dev>',
-  to: email,
-  subject: mailOptions.subject,
-  html: mailOptions.html
-});
+      return await resend.emails.send({
+        from: 'SpreadFast <onboarding@resend.dev>',
+        to: promoter.email,
+        subject: mailOptions.subject,
+        html: mailOptions.html
+      });
+    });
     await Promise.allSettled(emailPromises);
     console.log(`Campaign alert sent to ${promoters.length} promoters`);
   } catch (error) {
