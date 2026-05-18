@@ -5,9 +5,12 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
+const { Resend } = require('resend');
 require('dotenv').config();
+
+// ==================== RESEND EMAIL ====================
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ==================== MONGODB CONNECTION ====================
 const connectDB = async () => {
@@ -22,7 +25,6 @@ const connectDB = async () => {
 connectDB();
 
 // ==================== MONGODB MODELS ====================
-
 const userSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
@@ -102,9 +104,177 @@ const paystackTransactionSchema = new mongoose.Schema({
 });
 const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransactionSchema);
 
-// ==================== resent mailer ====================
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
+// ==================== EMAIL HELPER ====================
+// Single email sending function using Resend
+const sendEmail = async (to, subject, html) => {
+  try {
+    const result = await resend.emails.send({
+      from: 'SpreadFast <onboarding@resend.dev>',
+      to: to,
+      subject: subject,
+      html: html
+    });
+    console.log('Email sent successfully to:', to, '| ID:', result.id);
+    return result;
+  } catch (error) {
+    console.error('Email send error:', error.message);
+    throw error;
+  }
+};
+
+// ==================== EMAIL FUNCTIONS ====================
+const sendWelcomeEmail = async (name, email, role) => {
+  const isCompany = role === 'company';
+  const subject = 'Welcome to SpreadFast! 🎉';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
+        <h1 style="color: white; margin: 0;">Welcome to SpreadFast!</h1>
+      </div>
+      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
+        <h2 style="color: #15803d;">Hi ${name}! 👋</h2>
+        <p style="color: #444; font-size: 16px;">
+          Your account has been created successfully as a
+          <strong>${isCompany ? 'Company' : 'Promoter'}</strong>.
+        </p>
+        ${isCompany ? `
+        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #15803d;">As a Company you can:</h3>
+          <ul style="color: #444;">
+            <li>Create campaigns for promoters to spread</li>
+            <li>Pay securely via Paystack</li>
+            <li>Track promoter submissions</li>
+            <li>Grow your brand fast</li>
+          </ul>
+        </div>
+        ` : `
+        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #15803d;">As a Promoter you can:</h3>
+          <ul style="color: #444;">
+            <li>Browse available campaigns</li>
+            <li>Submit proof of promotion</li>
+            <li>Earn money directly to your wallet</li>
+            <li>Withdraw to your bank account</li>
+          </ul>
+        </div>
+        `}
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}"
+             style="background-color: #15803d; color: white; padding: 15px 30px;
+                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+            Go to SpreadFast →
+          </a>
+        </div>
+      </div>
+      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
+        © 2025 SpreadFast. All rights reserved.<br/>
+        If you did not create this account, please ignore this email.
+      </p>
+    </div>
+  `;
+  await sendEmail(email, subject, html);
+  console.log('Welcome email sent to:', email);
+};
+
+const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign) => {
+  const subject = `✅ Your Campaign "${campaign.title}" is Now Live!`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
+        <h1 style="color: white; margin: 0;">Campaign Live! 🚀</h1>
+      </div>
+      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
+        <h2 style="color: #15803d;">Hi ${companyName}!</h2>
+        <p style="color: #444; font-size: 16px;">
+          Your campaign has been created successfully and is now
+          <strong style="color: #15803d;">LIVE</strong> to promoters!
+        </p>
+        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
+          <h3 style="color: #15803d; margin-top: 0;">Campaign Details</h3>
+          <table style="width: 100%; color: #444;">
+            <tr><td style="padding: 8px 0;"><strong>Campaign Name:</strong></td><td>${campaign.title}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Budget:</strong></td><td>₦${parseFloat(campaign.budget).toLocaleString()}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Amount Paid:</strong></td><td>₦${parseFloat(campaign.amountPaid).toLocaleString()}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Active ✅</strong></td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Payment Reference:</strong></td><td style="font-size: 12px;">${campaign.paystackReference || 'N/A'}</td></tr>
+          </table>
+        </div>
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/company"
+             style="background-color: #15803d; color: white; padding: 15px 30px;
+                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+            View Your Campaign →
+          </a>
+        </div>
+      </div>
+      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">© 2025 SpreadFast. All rights reserved.</p>
+    </div>
+  `;
+  await sendEmail(companyEmail, subject, html);
+  console.log('Campaign confirmation email sent to:', companyEmail);
+};
+
+const sendNewCampaignAlertToPromoters = async (campaign) => {
+  try {
+    const promoters = await User.find({ role: 'promoter' });
+    if (promoters.length === 0) {
+      console.log('No promoters to notify');
+      return;
+    }
+    const promoterSlots = Math.floor(parseFloat(campaign.budget) / 2000);
+    const subject = `🔔 New Campaign Available: "${campaign.title}" — Earn Money Now!`;
+
+    const emailPromises = promoters.map(async (promoter) => {
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
+            <h1 style="color: white; margin: 0;">New Campaign Alert! 🔔</h1>
+            <p style="color: #dcfce7; margin: 10px 0 0 0;">A new earning opportunity is available</p>
+          </div>
+          <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
+            <h2 style="color: #15803d;">Hi ${promoter.name}! 👋</h2>
+            <p style="color: #444; font-size: 16px;">A new campaign just went live on SpreadFast.
+              <strong>Be one of the first to subscribe and start earning!</strong>
+            </p>
+            <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
+              <h3 style="color: #15803d; margin-top: 0;">📢 ${campaign.title}</h3>
+              <table style="width: 100%; color: #444;">
+                <tr><td style="padding: 8px 0;"><strong>Description:</strong></td><td>${campaign.description || 'Promote this brand on social media'}</td></tr>
+                <tr><td style="padding: 8px 0;"><strong>Campaign Budget:</strong></td><td style="color: #15803d;"><strong>₦${parseFloat(campaign.budget).toLocaleString()}</strong></td></tr>
+                <tr><td style="padding: 8px 0;"><strong>Available Slots:</strong></td><td><strong>${promoterSlots} promoters needed</strong></td></tr>
+                <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
+                <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Open for Subscription ✅</strong></td></tr>
+              </table>
+            </div>
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+              <p style="color: #92400e; margin: 0; font-size: 14px;">
+                ⚡ <strong>Act fast!</strong> Only ${promoterSlots} slots available. First come, first served!
+              </p>
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/campaigns"
+                 style="background-color: #15803d; color: white; padding: 15px 30px;
+                        border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                Subscribe Now & Start Earning →
+              </a>
+            </div>
+          </div>
+          <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
+            © 2025 SpreadFast. All rights reserved.<br/>
+            You are receiving this because you are a registered promoter on SpreadFast.
+          </p>
+        </div>
+      `;
+      return sendEmail(promoter.email, subject, html);
+    });
+
+    await Promise.allSettled(emailPromises);
+    console.log(`Campaign alert sent to ${promoters.length} promoters`);
+  } catch (error) {
+    console.error('Error sending promoter alerts:', error.message);
+  }
+};
 
 const app = express();
 
@@ -153,7 +323,6 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
         };
 
         await Campaign.create(campaign);
-
         await PaystackTransaction.updateOne(
           { reference },
           { campaignCreated: true, campaignId, status: 'completed' }
@@ -199,13 +368,12 @@ app.use(express.json());
 // ==================== TEST EMAIL ====================
 app.get('/api/test-email', async (req, res) => {
   try {
-    await transporter.sendMail({
-      from: `"SpreadFast" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
-      subject: 'SpreadFast Email Test',
-      html: '<h1>Email is working!</h1>'
-    });
-    res.json({ success: true, message: 'Email sent! Check your Gmail inbox.' });
+    await sendEmail(
+      process.env.EMAIL_USER || process.env.ADMIN_EMAIL,
+      'SpreadFast Email Test',
+      '<h1>Email is working! ✅</h1><p>Resend integration is working correctly.</p>'
+    );
+    res.json({ success: true, message: 'Test email sent! Check your inbox.' });
   } catch (err) {
     console.error('Email test error:', err);
     res.json({ success: false, error: err.message });
@@ -224,187 +392,7 @@ app.get('/api/health', (req, res) => {
 // ==================== AUTH MIDDLEWARE ====================
 const { authenticateToken } = require('./middleware/auth');
 
-// ==================== EMAIL FUNCTIONS ====================
-const sendWelcomeEmail = async (name, email, role) => {
-  const isCompany = role === 'company';
-  const mailOptions = {
-    from: `"SpreadFast" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: 'Welcome to SpreadFast! 🎉',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Welcome to SpreadFast!</h1>
-        </div>
-        <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-          <h2 style="color: #15803d;">Hi ${name}! 👋</h2>
-          <p style="color: #444; font-size: 16px;">
-            Your account has been created successfully as a
-            <strong>${isCompany ? 'Company' : 'Promoter'}</strong>.
-          </p>
-          ${isCompany ? `
-          <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #15803d;">As a Company you can:</h3>
-            <ul style="color: #444;">
-              <li>Create campaigns for promoters to spread</li>
-              <li>Pay securely via Paystack</li>
-              <li>Track promoter submissions</li>
-              <li>Grow your brand fast</li>
-            </ul>
-          </div>
-          ` : `
-          <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #15803d;">As a Promoter you can:</h3>
-            <ul style="color: #444;">
-              <li>Browse available campaigns</li>
-              <li>Submit proof of promotion</li>
-              <li>Earn money directly to your wallet</li>
-              <li>Withdraw to your bank account</li>
-            </ul>
-          </div>
-          `}
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}"
-               style="background-color: #15803d; color: white; padding: 15px 30px;
-                      border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-              Go to SpreadFast →
-            </a>
-          </div>
-        </div>
-        <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
-          © 2025 SpreadFast. All rights reserved.<br/>
-          If you did not create this account, please ignore this email.
-        </p>
-      </div>
-    `
-  };
-  await resend.emails.send({
-  from: 'SpreadFast <onboarding@resend.dev>',
-  to: email,
-  subject: mailOptions.subject,
-  html: mailOptions.html
-});
-  console.log('Welcome email sent to:', email);
-};
-
-const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign) => {
-  const mailOptions = {
-    from: `"SpreadFast" <${process.env.EMAIL_USER}>`,
-    to: companyEmail,
-    subject: `✅ Your Campaign "${campaign.title}" is Now Live!`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Campaign Live! 🚀</h1>
-        </div>
-        <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-          <h2 style="color: #15803d;">Hi ${companyName}!</h2>
-          <p style="color: #444; font-size: 16px;">
-            Your campaign has been created successfully and is now
-            <strong style="color: #15803d;">LIVE</strong> to promoters!
-          </p>
-          <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
-            <h3 style="color: #15803d; margin-top: 0;">Campaign Details</h3>
-            <table style="width: 100%; color: #444;">
-              <tr><td style="padding: 8px 0;"><strong>Campaign Name:</strong></td><td>${campaign.title}</td></tr>
-              <tr><td style="padding: 8px 0;"><strong>Budget:</strong></td><td>₦${parseFloat(campaign.budget).toLocaleString()}</td></tr>
-              <tr><td style="padding: 8px 0;"><strong>Amount Paid:</strong></td><td>₦${parseFloat(campaign.amountPaid).toLocaleString()}</td></tr>
-              <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
-              <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Active ✅</strong></td></tr>
-              <tr><td style="padding: 8px 0;"><strong>Payment Reference:</strong></td><td style="font-size: 12px;">${campaign.paystackReference || 'N/A'}</td></tr>
-            </table>
-          </div>
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/company"
-               style="background-color: #15803d; color: white; padding: 15px 30px;
-                      border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-              View Your Campaign →
-            </a>
-          </div>
-        </div>
-        <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">© 2025 SpreadFast. All rights reserved.</p>
-      </div>
-    `
-  };
-  await resend.emails.send({
-  from: 'SpreadFast <onboarding@resend.dev>',
-  to: companyEmail,
-  subject: mailOptions.subject,
-  html: mailOptions.html
-});
-  console.log('Campaign confirmation email sent to:', companyEmail);
-};
-
-const sendNewCampaignAlertToPromoters = async (campaign) => {
-  try {
-    const promoters = await User.find({ role: 'promoter' });
-    if (promoters.length === 0) {
-      console.log('No promoters to notify');
-      return;
-    }
-    const promoterSlots = Math.floor(parseFloat(campaign.budget) / 2000);
-    const emailPromises = promoters.map(async promoter => {
-      const mailOptions = {
-        from: `"SpreadFast" <${process.env.EMAIL_USER}>`,
-        to: promoter.email,
-        subject: `🔔 New Campaign Available: "${campaign.title}" — Earn Money Now!`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-              <h1 style="color: white; margin: 0;">New Campaign Alert! 🔔</h1>
-              <p style="color: #dcfce7; margin: 10px 0 0 0;">A new earning opportunity is available</p>
-            </div>
-            <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-              <h2 style="color: #15803d;">Hi ${promoter.name}! 👋</h2>
-              <p style="color: #444; font-size: 16px;">A new campaign just went live on SpreadFast.
-                <strong>Be one of the first to subscribe and start earning!</strong>
-              </p>
-              <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
-                <h3 style="color: #15803d; margin-top: 0;">📢 ${campaign.title}</h3>
-                <table style="width: 100%; color: #444;">
-                  <tr><td style="padding: 8px 0;"><strong>Description:</strong></td><td>${campaign.description || 'Promote this brand on social media'}</td></tr>
-                  <tr><td style="padding: 8px 0;"><strong>Campaign Budget:</strong></td><td style="color: #15803d;"><strong>₦${parseFloat(campaign.budget).toLocaleString()}</strong></td></tr>
-                  <tr><td style="padding: 8px 0;"><strong>Available Slots:</strong></td><td><strong>${promoterSlots} promoters needed</strong></td></tr>
-                  <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
-                  <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Open for Subscription ✅</strong></td></tr>
-                </table>
-              </div>
-              <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                <p style="color: #92400e; margin: 0; font-size: 14px;">
-                  ⚡ <strong>Act fast!</strong> Only ${promoterSlots} slots available. First come, first served!
-                </p>
-              </div>
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/campaigns"
-                   style="background-color: #15803d; color: white; padding: 15px 30px;
-                          border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                  Subscribe Now & Start Earning →
-                </a>
-              </div>
-            </div>
-            <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
-              © 2025 SpreadFast. All rights reserved.<br/>
-              You are receiving this because you are a registered promoter on SpreadFast.
-            </p>
-          </div>
-        `
-      };
-      return await resend.emails.send({
-        from: 'SpreadFast <onboarding@resend.dev>',
-        to: promoter.email,
-        subject: mailOptions.subject,
-        html: mailOptions.html
-      });
-    });
-    await Promise.allSettled(emailPromises);
-    console.log(`Campaign alert sent to ${promoters.length} promoters`);
-  } catch (error) {
-    console.error('Error sending promoter alerts:', error.message);
-  }
-};
-
 // ==================== AUTH ROUTES ====================
-
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -419,9 +407,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
 
-    console.log('Hashing password...');
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('Password hashed successfully');
 
     const newUser = {
       id: uuidv4(),
@@ -446,7 +432,6 @@ app.post('/api/auth/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    console.log('Registration successful:', newUser.email);
     res.json({
       success: true,
       message: 'Registration successful',
@@ -512,7 +497,6 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 });
 
 // ==================== PAYSTACK PAYMENT ROUTES ====================
-
 app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
   try {
     const { amount, campaignName, description, socialMediaPlatforms } = req.body;
@@ -685,7 +669,6 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
 });
 
 // ==================== CAMPAIGN ROUTES ====================
-
 app.post('/api/campaigns', authenticateToken, async (req, res) => {
   try {
     const { title, description, budget, reference, socialMediaPlatforms } = req.body;
@@ -701,7 +684,6 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
       if (existingTransaction && existingTransaction.campaignCreated) {
         const existingCampaign = await Campaign.findOne({ paystackReference: reference });
         if (existingCampaign) {
-          console.log('Campaign already exists for reference:', reference);
           return res.status(201).json({ success: true, message: 'Campaign already created', campaign: existingCampaign });
         }
       }
@@ -770,7 +752,6 @@ app.get('/api/campaigns', async (req, res) => {
     const campaigns = await Campaign.find({});
     res.json({ success: true, campaigns });
   } catch (error) {
-    console.error('Fetch campaigns error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
 });
@@ -780,7 +761,6 @@ app.get('/api/campaigns/company/:companyId', async (req, res) => {
     const campaigns = await Campaign.find({ companyId: req.params.companyId });
     res.json({ success: true, campaigns });
   } catch (error) {
-    console.error('Fetch company campaigns error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
 });
@@ -817,8 +797,6 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
     };
 
     await Submission.create(submission);
-    console.log('Submission saved:', submission.id);
-
     res.json({ success: true, message: 'Submission received', submission });
   } catch (error) {
     console.error('Submission error:', error);
@@ -835,9 +813,7 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
       return res.status(404).json({ success: false, message: 'Campaign not found' });
     }
 
-    if (!campaign.subscribedPromoters) {
-      campaign.subscribedPromoters = [];
-    }
+    if (!campaign.subscribedPromoters) campaign.subscribedPromoters = [];
 
     if (campaign.subscribedPromoters.find(p => p.promoterId === req.user.id)) {
       return res.status(400).json({ success: false, message: 'Already subscribed to this campaign' });
@@ -852,7 +828,6 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
     });
 
     await Campaign.updateOne({ id: campaignId }, { subscribedPromoters: campaign.subscribedPromoters });
-
     res.json({ success: true, message: 'Successfully subscribed to campaign' });
   } catch (error) {
     console.error('Subscription error:', error);
@@ -862,40 +837,32 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
 
 app.get('/api/campaigns/:campaignId/submissions', authenticateToken, async (req, res) => {
   try {
-    const { campaignId } = req.params;
-    const submissions = await Submission.find({ campaignId });
+    const submissions = await Submission.find({ campaignId: req.params.campaignId });
     res.json({ success: true, submissions });
   } catch (error) {
-    console.error('Fetch submissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
   }
 });
 
 app.get('/api/campaigns/:campaignId', async (req, res) => {
   try {
-    const { campaignId } = req.params;
-    const campaign = await Campaign.findOne({ id: campaignId });
+    const campaign = await Campaign.findOne({ id: req.params.campaignId });
     if (!campaign) {
       return res.status(404).json({ success: false, message: 'Campaign not found' });
     }
     res.json({ success: true, campaign });
   } catch (error) {
-    console.error('Fetch campaign error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch campaign' });
   }
 });
 
 // ==================== WALLET ROUTES ====================
-
 app.get('/api/wallet', authenticateToken, async (req, res) => {
   try {
     const user = await User.findOne({ id: req.user.id });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, wallet: { balance: user.walletBalance, bankDetails: user.bankDetails } });
   } catch (error) {
-    console.error('Wallet error:', error);
     res.status(500).json({ success: false, message: 'Failed to get wallet' });
   }
 });
@@ -906,13 +873,10 @@ app.post('/api/wallet/bank-details', authenticateToken, async (req, res) => {
     if (!accountNumber || !bankCode || !accountName) {
       return res.status(400).json({ success: false, message: 'Account details required' });
     }
-
     const bankDetails = { accountNumber, bankCode, accountName, addedAt: new Date().toISOString() };
     await User.updateOne({ id: req.user.id }, { bankDetails });
-
     res.json({ success: true, message: 'Bank details saved', bankDetails });
   } catch (error) {
-    console.error('Bank details error:', error);
     res.status(500).json({ success: false, message: 'Failed to save bank details' });
   }
 });
@@ -923,17 +887,14 @@ app.put('/api/users/update-bank', authenticateToken, async (req, res) => {
     if (!bankDetails || !bankDetails.accountNumber || !bankDetails.bankName || !bankDetails.accountName) {
       return res.status(400).json({ success: false, message: 'All bank details are required' });
     }
-
     const updatedBankDetails = {
       bankName: bankDetails.bankName,
       accountName: bankDetails.accountName,
       accountNumber: bankDetails.accountNumber,
       updatedAt: new Date().toISOString()
     };
-
     await User.updateOne({ id: req.user.id }, { bankDetails: updatedBankDetails });
     const user = await User.findOne({ id: req.user.id });
-
     res.json({
       success: true,
       message: 'Bank details updated successfully',
@@ -941,7 +902,6 @@ app.put('/api/users/update-bank', authenticateToken, async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, bankDetails: updatedBankDetails }
     });
   } catch (error) {
-    console.error('Update bank details error:', error);
     res.status(500).json({ success: false, message: 'Failed to update bank details' });
   }
 });
@@ -949,9 +909,7 @@ app.put('/api/users/update-bank', authenticateToken, async (req, res) => {
 app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
   try {
     const { amount } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ success: false, message: 'Valid amount required' });
-    }
+    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
 
     const user = await User.findOne({ id: req.user.id });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -972,10 +930,8 @@ app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
     await Withdrawal.create(withdrawal);
     const newBalance = user.walletBalance - amount;
     await User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
-
     res.json({ success: true, message: 'Withdrawal request submitted', withdrawal, newBalance });
   } catch (error) {
-    console.error('Withdrawal error:', error);
     res.status(500).json({ success: false, message: 'Withdrawal failed' });
   }
 });
@@ -986,7 +942,6 @@ app.get('/api/wallet/withdrawals/pending', authenticateToken, async (req, res) =
     const pendingAmount = userWithdrawals.reduce((sum, w) => sum + w.amount, 0);
     res.json({ success: true, withdrawals: userWithdrawals, pendingAmount });
   } catch (error) {
-    console.error('Fetch pending withdrawals error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch pending withdrawals' });
   }
 });
@@ -994,9 +949,7 @@ app.get('/api/wallet/withdrawals/pending', authenticateToken, async (req, res) =
 app.post('/api/withdrawals', authenticateToken, async (req, res) => {
   try {
     const { amount, bankDetails } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ success: false, message: 'Valid amount required' });
-    }
+    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
 
     const user = await User.findOne({ id: req.user.id });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -1020,16 +973,13 @@ app.post('/api/withdrawals', authenticateToken, async (req, res) => {
     await Withdrawal.create(withdrawal);
     const newBalance = user.walletBalance - amount;
     await User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
-
     res.status(201).json({ success: true, message: 'Withdrawal request created', withdrawal, newBalance });
   } catch (error) {
-    console.error('Withdrawal error:', error);
     res.status(500).json({ success: false, message: 'Withdrawal failed' });
   }
 });
 
 // ==================== ADMIN ROUTES ====================
-
 app.get('/api/admin/check', authenticateToken, (req, res) => {
   const isAdmin = req.user.email === process.env.ADMIN_EMAIL;
   res.json({ success: true, isAdmin });
@@ -1043,7 +993,6 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
     const users = await User.find({}, { password: 0 });
     res.json({ success: true, users });
   } catch (error) {
-    console.error('Fetch users error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch users' });
   }
 });
@@ -1056,7 +1005,6 @@ app.get('/api/admin/campaigns', authenticateToken, async (req, res) => {
     const campaigns = await Campaign.find({});
     res.json({ success: true, campaigns });
   } catch (error) {
-    console.error('Fetch campaigns error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
 });
@@ -1074,7 +1022,6 @@ app.get('/api/admin/submissions', authenticateToken, async (req, res) => {
     }));
     res.json({ success: true, submissions: enrichedSubmissions });
   } catch (error) {
-    console.error('Fetch submissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
   }
 });
@@ -1106,10 +1053,8 @@ app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req,
 
     await Submission.updateOne({ id: submissionId }, updateData);
     const updatedSubmission = await Submission.findOne({ id: submissionId });
-
     res.json({ success: true, message: `Submission ${status}`, submission: updatedSubmission });
   } catch (error) {
-    console.error('Update submission error:', error);
     res.status(500).json({ success: false, message: 'Failed to update submission' });
   }
 });
@@ -1122,7 +1067,6 @@ app.get('/api/admin/withdrawals', authenticateToken, async (req, res) => {
     const withdrawals = await Withdrawal.find({});
     res.json({ success: true, withdrawals });
   } catch (error) {
-    console.error('Fetch withdrawals error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch withdrawals' });
   }
 });
@@ -1156,7 +1100,6 @@ app.patch('/api/admin/withdrawals/:withdrawalId', authenticateToken, async (req,
     const updatedWithdrawal = await Withdrawal.findOne({ id: withdrawalId });
     res.json({ success: true, message: `Withdrawal marked as ${status}`, withdrawal: updatedWithdrawal });
   } catch (error) {
-    console.error('Withdrawal update error:', error);
     res.status(500).json({ success: false, message: 'Failed to update withdrawal' });
   }
 });
@@ -1187,7 +1130,6 @@ app.post('/api/admin/withdrawals/:withdrawalId/review', authenticateToken, async
 
     res.json({ success: true, message: `Withdrawal ${status}` });
   } catch (error) {
-    console.error('Withdrawal review error:', error);
     res.status(500).json({ success: false, message: 'Failed to review withdrawal' });
   }
 });
@@ -1197,14 +1139,11 @@ app.delete('/api/admin/campaigns/:campaignId', authenticateToken, async (req, re
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const { campaignId } = req.params;
-    const campaign = await Campaign.findOne({ id: campaignId });
+    const campaign = await Campaign.findOne({ id: req.params.campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
-
-    await Campaign.deleteOne({ id: campaignId });
+    await Campaign.deleteOne({ id: req.params.campaignId });
     res.json({ success: true, message: 'Campaign deleted successfully', campaign });
   } catch (error) {
-    console.error('Campaign deletion error:', error);
     res.status(500).json({ success: false, message: 'Failed to delete campaign' });
   }
 });
@@ -1226,10 +1165,8 @@ app.patch('/api/admin/campaigns/:campaignId', authenticateToken, async (req, res
 
     await Campaign.updateOne({ id: campaignId }, { status, statusUpdatedAt: new Date().toISOString() });
     const updatedCampaign = await Campaign.findOne({ id: campaignId });
-
     res.json({ success: true, message: `Campaign status updated to ${status}`, campaign: updatedCampaign });
   } catch (error) {
-    console.error('Campaign update error:', error);
     res.status(500).json({ success: false, message: 'Failed to update campaign' });
   }
 });
@@ -1268,18 +1205,15 @@ app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
 
     res.json({ success: true, stats });
   } catch (error) {
-    console.error('Stats error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch stats' });
   }
 });
 
-// ==================== SUBMISSIONS ====================
 app.get('/api/submissions/my-submissions', authenticateToken, async (req, res) => {
   try {
     const submissions = await Submission.find({ userId: req.user.id });
     res.json({ success: true, submissions });
   } catch (error) {
-    console.error('Fetch submissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
   }
 });
@@ -1288,6 +1222,6 @@ app.get('/api/submissions/my-submissions', authenticateToken, async (req, res) =
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`💳 Paystack Sandbox Mode: Testing payments with test keys`);
+  console.log(`📧 Email provider: Resend`);
   console.log(`🔔 Webhook endpoint: POST /api/payments/webhook`);
 });
