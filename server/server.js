@@ -328,7 +328,7 @@ const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign
   };
   await resend.emails.send({
   from: 'SpreadFast <onboarding@resend.dev>',
-  to: email,
+  to: companyEmail,
   subject: mailOptions.subject,
   html: mailOptions.html
 });
