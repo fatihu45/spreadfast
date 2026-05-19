@@ -363,7 +363,7 @@ app.use(cors({
 }));
 
 app.use(cors({
-  origin: 'https://tryspreadfast.com',
+  origin: [ 'https://tryspreadfast.com','https://www.tryspreadfast.com' ],
   credentials: true
 }));
 app.use(express.json());
