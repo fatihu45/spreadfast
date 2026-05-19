@@ -6,7 +6,9 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(
+    localStorage.getItem('token') || sessionStorage.getItem('token')
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export function AuthProvider({ children }) {
       setUser(data.user);
     } else {
       localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       setToken(null);
     }
   } catch (error) {
@@ -44,6 +47,7 @@ export function AuthProvider({ children }) {
       return;
     }
     localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setToken(null);
   } finally {
     setLoading(false);
@@ -70,7 +74,11 @@ export function AuthProvider({ children }) {
 
       const data = await response.json();
       if (data.success) {
-        localStorage.setItem('token', data.token);
+        try {
+          localStorage.setItem('token', data.token);
+        } catch (e) {
+          sessionStorage.setItem('token', data.token);
+        }
         setToken(data.token);
         setUser(data.user);
       }
@@ -114,7 +122,11 @@ export function AuthProvider({ children }) {
     const data = await response.json();
 
     if (data.success) {
-      localStorage.setItem('token', data.token);
+      try {
+        localStorage.setItem('token', data.token);
+      } catch (e) {
+        sessionStorage.setItem('token', data.token);
+      }
       setToken(data.token);
       setUser(data.user);
     }
@@ -134,6 +146,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setToken(null);
     setUser(null);
   };
