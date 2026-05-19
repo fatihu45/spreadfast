@@ -1,23 +1,37 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import './Auth.css';
 
 export default function Login() {
-  const { login, user, token } = useContext(AuthContext);
+  const { login } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [redirectTarget, setRedirectTarget] = useState(null);
 
-  // Watch for successful login - redirect after state is fully updated
-  useEffect(() => {
-    if (redirectTarget && user && token) {
-      // Only redirect when BOTH user AND token are set in context
-      // This ensures localStorage was updated and state is synchronized
-      window.location.href = redirectTarget;
-    }
-  }, [redirectTarget, user, token]);
+  const checkTokenAndRedirect = (target) => {
+    let attempts = 0;
+    const maxAttempts = 10;
+    const checkInterval = 100; // 100ms
+
+    const intervalId = setInterval(() => {
+      attempts++;
+      
+      // Check if token exists in localStorage or sessionStorage
+      const tokenInStorage = localStorage.getItem('token') || sessionStorage.getItem('token');
+      
+      if (tokenInStorage) {
+        // Token found in storage - redirect immediately
+        clearInterval(intervalId);
+        window.location.href = target;
+      } else if (attempts >= maxAttempts) {
+        // Max attempts reached - redirect anyway (with token in context)
+        clearInterval(intervalId);
+        console.warn('Token not found in storage after 10 attempts, redirecting anyway');
+        window.location.href = target;
+      }
+    }, checkInterval);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +40,7 @@ export default function Login() {
 
     const result = await login(email, password);
     if (result.success) {
-      // Don't redirect yet - wait for state to update via useEffect above
+      // Determine redirect target based on user role
       const user = result.user;
       const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
       
@@ -39,9 +53,9 @@ export default function Login() {
         target = '/company';
       }
       
-      // Set redirect target - useEffect will handle the actual redirect
-      // once context state is updated
-      setRedirectTarget(target);
+      // Check if token is saved to storage before redirecting
+      // This ensures token persists even on iPhone Safari
+      checkTokenAndRedirect(target);
     } else {
       setError(result.message);
     }
