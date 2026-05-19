@@ -6,9 +6,14 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(
-    localStorage.getItem('token') || sessionStorage.getItem('token')
-  );
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('token') || sessionStorage.getItem('token');
+    } catch (e) {
+      // localStorage may throw on iOS private mode
+      return sessionStorage.getItem('token');
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,44 +25,42 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const fetchUser = async (retryCount = 0) => {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    const response = await fetch(`${API_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal
-    });
+      const response = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal
+      });
 
-    clearTimeout(timeoutId);
-    const data = await response.json();
+      clearTimeout(timeoutId);
+      const data = await response.json();
 
-    if (data.success) {
-      setUser(data.user);
-    } else {
-      localStorage.removeItem('token');
-      sessionStorage.removeItem('token');
+      if (data.success) {
+        setUser(data.user);
+      } else {
+        clearAllTokens();
+        setToken(null);
+      }
+    } catch (error) {
+      console.error('Fetch user error:', error);
+      if (error.name === 'AbortError' && retryCount < 3) {
+        console.log(`Server waking up - retry ${retryCount + 1}/3`);
+        setTimeout(() => fetchUser(retryCount + 1), 15000);
+        return;
+      }
+      clearAllTokens();
       setToken(null);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Fetch user error:', error);
-    if (error.name === 'AbortError' && retryCount < 3) {
-      console.log(`Server waking up - retry ${retryCount + 1}/3`);
-      setTimeout(() => fetchUser(retryCount + 1), 15000);
-      return;
-    }
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
-    setToken(null);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const register = async (name, email, password, role, socialMedia = {}) => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
@@ -74,11 +77,7 @@ export function AuthProvider({ children }) {
 
       const data = await response.json();
       if (data.success) {
-        try {
-          localStorage.setItem('token', data.token);
-        } catch (e) {
-          sessionStorage.setItem('token', data.token);
-        }
+        saveToken(data.token);
         setToken(data.token);
         setUser(data.user);
       }
@@ -93,60 +92,77 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-  try {
-    // Wake up Render first
     try {
-      await fetch(`${API_URL}/api/health`, { 
-        signal: AbortSignal.timeout(5000) 
-      });
-    } catch (e) {
-      // ignore - just waking up server
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
-
-    const response = await fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.success) {
+      // Wake up Render first
       try {
-        localStorage.setItem('token', data.token);
+        await fetch(`${API_URL}/api/health`, { 
+          signal: AbortSignal.timeout(5000) 
+        });
       } catch (e) {
-        sessionStorage.setItem('token', data.token);
+        // ignore - just waking up server
       }
-      setToken(data.token);
-      setUser(data.user);
-    }
 
-    return data;
-  } catch (error) {
-    console.error('Login error:', error);
-    if (error.name === 'AbortError') {
-      return { 
-        success: false, 
-        message: 'Server is waking up, please try again in 30 seconds.' 
-      };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        saveToken(data.token);
+        setToken(data.token);
+        setUser(data.user);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Login error:', error);
+      if (error.name === 'AbortError') {
+        return { 
+          success: false, 
+          message: 'Server is waking up, please try again in 30 seconds.' 
+        };
+      }
+      return { success: false, message: error.message || 'Login failed' };
     }
-    return { success: false, message: error.message || 'Login failed' };
-  }
-};
+  };
+
+  const saveToken = (token) => {
+    try {
+      localStorage.setItem('token', token);
+    } catch (e) {
+      // localStorage not available (iOS private mode, quota exceeded, etc.)
+      try {
+        sessionStorage.setItem('token', token);
+      } catch (e2) {
+        console.error('Both localStorage and sessionStorage failed:', e2);
+      }
+    }
+  };
+
+  const clearAllTokens = () => {
+    try {
+      localStorage.removeItem('token');
+    } catch (e) {}
+    try {
+      sessionStorage.removeItem('token');
+    } catch (e) {}
+  };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
+    clearAllTokens();
     setToken(null);
     setUser(null);
   };
