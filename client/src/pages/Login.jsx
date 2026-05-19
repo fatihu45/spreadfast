@@ -3,7 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import './Auth.css';
 
 export default function Login() {
-  const { login, debugInfo } = useContext(AuthContext);
+  const { login } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,15 +20,18 @@ export default function Login() {
       const user = result.user;
       const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
       
-      if (user.email === adminEmail) {
-        window.location.href = '/admin-portal';
-      } else if (user.role === 'promoter') {
-        window.location.href = '/promoter-dashboard';
-      } else if (user.role === 'company') {
-        window.location.href = '/company';
-      } else {
-        window.location.href = '/';
-      }
+      // Add delay to ensure token is saved before redirecting (important for iPhone)
+      setTimeout(() => {
+        if (user.email === adminEmail) {
+          window.location.href = '/admin-portal';
+        } else if (user.role === 'promoter') {
+          window.location.href = '/promoter-dashboard';
+        } else if (user.role === 'company') {
+          window.location.href = '/company';
+        } else {
+          window.location.href = '/';
+        }
+      }, 300); // 300ms delay
     } else {
       setError(result.message);
     }
@@ -61,26 +64,8 @@ export default function Login() {
           {loading ? 'Logging in...' : 'Login'}
         </button>
         
-        {debugInfo && (
-          <div style={{
-            marginTop: '20px',
-            padding: '10px',
-            backgroundColor: '#222',
-            color: '#0f0',
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            maxHeight: '200px',
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word'
-          }}>
-            {debugInfo}
-          </div>
-        )}
-        
         <p>Don't have an account? <a href="/register">Register here</a></p>
       </form>
     </div>
   );
 }
-;
