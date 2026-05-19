@@ -109,7 +109,7 @@ const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransa
 const sendEmail = async (to, subject, html) => {
   try {
     const result = await resend.emails.send({
-      from: 'SpreadFast <onboarding@resend.dev>',
+      from: 'SpreadFast <noreply@tryspreadfast.com>',
       to: to,
       subject: subject,
       html: html
