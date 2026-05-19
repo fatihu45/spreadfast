@@ -1,13 +1,23 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import './Auth.css';
 
 export default function Login() {
-  const { login } = useContext(AuthContext);
+  const { login, user, token } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [redirectTarget, setRedirectTarget] = useState(null);
+
+  // Watch for successful login - redirect after state is fully updated
+  useEffect(() => {
+    if (redirectTarget && user && token) {
+      // Only redirect when BOTH user AND token are set in context
+      // This ensures localStorage was updated and state is synchronized
+      window.location.href = redirectTarget;
+    }
+  }, [redirectTarget, user, token]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,22 +26,22 @@ export default function Login() {
 
     const result = await login(email, password);
     if (result.success) {
-      // Redirect based on user role
+      // Don't redirect yet - wait for state to update via useEffect above
       const user = result.user;
       const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
       
-      // Add delay to ensure token is saved before redirecting (important for iPhone)
-      setTimeout(() => {
-        if (user.email === adminEmail) {
-          window.location.href = '/admin-portal';
-        } else if (user.role === 'promoter') {
-          window.location.href = '/promoter-dashboard';
-        } else if (user.role === 'company') {
-          window.location.href = '/company';
-        } else {
-          window.location.href = '/';
-        }
-      }, 300); // 300ms delay
+      let target = '/';
+      if (user.email === adminEmail) {
+        target = '/admin-portal';
+      } else if (user.role === 'promoter') {
+        target = '/promoter-dashboard';
+      } else if (user.role === 'company') {
+        target = '/company';
+      }
+      
+      // Set redirect target - useEffect will handle the actual redirect
+      // once context state is updated
+      setRedirectTarget(target);
     } else {
       setError(result.message);
     }
