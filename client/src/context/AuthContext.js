@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
 
       const response = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
         signal: controller.signal
       });
 
@@ -66,6 +67,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role, socialMedia }),
+        credentials: 'include',
         signal: controller.signal
       });
 
@@ -96,7 +98,8 @@ export function AuthProvider({ children }) {
       // Wake up Render first
       try {
         await fetch(`${API_URL}/api/health`, { 
-          signal: AbortSignal.timeout(5000) 
+          signal: AbortSignal.timeout(5000),
+          credentials: 'include'
         });
       } catch (e) {
         // ignore - just waking up server
@@ -109,6 +112,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
         signal: controller.signal
       });
 
