@@ -10,53 +10,12 @@ export default function Dashboard() {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Guard: Redirect if not authenticated
+  // Fetch campaigns data only (ProtectedRoute already handles auth)
   useEffect(() => {
-  if (!authLoading && !user) {
-    navigate('/login');
-    return;
-  }
-
-  if (!authLoading && user) {
-    // Admin redirect
-    if (user.email === process.env.REACT_APP_ADMIN_EMAIL) {
-      navigate('/admin');
-      return;
+    if (user) {
+      // Fetch campaigns here
     }
-    // Company redirect
-    if (user.role === 'company') {
-      navigate('/company');
-      return;
-    }
-    // Promoter redirect
-    if (user.role === 'promoter') {
-      navigate('/promoter-dashboard');
-      return;
-    }
-  }
-}, [authLoading, user, navigate]);
-
-  // Loading state from AuthContext
-  if (authLoading) {
-    return (
-      <div className="dashboard">
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <p>Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Guard: User not authenticated
-  if (!user) {
-    return (
-      <div className="dashboard">
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <p>Redirecting to login...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [user]);
 
   return (
     <div className="dashboard">

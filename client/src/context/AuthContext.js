@@ -18,8 +18,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (token) {
+      addDebug('🔑 Token found, validating with server...');
       fetchUser();
     } else {
+      addDebug('⚠️ No token found');
       setLoading(false);
     }
   }, [token]);
@@ -34,6 +36,8 @@ export function AuthProvider({ children }) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
 
+      addDebug(`📡 Validating token (attempt ${retryCount + 1})...`);
+      
       const response = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
@@ -41,24 +45,56 @@ export function AuthProvider({ children }) {
       });
 
       clearTimeout(timeoutId);
+      addDebug(`✓ Response: ${response.status} ${response.statusText}`);
+      
       const data = await response.json();
 
       if (data.success) {
         setUser(data.user);
-      } else {
+        addDebug(`✓ User validated successfully: ${data.user.name}`);
+        setLoading(false);
+      } else if (response.status === 401) {
+        // Token is invalid - clear it
+        addDebug('❌ Token invalid (401) - clearing tokens');
         clearAllTokens();
         setToken(null);
+        setLoading(false);
+      } else {
+        // Other error - don't clear token, just log
+        addDebug(`⚠️ Auth failed: ${data.message || 'Unknown error'}`);
+        setLoading(false);
       }
     } catch (error) {
       console.error('Fetch user error:', error);
-      if (error.name === 'AbortError' && retryCount < 3) {
-        setTimeout(() => fetchUser(retryCount + 1), 15000);
+      addDebug(`❌ Error: ${error.name} - ${error.message}`);
+      
+      if (error.name === 'AbortError') {
+        // Network timeout - retry with exponential backoff
+        if (retryCount < 3) {
+          const delayMs = Math.min(15000 * Math.pow(2, retryCount), 60000);
+          addDebug(`⏳ Timeout - retrying in ${delayMs}ms...`);
+          setTimeout(() => fetchUser(retryCount + 1), delayMs);
+          return;
+        } else {
+          // Max retries reached - give up but DON'T clear token
+          addDebug('⚠️ Max retries reached - keeping token in case network recovers');
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Network error (not timeout) - retry but don't clear token
+      if (retryCount < 3) {
+        const delayMs = Math.min(5000 * Math.pow(2, retryCount), 30000);
+        addDebug(`🔄 Network error - retrying in ${delayMs}ms...`);
+        setTimeout(() => fetchUser(retryCount + 1), delayMs);
+        return;
+      } else {
+        // Give up retrying but keep token
+        addDebug('⚠️ Network errors persist - keeping token in case network recovers');
+        setLoading(false);
         return;
       }
-      clearAllTokens();
-      setToken(null);
-    } finally {
-      setLoading(false);
     }
   };
 
