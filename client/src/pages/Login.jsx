@@ -3,7 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import './Auth.css';
 
 export default function Login() {
-  const { login } = useContext(AuthContext);
+  const { login, debugInfo } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +60,23 @@ export default function Login() {
         <button type="submit" disabled={loading}>
           {loading ? 'Logging in...' : 'Login'}
         </button>
+        
+        {debugInfo && (
+          <div style={{
+            marginTop: '20px',
+            padding: '10px',
+            backgroundColor: '#222',
+            color: '#0f0',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            maxHeight: '200px',
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word'
+          }}>
+            {debugInfo}
+          </div>
+        )}
         
         <p>Don't have an account? <a href="/register">Register here</a></p>
       </form>
