@@ -46,6 +46,34 @@ export default function Campaigns() {
                 <h3 className="text-xl font-bold mb-2">{campaign.name}</h3>
                 <p className="text-gray-600 mb-3 line-clamp-2">{campaign.description}</p>
                 
+                {campaign.keyMessage && (
+                  <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mb-4 text-sm">
+                    <p className="font-semibold text-green-800 mb-2">📢 Key Message from Brand</p>
+                    <p className="text-gray-700">{campaign.keyMessage}</p>
+                  </div>
+                )}
+                
+                {campaign.brandAssets && campaign.brandAssets.length > 0 && (
+                  <div className="mb-4">
+                    <p className="font-semibold text-gray-800 mb-2 text-sm">Brand Assets — Use these in your content</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                      {campaign.brandAssets.map((asset, idx) => (
+                        <div key={idx} className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group">
+                          {asset.fileType.startsWith('image/') ? (
+                            <img src={asset.fileUrl} alt={`asset-${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition" />
+                          ) : asset.fileType === 'video/mp4' ? (
+                            <video src={asset.fileUrl} className="w-full h-full object-cover group-hover:scale-110 transition" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-red-100 group-hover:bg-red-200 transition">
+                              <span className="text-xs font-bold text-red-700">PDF</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="bg-gray-100 p-3 rounded mb-4 text-sm">
                   <p className="font-semibold text-primary mb-2">{campaign.caption}</p>
                   <div className="space-y-1 text-gray-700">

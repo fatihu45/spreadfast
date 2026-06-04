@@ -14,11 +14,31 @@ export default function AvailableCampaigns() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [campaignAssets, setCampaignAssets] = useState({});
+  const [subscribedCampaigns, setSubscribedCampaigns] = useState([]);
+  const [downloadingAsset, setDownloadingAsset] = useState(null);
+
+  const fetchAssetPreviews = async (campaignList) => {
+    const assetMap = {};
+    await Promise.all(
+      campaignList.map(async (campaign) => {
+        try {
+          const data = await apiCall(`/api/campaigns/${campaign.id}/assets/preview`);
+          if (data.success) {
+            assetMap[campaign.id] = data.assets;
+          }
+        } catch (err) {
+          console.error('Asset preview fetch failed for', campaign.id);
+        }
+      })
+    );
+    setCampaignAssets(assetMap);
+  };
 
   // Calculate slots from budget
   const calculateSlots = (budget) => {
     const amount = parseFloat(budget) || 0;
-    return Math.floor(amount / 2000) * 1;
+    return Math.floor(amount / 5000) * 1;
   };
 
   // Get remaining slots
@@ -45,6 +65,7 @@ export default function AvailableCampaigns() {
         const activeCampaigns = data.campaigns.filter(c => c.status === 'active' || !c.status);
         setCampaigns(activeCampaigns);
         setFilteredCampaigns(activeCampaigns);
+        await fetchAssetPreviews(activeCampaigns);
       }
     } catch (error) {
       console.error('Fetch error:', error);
@@ -89,6 +110,41 @@ export default function AvailableCampaigns() {
     setFilteredCampaigns(filtered);
   };
 
+  const handleDownloadAsset = async (campaignId, assetId, fileName) => {
+    if (!token) {
+      setError('You must be logged in to download assets');
+      return;
+    }
+
+    try {
+      setDownloadingAsset(assetId);
+      const data = await apiCallAuth(
+        `/api/campaigns/${campaignId}/assets/${assetId}/download`,
+        token
+      );
+
+      if (data.success) {
+        // Trigger browser download
+        const link = document.createElement('a');
+        link.href = data.download_url;
+        link.download = data.file_name || fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        setError(data.message || 'Failed to download asset');
+        setTimeout(() => setError(''), 3000);
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      setError('Failed to download asset');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setDownloadingAsset(null);
+    }
+  };
+
   const handleSubscribeCampaign = async (campaignId) => {
     if (!token) {
       setError('You must be logged in to subscribe');
@@ -103,9 +159,11 @@ export default function AvailableCampaigns() {
       );
 
       if (data.success) {
-        setSuccessMessage('Successfully subscribed to campaign!');
+        setSuccessMessage('Successfully subscribed to campaign! You can now download brand assets.');
+        setSubscribedCampaigns(prev => [...prev, campaignId]);
         fetchCampaigns();
-        setTimeout(() => setSuccessMessage(''), 3000);
+        await fetchAssetPreviews([{ id: campaignId }]);
+        setTimeout(() => setSuccessMessage(''), 4000);
       } else {
         setError(data.message || 'Failed to subscribe');
       }
@@ -225,7 +283,7 @@ export default function AvailableCampaigns() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {filteredCampaigns.map(campaign => {
                   const totalSlots = calculateSlots(campaign.budget || campaign.amountPaid || 0);
-                  const subscribedCount = campaign.subscribedPromotors?.length || campaign.subscribers?.length || 0;
+                  const subscribedCount = campaign.subscribedPromoters?.length || 0;
                   const remainingSlots = getRemainingSlots(campaign);
                   const progressPercent = (subscribedCount / totalSlots) * 100;
 
@@ -254,6 +312,84 @@ export default function AvailableCampaigns() {
                             </div>
                           )}
                         </div>
+                        
+                        {/* Description */}
+                        {campaign.description && (
+                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">{campaign.description}</p>
+                        )}
+
+                        {/* Key Message */}
+                        {campaign.keyMessage && (
+                          <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mb-4 text-sm">
+                            <p className="font-semibold text-green-800 mb-1">📢 Key Message</p>
+                            <p className="text-gray-700">{campaign.keyMessage}</p>
+                          </div>
+                        )}
+
+                        {/* Brand Assets */}
+                        {campaignAssets[campaign.id]?.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-semibold text-gray-700">
+                                Brand Assets ({campaignAssets[campaign.id].length})
+                              </p>
+
+                              {!campaign.subscribedPromoters?.some(p => p.promoterId === user?.id) && (
+                                <span className="text-xs text-orange-600 font-medium">Subscribe to download</span>
+                              )}
+                            </div>
+
+                            <div className="space-y-2">
+                              {campaignAssets[campaign.id].map((asset, idx) => {
+                                const isSubscribed = campaign.subscribedPromoters?.some(p => p.promoterId === user?.id);
+                                const isDownloading = downloadingAsset === asset.id;
+                                return (
+                                  <div key={asset.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                                    {/* Thumbnail */}
+                                    <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-gray-200">
+                                      {asset.file_type === 'image' ? (
+                                        <img src={asset.url} alt={asset.file_name} className="w-full h-full object-cover" />
+                                      ) : asset.file_type === 'video' ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-blue-100">
+                                          🎬
+                                        </div>
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-red-100">
+                                          📄
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* File info */}
+                                    <div className="flex-grow min-w-0">
+                                      <p className="text-xs font-medium text-gray-700 truncate">{asset.file_name}</p>
+                                      <p className="text-xs text-gray-500">{asset.file_type}</p>
+                                    </div>
+
+                                    {/* Download button */}
+                                    {isSubscribed ? (
+                                      <button
+                                        onClick={() => handleDownloadAsset(campaign.id, asset.id, asset.file_name)}
+                                        disabled={isDownloading}
+                                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                          isDownloading
+                                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                            : 'bg-green-600 text-white hover:bg-green-700'
+                                        }`}
+                                      >
+                                        {isDownloading ? '⏳' : '⬇ Download'}
+                                      </button>
+                                    ) : (
+                                      <span className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-gray-500 bg-gray-200 rounded-lg">
+                                        🔒 Locked
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Promoter Slots Info */}
                         <div className="bg-gray-50 rounded-lg p-4 mb-4">

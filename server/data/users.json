@@ -8,5 +8,35 @@
     "tiktok": "@fatihu_m",
     "twitter": "@fatihu_m",
     "createdAt": "2026-04-03T19:40:58.274Z"
+  },
+  {
+    "id": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "name": "fatihu muaz",
+    "email": "fatihum25@gmail.com",
+    "password": "$2b$10$GxuaGdd.BrYM2wLViFktHePRIhkQZ19eUzjdvTe4dH3avtSBD0HWS",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-24T15:40:35.518Z"
+  },
+  {
+    "id": "b4fa7175-5a44-4966-befb-8749567b5c86",
+    "name": "broski",
+    "email": "broskixyz6@gmail.com",
+    "password": "$2b$10$bSOLye2Ax83chNLEhEgxf.aaxHVnH.Uy.eZ1Ni.pglB/x3SMllMsO",
+    "role": "promoter",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-25T05:49:25.935Z"
+  },
+  {
+    "id": "7a6852df-8dda-4c84-9314-b653adb1cc6a",
+    "name": "admin",
+    "email": "tryspreadfast@gmail.com",
+    "password": "$2b$10$W1aMMvLHQn8lxhVE7uC4KOcZRITamrIh0QwZr8vno.zeQJhYOCzjK",
+    "role": "company",
+    "walletBalance": 0,
+    "bankDetails": null,
+    "createdAt": "2026-05-25T06:03:14.141Z"
   }
 ]

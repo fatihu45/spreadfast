@@ -3,6 +3,7 @@
 import React, { useState, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import PolicyModal from '../components/PolicyModal';
 import './Auth.css';
 
 export default function Register() {
@@ -21,6 +22,9 @@ export default function Register() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [openPolicy, setOpenPolicy] = useState(null);
+
 
   const handleSocialMediaChange = (platform, value) => {
     setSocialMedia(prev => ({
@@ -31,6 +35,12 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+      if (!agreedToTerms) {
+    setError('You must agree to the Terms & Conditions and Privacy Policy.');
+    return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -41,6 +51,7 @@ export default function Register() {
       role,
       ...(role === 'promoter' && { socialMedia })
     };
+    
 
     const result = await register(
       registrationData.name,
@@ -139,6 +150,59 @@ export default function Register() {
             />
           </div>
         )}
+
+        <div className="terms-checkbox">
+            <label>
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                required
+              />
+              {' '}I agree to the{' '}
+              <span
+                className="policy-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpenPolicy('terms');
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') setOpenPolicy('terms');
+                }}
+              >
+                Terms & Conditions
+              </span>
+              {' '}and{' '}
+              <span
+                className="policy-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpenPolicy('privacy');
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') setOpenPolicy('privacy');
+                }}
+              >
+                Privacy Policy
+              </span>
+              .
+            </label>
+          </div>
+        
+        <PolicyModal 
+          isOpen={openPolicy === 'terms'} 
+          policyType="terms" 
+          onClose={() => setOpenPolicy(null)} 
+        />
+        <PolicyModal 
+          isOpen={openPolicy === 'privacy'} 
+          policyType="privacy" 
+          onClose={() => setOpenPolicy(null)} 
+        />
         
         <button type="submit" disabled={loading}>
           {loading ? 'Registering...' : 'Register'}

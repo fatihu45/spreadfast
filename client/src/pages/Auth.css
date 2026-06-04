@@ -100,3 +100,79 @@
 .auth-form a:hover {
   color: #0d3415;
 }
+
+.auth-form .terms {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.auth-form .terms input {
+  margin-right: 10px;
+  width: auto;
+}
+
+.auth-form .terms label {
+  font-size: 14px;
+  color: #666;
+}
+
+.auth-form .terms label a {
+  color: #1B5E20;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.auth-form .terms label a:hover {
+  color: #0d3415;
+}
+
+@media (max-width: 480px) {
+  .auth-form {
+    padding: 30px 20px;
+  }
+
+  .auth-form h2 {
+    font-size: 24px;
+  }
+}
+
+.terms-checkbox {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+
+.terms-checkbox label {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+}
+
+.terms-checkbox input {
+  margin-right: 8px;
+  margin-bottom: 0;
+  width: auto;
+  cursor: pointer;
+}
+
+.policy-link {
+  background: none;
+  border: none;
+  color: #1B5E20;
+  text-decoration: underline;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  transition: color 0.3s;
+}
+
+.policy-link:hover {
+  color: #0d3415;
+}
+
+

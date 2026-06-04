@@ -4,6 +4,17 @@ import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// ── ADMIN API ──────────────────────────────────────────────────
+export const getAdminStats       = () => API.get('/admin/stats/extended');
+export const getActivityFeed     = (page = 1) => API.get(`/admin/activity-feed?limit=15&page=${page}`);
+export const getAdminUsers       = (params) => API.get(`/admin/users?${new URLSearchParams(params)}`);
+export const updateUserStatus    = (id, status) => API.patch(`/admin/users/${id}/status`, { status });
+export const deleteUser          = (id) => API.delete(`/admin/users/${id}`);
+export const getFinanceSummary   = () => API.get('/admin/finance');
+export const getTransactions     = (params) => API.get(`/admin/transactions?${new URLSearchParams(params)}`);
+export const getAdminSettings    = () => API.get('/admin/settings');
+export const updateAdminSettings = (data) => API.patch('/admin/settings', data);
+
 /**
  * Make an API request with proper error handling
  * @param {string} endpoint - API endpoint (e.g., '/api/auth/login')
@@ -16,13 +27,17 @@ export async function apiCall(endpoint, options = {}) {
     
     // Add timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds for large file uploads
+
+    // Don't set Content-Type if body is FormData (browser will set it automatically)
+    const isFormData = options.body instanceof FormData;
+    const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
 
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
+        ...headers,
         ...options.headers
       }
     });
@@ -56,10 +71,30 @@ export async function apiCall(endpoint, options = {}) {
  * Make an authenticated API request
  * @param {string} endpoint - API endpoint
  * @param {string} token - JWT token
- * @param {object} options - Fetch options
+ * @param {string} method - HTTP method (GET, POST, DELETE, etc.) - default GET
+ * @param {any} data - Request body (for FormData or JSON)
  * @returns {Promise} - Response data
  */
-export async function apiCallAuth(endpoint, token, options = {}) {
+export async function apiCallAuth(endpoint, token, method = 'GET', data = null) {
+  // Handle old signature: apiCallAuth(endpoint, token, options)
+  let options = {};
+  
+  if (typeof method === 'object' && method !== null) {
+    // Old signature: apiCallAuth(endpoint, token, options)
+    options = method;
+  } else {
+    // New signature: apiCallAuth(endpoint, token, method, data)
+    options.method = method;
+    
+    if (data) {
+      if (data instanceof FormData) {
+        options.body = data;
+      } else {
+        options.body = JSON.stringify(data);
+      }
+    }
+  }
+
   return apiCall(endpoint, {
     ...options,
     headers: {

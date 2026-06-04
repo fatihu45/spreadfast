@@ -1,0 +1,105 @@
+[
+  {
+    "id": "3f566edc-7877-482e-839d-9bcf2b82de63",
+    "reference": "081hf4bsjf",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 40000,
+    "campaignName": "spread fast",
+    "description": "create a video explaining what spreadfast does. make sure you tag us on your caption",
+    "keyMessage": "communicate our company and promoter features. ",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-25T06:08:01.866Z"
+  },
+  {
+    "id": "89d77799-59c4-472d-a5e6-ffb2d0779ddd",
+    "reference": "y1obvjdb92",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 40000,
+    "campaignName": "spread fast",
+    "description": "create a video explaining what spreadfast does. make sure you tag us on your caption",
+    "keyMessage": "communicate our company and promoter features. ",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-25T06:13:44.005Z"
+  },
+  {
+    "id": "a29f9a4c-faa9-4eea-9076-703318e5837d",
+    "reference": "9clz8cmnl8",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 20000,
+    "campaignName": "testing",
+    "description": "should be about  testing ",
+    "keyMessage": "best in testing",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-28T08:23:55.542Z"
+  },
+  {
+    "id": "ead1ee38-a1a5-47ae-b2af-8b4c377243e7",
+    "reference": "cz6tughfmn",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 20000,
+    "campaignName": "testing",
+    "description": "",
+    "keyMessage": "this is just for testing",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-28T08:41:21.273Z"
+  },
+  {
+    "id": "5ce43da7-7ef7-4e35-af94-6b0e1af9a6bd",
+    "reference": "pncft7vugf",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 20000,
+    "campaignName": "testing",
+    "description": "",
+    "keyMessage": "this is just for testing",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "pending",
+    "campaignCreated": false,
+    "createdAt": "2026-05-28T08:44:07.300Z"
+  },
+  {
+    "id": "ceae4c28-58b7-46fe-9715-5eaf72821689",
+    "reference": "x6pmmd5kp4",
+    "userId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "email": "fatihum25@gmail.com",
+    "amount": 20000,
+    "campaignName": "testing",
+    "description": "",
+    "keyMessage": "this is just for testing",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "status": "completed",
+    "campaignCreated": true,
+    "createdAt": "2026-05-28T08:45:02.832Z",
+    "campaignId": "ad44ea68-a484-4e65-9900-932415767490"
+  }
+]

@@ -2,6 +2,8 @@ import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { apiCallAuth, apiCall } from '../utils/api';
+import GetStartedBanner from '../components/GetStartedBanner';
+import HowYouEarnCard from '../components/HowYouEarnCard';
 import './Pages.css';
 
 export default function PromotionDashboard() {
@@ -11,6 +13,8 @@ export default function PromotionDashboard() {
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userSubmissions, setUserSubmissions] = useState([]);
+  const [showGetStartedBanner, setShowGetStartedBanner] = useState(false);
 
   // Load campaigns and wallet
   useEffect(() => {
@@ -20,6 +24,15 @@ export default function PromotionDashboard() {
     }
     fetchPromotionData();
   }, [user, navigate, token]);
+
+  // Hide banner when user joins first campaign
+  useEffect(() => {
+    if (userSubmissions && userSubmissions.length > 0) {
+      setShowGetStartedBanner(true);
+      // Permanently hide the banner for this user
+      localStorage.setItem(`sf_banner_hidden_${user?.id}`, 'true');
+    }
+  }, [userSubmissions, user?.id]);
 
   const fetchPromotionData = async () => {
     try {
@@ -37,6 +50,26 @@ export default function PromotionDashboard() {
         // Filter campaigns that the promoter is subscribed to
         // In a real app, you'd get promoter subscriptions from backend
         setActiveCampaigns(campaignsData.campaigns);
+      }
+
+      // Fetch user submissions to check if they've joined any campaigns
+      const submissionsData = await apiCallAuth('/api/submissions/my-submissions', token);
+      if (submissionsData.success) {
+        setUserSubmissions(submissionsData.submissions || []);
+      }
+
+      // Determine if we should show the onboarding banner
+      // Show if: no active campaigns AND no earnings AND never joined a campaign before
+      const hasNeverJoinedCampaign = submissionsData.success && 
+                                     (submissionsData.submissions?.length === 0 || !submissionsData.submissions);
+      const hasZeroEarnings = walletData.success && (walletData.wallet?.balance === 0 || !walletData.wallet?.balance);
+      const hasNoActiveCampaigns = campaignsData.success && campaignsData.campaigns?.length === 0;
+
+      // Check localStorage flag (allows permanent hiding after first join)
+      const hasHiddenBanner = localStorage.getItem(`sf_banner_hidden_${user?.id}`);
+
+      if (hasNeverJoinedCampaign && hasZeroEarnings && hasNoActiveCampaigns && !hasHiddenBanner) {
+        setShowGetStartedBanner(true);
       }
     } catch (error) {
       console.error('Fetch error:', error);
@@ -100,6 +133,11 @@ export default function PromotionDashboard() {
           </div>
         )}
 
+        {/* Get Started Onboarding Banner */}
+        {showGetStartedBanner && (
+          <GetStartedBanner />
+        )}
+
         {/* Earnings Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-8 shadow-lg">
@@ -122,6 +160,9 @@ export default function PromotionDashboard() {
             <p className="text-purple-100 text-sm mt-2">Proofs submitted</p>
           </div>
         </div>
+
+        {/* How You Earn Section */}
+        <HowYouEarnCard />
 
         {/* Quick Action Buttons */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
@@ -150,6 +191,32 @@ export default function PromotionDashboard() {
                   <p className="text-gray-600 text-sm mb-4 line-clamp-2">
                     {campaign.description || campaign.caption}
                   </p>
+                  {campaign.keyMessage && (
+                    <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mb-4 text-sm">
+                      <p className="font-semibold text-green-800 mb-2">📢 Key Message from Brand</p>
+                      <p className="text-gray-700 line-clamp-3">{campaign.keyMessage}</p>
+                    </div>
+                  )}
+                  {campaign.brandAssets && campaign.brandAssets.length > 0 && (
+                    <div className="mb-4">
+                      <p className="font-semibold text-gray-800 mb-2 text-sm">Brand Assets — Use these in your content</p>
+                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        {campaign.brandAssets.map((asset, idx) => (
+                          <div key={idx} className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group">
+                            {asset.fileType.startsWith('image/') ? (
+                              <img src={asset.fileUrl} alt={`asset-${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition" />
+                            ) : asset.fileType === 'video/mp4' ? (
+                              <video src={asset.fileUrl} className="w-full h-full object-cover group-hover:scale-110 transition" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-red-100 group-hover:bg-red-200 transition">
+                                <span className="text-xs font-bold text-red-700">PDF</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2 text-sm mb-4">
                     <p className="text-gray-700">
                       <strong>Budget:</strong> ₦{campaign.budget ? parseFloat(campaign.budget).toLocaleString() : 'N/A'}

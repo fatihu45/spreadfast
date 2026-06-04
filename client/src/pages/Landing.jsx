@@ -63,7 +63,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 text-center">
           <h1 className="text-5xl font-bold mb-6">Get Real Customers Through Real People</h1>
           <p className="text-xl mb-10 text-green-50">
-            SpreadFast connects businesses with promoters to amplify their reach through authentic social media marketing
+            SpreadFast helps businesses and brands get viral promotion from creators, while creators earn money by creating and sharing ads with their followers. No bots, no automation - just real marketing that works.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <button
@@ -188,7 +188,7 @@ export default function LandingPage() {
               rel="noopener noreferrer"
               className="border-2 border-white text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
             >
-              Join Telegram
+              Join our Telegram community
             </a>
           </div>
         </div>

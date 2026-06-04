@@ -11,7 +11,10 @@ export default function CompanyDashboard() {
   // Campaign Creation State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [keyMessage, setKeyMessage] = useState('');
   const [budget, setBudget] = useState('');
+  const [brandAssetFiles, setBrandAssetFiles] = useState([]); // Array of File objects
+  const [brandAssetPreviews, setBrandAssetPreviews] = useState([]); // Array of {file, preview, error}
   const [socialMediaPlatforms, setSocialMediaPlatforms] = useState({
     tiktok: false,
     instagram: false,
@@ -29,13 +32,15 @@ export default function CompanyDashboard() {
   const [successMessage, setSuccessMessage] = useState('');
   const [campaignSubmissions, setCampaignSubmissions] = useState({});
   const [statusMessage, setStatusMessage] = useState('');
+  const [campaignAssets, setCampaignAssets] = useState({});
+
 
   // Polling ref — so we can stop it when done
   const pollingRef = useRef(null);
 
   const calculatePromoterSlots = (budgetAmount) => {
     const amount = parseFloat(budgetAmount) || 0;
-    return Math.floor(amount / 2000) * 1;
+    return Math.floor(amount / 5000) * 1;
   };
 
   const handleSocialMediaChange = (platform) => {
@@ -57,6 +62,62 @@ export default function CompanyDashboard() {
     setSocialMediaPlatforms(newState);
   };
 
+  const handleBrandAssetFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    const allowedFormats = ['image/jpeg', 'image/png', 'video/mp4', 'application/pdf'];
+    const maxFileSize = 20 * 1024 * 1024; // 20MB
+    const maxFiles = 10;
+
+    // Check total file count
+    if (brandAssetFiles.length + files.length > maxFiles) {
+      setError(`Maximum ${maxFiles} files allowed. You currently have ${brandAssetFiles.length}.`);
+      return;
+    }
+
+    const newPreviews = [];
+    const validFiles = [];
+
+    files.forEach(file => {
+      let error = null;
+
+      // Validate file format
+      if (!allowedFormats.includes(file.type)) {
+        error = 'Invalid format. Only JPG, PNG, MP4, PDF allowed.';
+      }
+      // Validate file size
+      else if (file.size > maxFileSize) {
+        error = 'File exceeds 20MB limit.';
+      }
+
+      let preview = null;
+      if (!error) {
+        // Create preview URL
+        if (file.type.startsWith('image/')) {
+          preview = URL.createObjectURL(file);
+        } else if (file.type === 'video/mp4') {
+          preview = URL.createObjectURL(file);
+        }
+        validFiles.push(file);
+      }
+
+      newPreviews.push({ file, preview, error });
+    });
+
+    setBrandAssetFiles(prev => [...prev, ...validFiles]);
+    setBrandAssetPreviews(prev => [...prev, ...newPreviews]);
+    setError(''); // Clear any previous errors
+  };
+
+  const removeBrandAsset = (index) => {
+    // Clean up object URLs
+    if (brandAssetPreviews[index]?.preview) {
+      URL.revokeObjectURL(brandAssetPreviews[index].preview);
+    }
+    
+    setBrandAssetFiles(prev => prev.filter((_, i) => i !== index));
+    setBrandAssetPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   const stopPolling = () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -67,6 +128,17 @@ export default function CompanyDashboard() {
   useEffect(() => {
     return () => stopPolling();
   }, []);
+
+  useEffect(() => {
+    // Cleanup object URLs when component unmounts
+    return () => {
+      brandAssetPreviews.forEach(item => {
+        if (item.preview) {
+          URL.revokeObjectURL(item.preview);
+        }
+      });
+    };
+  }, [brandAssetPreviews]);
 
   useEffect(() => {
     if (user?.role !== 'company') {
@@ -85,6 +157,7 @@ export default function CompanyDashboard() {
         setCampaigns(companyCampaigns);
         companyCampaigns.forEach(campaign => {
           fetchCampaignSubmissions(campaign.id);
+          fetchCampaignAssets(campaign.id);
         });
       }
     } catch (error) {
@@ -108,6 +181,50 @@ export default function CompanyDashboard() {
       }
     } catch (error) {
       console.error('Error fetching submissions:', error);
+    }
+  };
+
+  const fetchCampaignAssets = async (campaignId) => {
+  try {
+    const data = await apiCallAuth(`/api/campaigns/${campaignId}/assets`, token);
+    if (data.success) {
+      setCampaignAssets(prev => ({ ...prev, [campaignId]: data.assets }));
+    }
+  } catch (err) {
+    console.error('Failed to fetch assets:', err);
+  }
+  };
+
+  const uploadBrandAssets = async (campaignId, files, authToken) => {
+    if (!files || files.length === 0) {
+      return { success: true }; // No assets to upload
+    }
+
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${apiUrl}/api/campaigns/${campaignId}/assets/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('Asset upload error:', data.message);
+        return { success: false, message: data.message };
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Brand assets upload error:', error);
+      return { success: false, message: error.message };
     }
   };
 
@@ -138,9 +255,20 @@ export default function CompanyDashboard() {
           setPaymentProcessing(false);
           setStatusMessage('');
           setSuccessMessage('🎉 Payment confirmed! Your campaign is now live to promoters.');
+          
+          // Upload brand assets if any
+          if (brandAssetFiles.length > 0 && data.campaign.id) {
+            const cId = data.campaign.id || data.campaign._id;
+            console.log('Uploading brand assets to campaign:', cId);
+            await uploadBrandAssets(cId, brandAssetFiles, authToken);
+          }
+
           setTitle('');
           setDescription('');
+          setKeyMessage('');
           setBudget('');
+          setBrandAssetFiles([]);
+          setBrandAssetPreviews([]);
           setSocialMediaPlatforms({
             tiktok: false, instagram: false,
             twitter: false, facebook: false, youtube: false
@@ -183,6 +311,11 @@ export default function CompanyDashboard() {
       return;
     }
 
+    if (!keyMessage || keyMessage.trim() === '') {
+      setError('Key message is required');
+      return;
+    }
+
     const selectedPlatforms = Object.keys(socialMediaPlatforms).filter(p => socialMediaPlatforms[p]);
     if (selectedPlatforms.length === 0) {
       setError('Please select at least one social media platform');
@@ -194,26 +327,28 @@ export default function CompanyDashboard() {
     // Capture all values before popup opens
     const campaignTitle = title;
     const campaignDescription = description;
-    const campaignBudget = parseFloat(budget);
-    const campaignPlatforms = selectedPlatforms;
-    const authToken = token || localStorage.getItem('token');
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const campaignKeyMessage = keyMessage;
+      const campaignBudget = parseFloat(budget);
+      const campaignPlatforms = selectedPlatforms;
+      const authToken = token || localStorage.getItem('token');
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-    try {
-      // Step 1: Initialize payment and save campaign data on backend
-      const paymentInitResponse = await apiCallAuth(
-        '/api/payments/initiate',
-        authToken,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            amount: campaignBudget,
-            campaignName: campaignTitle,
-            description: campaignDescription,
-            socialMediaPlatforms: campaignPlatforms
-          })
-        }
-      );
+      try {
+        // Step 1: Initialize payment and save campaign data on backend
+        const paymentInitResponse = await apiCallAuth(
+          '/api/payments/initiate',
+          authToken,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              amount: campaignBudget,
+              campaignName: campaignTitle,
+              description: campaignDescription,
+              keyMessage: campaignKeyMessage,
+              socialMediaPlatforms: campaignPlatforms
+            })
+          }
+        );
 
       if (!paymentInitResponse.success) {
         setError(paymentInitResponse.message || 'Failed to initialize payment');
@@ -222,6 +357,7 @@ export default function CompanyDashboard() {
       }
 
       const paymentReference = paymentInitResponse.reference;
+      const paystackPublicKey = paymentInitResponse.publicKey;
 
       // Step 2: Start polling BEFORE opening popup
       // This way bank transfer confirmation is caught even if popup closes
@@ -229,7 +365,7 @@ export default function CompanyDashboard() {
 
       // Step 3: Open Paystack popup
       const handler = window.PaystackPop.setup({
-        key: process.env.REACT_APP_PAYSTACK_PUBLIC_KEY,
+        key: paystackPublicKey,
         email: user?.email || '',
         amount: campaignBudget * 100,
         ref: paymentReference,
@@ -251,6 +387,7 @@ export default function CompanyDashboard() {
             response.reference,
             campaignTitle,
             campaignDescription,
+            campaignKeyMessage,
             campaignBudget,
             campaignPlatforms,
             authToken,
@@ -274,6 +411,7 @@ export default function CompanyDashboard() {
     reference,
     campaignTitle,
     campaignDescription,
+    campaignKeyMessage,
     campaignBudget,
     campaignPlatforms,
     authToken,
@@ -292,6 +430,7 @@ export default function CompanyDashboard() {
         body: JSON.stringify({
           title: campaignTitle,
           description: campaignDescription,
+          keyMessage: campaignKeyMessage,
           budget: campaignBudget,
           socialMediaPlatforms: campaignPlatforms,
           reference
@@ -305,12 +444,21 @@ export default function CompanyDashboard() {
         throw new Error(data.message || 'Campaign creation failed');
       }
 
+      // Upload brand assets if any
+      if (brandAssetFiles.length > 0) {
+        console.log('Uploading brand assets...');
+        await uploadBrandAssets(data.campaign.id, brandAssetFiles, authToken);
+      }
+
       setPaymentProcessing(false);
       setStatusMessage('');
       setSuccessMessage('🎉 Campaign created successfully! It is now live to promoters.');
       setTitle('');
       setDescription('');
+      setKeyMessage('');
       setBudget('');
+      setBrandAssetFiles([]);
+      setBrandAssetPreviews([]);
       setSocialMediaPlatforms({
         tiktok: false, instagram: false,
         twitter: false, facebook: false, youtube: false
@@ -415,6 +563,83 @@ export default function CompanyDashboard() {
               </div>
 
               <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-2">What should promoters communicate? *</label>
+                <textarea
+                  placeholder="e.g., We offer free delivery citywide, use promo code FAST20, we are Nigeria's #1 logistics app"
+                  value={keyMessage}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 500) {
+                      setKeyMessage(e.target.value);
+                    }
+                  }}
+                  rows="3"
+                  maxLength="500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
+                  required
+                ></textarea>
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-gray-500">Max 500 characters. This is the key message promoters will share.</p>
+                  <p className={`text-xs font-semibold ${keyMessage.length >= 450 ? 'text-red-600' : 'text-gray-500'}`}>
+                    {keyMessage.length}/500
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-2">Upload Brand Assets (Logo, Photos, Videos)</label>
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">💡 <strong>Campaigns with assets get 3x more promoter sign-ups</strong></p>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.mp4,.pdf"
+                  onChange={handleBrandAssetFiles}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">JPG, PNG, MP4, PDF • Max 20MB each • Max 10 files</p>
+
+                {/* File Preview Grid */}
+                {brandAssetPreviews.length > 0 && (
+                  <div className="mt-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      {brandAssetPreviews.map((item, idx) => (
+                        <div key={idx} className="relative">
+                          {item.error ? (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
+                              <p className="text-xs text-red-600 font-semibold">{item.file.name.substring(0, 15)}...</p>
+                              <p className="text-xs text-red-500 mt-1">{item.error}</p>
+                            </div>
+                          ) : (
+                            <div className="bg-gray-100 rounded-lg overflow-hidden">
+                              {item.file.type.startsWith('image/') ? (
+                                <img src={item.preview} alt="preview" className="w-full h-20 object-cover" />
+                              ) : item.file.type === 'video/mp4' ? (
+                                <video src={item.preview} className="w-full h-20 object-cover" />
+                              ) : (
+                                <div className="w-full h-20 flex items-center justify-center bg-gray-200">
+                                  <span className="text-xs font-bold text-gray-600">PDF</span>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeBrandAsset(idx)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                              >
+                                ✕
+                              </button>
+                              <p className="text-xs text-gray-600 p-1 truncate">{item.file.name.substring(0, 12)}...</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">{brandAssetFiles.length}/10 files selected</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-4">
                 <label className="block text-sm font-bold text-gray-700 mb-2">Budget (NGN) *</label>
                 <div className="flex items-center">
                   <span className="text-gray-700 font-semibold mr-2">₦</span>
@@ -436,7 +661,7 @@ export default function CompanyDashboard() {
                       <strong>Promoter Slots Available:</strong> {calculatePromoterSlots(budget)} slots
                     </p>
                     <p className="text-xs text-green-700 mt-1">
-                      ₦2,000 = 1 slot (₦10,000 = 5 slots, ₦20,000 = 10 slots)
+                      ₦5,000 = 1 slot (₦10,000 = 2 slots, ₦20,000 = 4 slots)
                     </p>
                   </div>
                 )}
@@ -577,6 +802,37 @@ export default function CompanyDashboard() {
 
                   {expandedCampaignId === campaign?.id && (
                     <div className="mt-6 border-t border-gray-200 pt-6">
+                      {campaign?.keyMessage && (
+                        <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                          <p className="text-sm font-bold text-green-800 mb-2">📢 Key Message from Brand</p>
+                          <p className="text-gray-700 text-sm">{campaign?.keyMessage}</p>
+                        </div>
+                      )}
+                      {campaignAssets[campaign.id]?.length > 0 && (
+                        <div className="mb-6">
+                              <p className="text-lg font-bold text-gray-800 mb-4">
+                                 Brand Assets ({campaignAssets[campaign.id].length})
+                              </p>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {campaignAssets[campaign.id].map((asset, idx) => (
+                                  <div key={idx} className="bg-gray-100 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition">
+                                    {asset.file_type === 'image' ? (
+                                          <img src={asset.url} alt={asset.file_name} className="w-full h-24 object-cover" />
+                                    ) : asset.file_type === 'video' ? (
+                                          <video src={asset.url} className="w-full h-24 object-cover" />
+                                    ) : (
+                                      <div className="w-full h-24 flex items-center justify-center bg-gray-200">
+                                            <span className="text-xs font-bold text-gray-600">PDF</span>
+                                          </div>
+                                        )}
+                                        <p className="text-xs text-gray-600 p-2 truncate">{asset.file_name}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                      
+
                       <div className="mb-6">
                         <h4 className="text-lg font-bold text-gray-800 mb-4">
                           Subscribed Promoters ({campaign?.subscribedPromoters?.length || 0})
@@ -642,4 +898,4 @@ export default function CompanyDashboard() {
       </div>
     </div>
   );
-}
+};

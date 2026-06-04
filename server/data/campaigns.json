@@ -1,15 +1,34 @@
 [
   {
-    "id": "57447651-b11f-48da-9976-28ef2c674d7f",
-    "name": "spreadfast",
-    "description": "first test campaign",
-    "budget": "100",
-    "amountPaid": 100,
-    "companyId": "test-company-id",
-    "socialMediaPlatforms": ["instagram"],
+    "id": "ad44ea68-a484-4e65-9900-932415767490",
+    "title": "testing",
+    "description": "Test campaign for promoters",
+    "budget": "20000",
+    "amountPaid": 20000,
+    "companyId": "da5c7975-e2fc-445b-a371-68b7df9ee482",
+    "socialMediaPlatforms": [
+      "tiktok",
+      "instagram"
+    ],
+    "keyMessage": "This is our key message for the campaign - spread the word!",
+    "brandAssets": [
+      {
+        "filename": "logo.png",
+        "fileUrl": "https://via.placeholder.com/150",
+        "fileType": "image/png",
+        "fileSize": 45678,
+        "uploadedAt": "2026-05-28T08:45:23.541Z"
+      },
+      {
+        "filename": "promotional_video.mp4",
+        "fileUrl": "https://via.placeholder.com/300",
+        "fileType": "video/mp4",
+        "fileSize": 1234567,
+        "uploadedAt": "2026-05-28T08:45:23.541Z"
+      }
+    ],
     "status": "active",
-    "paystackReference": null,
-    "subscribedPromoters": [],
-    "createdAt": "2026-04-03T19:37:32.140Z"
+    "paystackReference": "x6pmmd5kp4",
+    "createdAt": "2026-05-28T08:45:23.541Z"
   }
 ]

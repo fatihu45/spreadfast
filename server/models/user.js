@@ -1,54 +1,22 @@
-const { v4: uuidv4 } = require('uuid');
+const mongoose = require('mongoose');
 
-class User {
-  static create(name, email, password, role = 'promoter', socialMedia = {}) {
-    return {
-      id: uuidv4(),
-      name,
-      email,
-      password, // Will be hashed
-      role, // 'company' or 'promoter' or 'admin'
-      walletBalance: 0,
-      bankDetails: null,
-      // Social media handles for promoters
-      socialMedia: {
-        tiktok: socialMedia.tiktok || '',
-        instagram: socialMedia.instagram || '',
-        twitter: socialMedia.twitter || '',
-        facebook: socialMedia.facebook || '',
-        youtube: socialMedia.youtube || ''
-      },
-      createdAt: new Date().toISOString()
-    };
+const userSchema = new mongoose.Schema({
+  id: { type: String },
+  name: { type: String },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['promoter', 'company', 'admin'], default: 'promoter' },
+  status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
+  walletBalance: { type: Number, default: 0 },
+  bankDetails: { type: Object, default: null },
+  lastLogin: { type: Date },
+  socialMedia: {
+    tiktok: { type: String, default: '' },
+    instagram: { type: String, default: '' },
+    twitter: { type: String, default: '' },
+    facebook: { type: String, default: '' },
+    youtube: { type: String, default: '' }
   }
-}
+}, { timestamps: true });
 
-module.exports = User;
-
-const jwt = require('jsonwebtoken');
-
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Access token required' 
-    });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Invalid token' 
-      });
-    }
-
-    req.user = user;
-    next();
-  });
-}
-
-module.exports = { authenticateToken };
+module.exports = mongoose.models.User || mongoose.model('User', userSchema);

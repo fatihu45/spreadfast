@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -7,36 +9,371 @@ const axios = require('axios');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const { Resend } = require('resend');
-require('dotenv').config();
+const multer = require('multer');
+const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+
+// ==================== IMPORT MODELS ====================
+const User = require('./models/user');
+
+const app = express();
+
+// ==================== MIDDLEWARE ====================
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://tryspreadfast.com',
+  'https://www.tryspreadfast.com',
+  process.env.CLIENT_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json());
+
+// ==================== ROUTES AFTER CORS ====================
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
 
 // ==================== RESEND EMAIL ====================
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend = null;
+try {
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('✅ Resend email service initialized');
+  } else {
+    console.warn('⚠️  RESEND_API_KEY not found in environment variables');
+  }
+} catch (error) {
+  console.error('❌ Error initializing Resend:', error.message);
+}
+
+// ==================== CLOUDINARY SETUP ====================
+if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+  console.log('✅ Cloudinary initialized');
+} else {
+  console.warn('⚠️  Cloudinary credentials not found in environment variables');
+}
+
+// ==================== PAYSTACK CONFIGURATION ====================
+const getPaystackConfig = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  return {
+    secretKey: isProduction 
+      ? process.env.PAYSTACK_LIVE_SECRET_KEY 
+      : process.env.PAYSTACK_TEST_SECRET_KEY,
+    publicKey: isProduction 
+      ? process.env.PAYSTACK_LIVE_PUBLIC_KEY 
+      : process.env.PAYSTACK_TEST_PUBLIC_KEY,
+    mode: isProduction ? 'Live' : 'Test'
+  };
+};
+
+const paystackConfig = getPaystackConfig();
+console.log(`✅ Paystack initialized in ${paystackConfig.mode} mode`);
+
+// ==================== FILE UPLOAD CONFIGURATION ====================
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedFormats = ['image/jpeg', 'image/png', 'video/mp4', 'application/pdf'];
+  if (allowedFormats.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file format. Only JPG, PNG, MP4, and PDF are allowed.'), false);
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
+// ==================== JSON FALLBACK HELPERS ====================
+// Only used locally when MongoDB is unreachable. Never runs in production.
+
+const isMongoConnected = () => mongoose.connection.readyState === 1;
+
+const DATA_DIR = path.join(__dirname, 'data');
+
+const readJSON = (filename) => {
+  const filePath = path.join(DATA_DIR, filename);
+  if (!fs.existsSync(filePath)) return [];
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return [];
+  }
+};
+
+const writeJSON = (filename, data) => {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DATA_DIR, filename), JSON.stringify(data, null, 2));
+};
+
+// Fallback model wrappers — mirror Mongoose methods used in routes
+const localDB = {
+  User: {
+    find: (query = {}, projection = null) => {
+      let data = readJSON('users.json');
+      return Promise.resolve(matchQuery(data, query).map(u => projection ? omitFields(u, projection) : u));
+    },
+    findOne: (query) => {
+      const data = readJSON('users.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('users.json');
+      data.push(doc);
+      writeJSON('users.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('users.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('users.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  },
+  Campaign: {
+    find: (query = {}) => {
+      const data = readJSON('campaigns.json');
+      return Promise.resolve(matchQuery(data, query));
+    },
+    findOne: (query) => {
+      const data = readJSON('campaigns.json');
+      const result = matchQuery(data, query)[0] || null;
+      // Add toObject() so enrichedSubmissions mapping works
+      if (result) result.toObject = () => result;
+      return Promise.resolve(result);
+    },
+    create: (doc) => {
+      const data = readJSON('campaigns.json');
+      data.push(doc);
+      writeJSON('campaigns.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('campaigns.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('campaigns.json', data);
+      return Promise.resolve({ nModified: 1 });
+    },
+    deleteOne: (query) => {
+      let data = readJSON('campaigns.json');
+      const before = data.length;
+      data = data.filter(item => !matchQuery([item], query).length);
+      writeJSON('campaigns.json', data);
+      return Promise.resolve({ deletedCount: before - data.length });
+    }
+  },
+  Submission: {
+    find: (query = {}) => {
+      const data = readJSON('submissions.json');
+      return Promise.resolve(matchQuery(data, query).map(s => ({ ...s, toObject: () => s })));
+    },
+    findOne: (query) => {
+      const data = readJSON('submissions.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('submissions.json');
+      data.push(doc);
+      writeJSON('submissions.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('submissions.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('submissions.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  },
+  Withdrawal: {
+    find: (query = {}) => {
+      const data = readJSON('withdrawals.json');
+      return Promise.resolve(matchQuery(data, query));
+    },
+    findOne: (query) => {
+      const data = readJSON('withdrawals.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('withdrawals.json');
+      data.push(doc);
+      writeJSON('withdrawals.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('withdrawals.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('withdrawals.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  },
+  PaystackTransaction: {
+    find: (query = {}) => {
+      const data = readJSON('transactions.json');
+      return Promise.resolve(matchQuery(data, query));
+    },
+    findOne: (query) => {
+      const data = readJSON('transactions.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('transactions.json');
+      data.push(doc);
+      writeJSON('transactions.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('transactions.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('transactions.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  },
+  CampaignAsset: {
+    find: (query = {}) => {
+      const data = readJSON('campaign_assets.json');
+      return Promise.resolve(matchQuery(data, query));
+    },
+    findOne: (query) => {
+      const data = readJSON('campaign_assets.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('campaign_assets.json');
+      data.push(doc);
+      writeJSON('campaign_assets.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('campaign_assets.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('campaign_assets.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  },
+  CampaignSubscription: {
+    find: (query = {}) => {
+      const data = readJSON('campaign_subscriptions.json');
+      return Promise.resolve(matchQuery(data, query));
+    },
+    findOne: (query) => {
+      const data = readJSON('campaign_subscriptions.json');
+      return Promise.resolve(matchQuery(data, query)[0] || null);
+    },
+    create: (doc) => {
+      const data = readJSON('campaign_subscriptions.json');
+      data.push(doc);
+      writeJSON('campaign_subscriptions.json', data);
+      return Promise.resolve(doc);
+    },
+    updateOne: (query, update) => {
+      let data = readJSON('campaign_subscriptions.json');
+      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      writeJSON('campaign_subscriptions.json', data);
+      return Promise.resolve({ nModified: 1 });
+    }
+  }
+};
+
+// Simple query matcher — handles flat key/value pairs like { id: '...', email: '...' }
+function matchQuery(data, query) {
+  if (!query || Object.keys(query).length === 0) return data;
+  return data.filter(item =>
+    Object.entries(query).every(([key, val]) => item[key] === val)
+  );
+}
+
+function omitFields(obj, projection) {
+  if (!projection) return obj;
+  const result = { ...obj };
+  Object.keys(projection).forEach(key => {
+    if (projection[key] === 0) delete result[key];
+  });
+  return result;
+}
+
+// ==================== DB PROXY ====================
+// Routes always call DB.User, DB.Campaign etc.
+// This automatically switches between Mongoose and local JSON.
+
+const DB = new Proxy({}, {
+  get(_, model) {
+    if (isMongoConnected()) {
+      // Use real Mongoose models
+      const models = { User, Campaign, Submission, Withdrawal, PaystackTransaction, CampaignAsset, CampaignSubscription };
+      return models[model];
+    }
+    // Use local JSON fallback
+    console.warn(`⚠️  [LOCAL FALLBACK] Using JSON file for ${model}`);
+    return localDB[model];
+  }
+});
 
 // ==================== MONGODB CONNECTION ====================
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('🔄 Attempting to connect to MongoDB...');
+    console.log('📍 Connection string host:', process.env.MONGODB_URI.split('@')[1]?.split('?')[0] || 'unknown');
+
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 30000,
+      retryWrites: true,
+      w: 'majority',
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      family: 4
+    });
     console.log('✅ MongoDB connected successfully');
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
-    process.exit(1);
+    console.log('⚠️  Running in LOCAL FALLBACK mode — data will be saved to /data/*.json files');
+    console.log('⚠️  This fallback is for local development only. Deploy as normal for production.');
+    // Do NOT retry forever — just stay in fallback mode locally
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔁 Retrying in 5 seconds (production mode)...');
+      setTimeout(connectDB, 5000);
+    }
   }
 };
 connectDB();
 
 // ==================== MONGODB MODELS ====================
-const userSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['company', 'promoter', 'admin'], default: 'promoter' },
-  walletBalance: { type: Number, default: 0 },
-  bankDetails: { type: Object, default: null },
-  createdAt: { type: String, default: () => new Date().toISOString() }
-});
-const User = mongoose.model('User', userSchema);
-
 const campaignSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   title: { type: String, required: true },
@@ -45,6 +382,8 @@ const campaignSchema = new mongoose.Schema({
   amountPaid: { type: Number, default: 0 },
   companyId: { type: String, required: true },
   socialMediaPlatforms: { type: [String], default: [] },
+  keyMessage: { type: String, default: '' },
+  brandAssets: { type: Array, default: [] },
   status: { type: String, default: 'active' },
   paystackReference: { type: String, default: null },
   subscribedPromoters: { type: Array, default: [] },
@@ -53,6 +392,27 @@ const campaignSchema = new mongoose.Schema({
   createdAt: { type: String, default: () => new Date().toISOString() }
 });
 const Campaign = mongoose.model('Campaign', campaignSchema);
+
+const campaignAssetSchema = new mongoose.Schema({
+  campaign_id: { type: String, required: true },
+  company_id: { type: String, required: true },
+  file_name: { type: String, required: true },
+  file_type: { type: String, enum: ['image', 'video', 'pdf', 'audio'], required: true },
+  file_size: { type: Number, required: true },
+  cloudinary_public_id: { type: String, required: true, unique: true },
+  cloudinary_url: { type: String, required: true },
+  is_active: { type: Boolean, default: true },
+  uploaded_at: { type: String, default: () => new Date().toISOString() }
+});
+const CampaignAsset = mongoose.model('CampaignAsset', campaignAssetSchema);
+
+const campaignSubscriptionSchema = new mongoose.Schema({
+  promoter_id: { type: String, required: true },
+  campaign_id: { type: String, required: true },
+  status: { type: String, enum: ['active', 'completed', 'cancelled'], default: 'active' },
+  joined_at: { type: String, default: () => new Date().toISOString() }
+});
+const CampaignSubscription = mongoose.model('CampaignSubscription', campaignSubscriptionSchema);
 
 const submissionSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
@@ -95,6 +455,7 @@ const paystackTransactionSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   campaignName: { type: String, required: true },
   description: { type: String, default: '' },
+  keyMessage: { type: String, default: '' },
   socialMediaPlatforms: { type: [String], default: [] },
   status: { type: String, default: 'pending' },
   campaignCreated: { type: Boolean, default: false },
@@ -104,10 +465,15 @@ const paystackTransactionSchema = new mongoose.Schema({
 });
 const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransactionSchema);
 
+const ActivityLog = require('./models/ActivityLog');
+
 // ==================== EMAIL HELPER ====================
-// Single email sending function using Resend
 const sendEmail = async (to, subject, html) => {
   try {
+    if (!resend) {
+      console.warn('⚠️  Email service not available (RESEND_API_KEY not configured)');
+      return { id: 'mock-' + Date.now(), success: false };
+    }
     const result = await resend.emails.send({
       from: 'SpreadFast <noreply@tryspreadfast.com>',
       to: to,
@@ -215,14 +581,17 @@ const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign
   console.log('Campaign confirmation email sent to:', companyEmail);
 };
 
-const sendNewCampaignAlertToPromoters = async (campaign) => {
-  try {
-    const promoters = await User.find({ role: 'promoter' });
+const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NODE_ENV !== 'production') {
+    console.log('📧 [DEV] Skipping promoter email alerts in development');
+    return;
+    }
+    try {
+    const promoters = await DB.User.find({ role: 'promoter' });
     if (promoters.length === 0) {
       console.log('No promoters to notify');
       return;
     }
-    const promoterSlots = Math.floor(parseFloat(campaign.budget) / 2000);
+    const promoterSlots = Math.floor(parseFloat(campaign.budget) / 5000);
     const subject = `🔔 New Campaign Available: "${campaign.title}" — Earn Money Now!`;
 
     const emailPromises = promoters.map(async (promoter) => {
@@ -276,11 +645,9 @@ const sendNewCampaignAlertToPromoters = async (campaign) => {
   }
 };
 
-const app = express();
-
-// ==================== PAYSTACK WEBHOOK (must be before express.json()) ====================
+// ==================== PAYSTACK WEBHOOK ====================
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const secret = process.env.PAYSTACK_SECRET_KEY;
+  const secret = paystackConfig.secretKey;
   const hash = crypto
     .createHmac('sha512', secret)
     .update(req.body)
@@ -305,7 +672,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
     console.log('Payment confirmed via webhook for reference:', reference);
 
     try {
-      const transaction = await PaystackTransaction.findOne({ reference });
+      const transaction = await DB.PaystackTransaction.findOne({ reference });
 
       if (transaction && !transaction.campaignCreated) {
         const campaignId = uuidv4();
@@ -313,24 +680,26 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
           id: campaignId,
           title: transaction.campaignName,
           description: transaction.description || '',
+          keyMessage: transaction.keyMessage || '',
           budget: transaction.amount.toString(),
           amountPaid: transaction.amount,
           companyId: transaction.userId,
           socialMediaPlatforms: transaction.socialMediaPlatforms || [],
+          keyMessage: transaction.keyMessage || '',
           status: 'active',
           paystackReference: reference,
           createdAt: new Date().toISOString()
         };
 
-        await Campaign.create(campaign);
-        await PaystackTransaction.updateOne(
+        await DB.Campaign.create(campaign);
+        await DB.PaystackTransaction.updateOne(
           { reference },
           { campaignCreated: true, campaignId, status: 'completed' }
         );
 
         console.log('Campaign created via webhook:', campaignId);
 
-        const companyUser = await User.findOne({ id: transaction.userId });
+        const companyUser = await DB.User.findOne({ id: transaction.userId });
         if (companyUser) {
           sendCampaignConfirmationEmail(companyUser.name, companyUser.email, campaign)
             .catch(err => console.error('Webhook campaign confirmation email failed:', err.message));
@@ -352,21 +721,10 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
   res.sendStatus(200);
 });
 
-// ==================== MIDDLEWARE ====================
-app.use(cors({
-  origin: process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:3000', 'http://localhost:5173'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
 
-app.use(cors({
-  origin: [ 'https://tryspreadfast.com','https://www.tryspreadfast.com' ],
-  credentials: true
-}));
-app.use(express.json());
+
+// ==================== STATIC FILES ====================
+app.use('/uploads', express.static(uploadsDir));
 
 // ==================== TEST EMAIL ====================
 app.get('/api/test-email', async (req, res) => {
@@ -388,6 +746,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'Backend is running',
+    mongoConnected: isMongoConnected(),
+    mode: isMongoConnected() ? 'MongoDB' : 'Local JSON Fallback',
     timestamp: new Date().toISOString()
   });
 });
@@ -405,7 +765,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Name, email, and password required' });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await DB.User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
@@ -423,8 +783,8 @@ app.post('/api/auth/register', async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    await User.create(newUser);
-    console.log('User saved to MongoDB:', newUser.id);
+    await DB.User.create(newUser);
+    console.log('User saved:', newUser.id);
 
     sendWelcomeEmail(newUser.name, newUser.email, newUser.role)
       .catch(err => console.error('Welcome email failed:', err.message));
@@ -455,7 +815,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await DB.User.findOne({ email });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -485,7 +845,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -502,13 +862,13 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 // ==================== PAYSTACK PAYMENT ROUTES ====================
 app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
   try {
-    const { amount, campaignName, description, socialMediaPlatforms } = req.body;
+    const { amount, campaignName, description, keyMessage, socialMediaPlatforms } = req.body;
 
     if (!amount || !campaignName) {
       return res.status(400).json({ success: false, message: 'Amount and campaign name required' });
     }
 
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -518,11 +878,11 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
       amount: Math.round(amount * 100),
       metadata: { campaignName, userId: user.id, userName: user.name }
     }, {
-      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
+      headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }
     });
 
     if (response.data.status) {
-      await PaystackTransaction.create({
+      await DB.PaystackTransaction.create({
         id: uuidv4(),
         reference: response.data.data.reference,
         userId: user.id,
@@ -530,6 +890,7 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
         amount,
         campaignName,
         description: description || '',
+        keyMessage: keyMessage || '',
         socialMediaPlatforms: socialMediaPlatforms || [],
         status: 'pending',
         campaignCreated: false,
@@ -539,7 +900,7 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
       return res.json({
         success: true,
         message: 'Payment initialized',
-        publicKey: process.env.PAYSTACK_PUBLIC_KEY,
+        publicKey: paystackConfig.publicKey,
         authorizationUrl: response.data.data.authorization_url,
         reference: response.data.data.reference
       });
@@ -561,12 +922,12 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
 
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
-      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, timeout: 10000 }
+      { headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }, timeout: 10000 }
     );
 
     if (response.data.status && response.data.data.status === 'success') {
       const transaction = response.data.data;
-      await PaystackTransaction.updateOne(
+      await DB.PaystackTransaction.updateOne(
         { reference },
         { status: 'completed', verifiedAt: new Date().toISOString() }
       );
@@ -589,7 +950,7 @@ app.get('/api/payments/status/:reference', authenticateToken, async (req, res) =
     const { reference } = req.params;
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
-      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, timeout: 10000 }
+      { headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }, timeout: 10000 }
     );
 
     if (response.data.status) {
@@ -607,21 +968,21 @@ app.get('/api/payments/status/:reference', authenticateToken, async (req, res) =
 app.get('/api/payments/campaign-status/:reference', authenticateToken, async (req, res) => {
   try {
     const { reference } = req.params;
-    const transaction = await PaystackTransaction.findOne({ reference });
+    const transaction = await DB.PaystackTransaction.findOne({ reference });
 
     if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
     }
 
     if (transaction.campaignCreated && transaction.campaignId) {
-      const campaign = await Campaign.findOne({ id: transaction.campaignId });
+      const campaign = await DB.Campaign.findOne({ id: transaction.campaignId });
       return res.json({ success: true, campaignCreated: true, campaign });
     }
 
     try {
       const response = await axios.get(
         `https://api.paystack.co/transaction/verify/${reference}`,
-        { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, timeout: 10000 }
+        { headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }, timeout: 10000 }
       );
 
       if (response.data.status && response.data.data.status === 'success') {
@@ -631,6 +992,7 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
             id: campaignId,
             title: transaction.campaignName,
             description: transaction.description || '',
+            keyMessage: transaction.keyMessage || '',
             budget: transaction.amount.toString(),
             amountPaid: transaction.amount,
             companyId: transaction.userId,
@@ -640,15 +1002,13 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
             createdAt: new Date().toISOString()
           };
 
-          await Campaign.create(campaign);
-          await PaystackTransaction.updateOne(
+          await DB.Campaign.create(campaign);
+          await DB.PaystackTransaction.updateOne(
             { reference },
             { campaignCreated: true, campaignId, status: 'completed' }
           );
 
-          console.log('Campaign created via polling:', campaignId);
-
-          const companyUser = await User.findOne({ id: transaction.userId });
+          const companyUser = await DB.User.findOne({ id: transaction.userId });
           if (companyUser) {
             sendCampaignConfirmationEmail(companyUser.name, companyUser.email, campaign)
               .catch(err => console.error('Polling campaign confirmation email failed:', err.message));
@@ -674,18 +1034,16 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
 // ==================== CAMPAIGN ROUTES ====================
 app.post('/api/campaigns', authenticateToken, async (req, res) => {
   try {
-    const { title, description, budget, reference, socialMediaPlatforms } = req.body;
-
-    console.log('POST /api/campaigns - User:', req.user.id, 'Role:', req.user.role);
+    const { title, description, budget, reference, socialMediaPlatforms, keyMessage } = req.body;
 
     if (!title || !budget) {
       return res.status(400).json({ success: false, message: 'Title and budget required' });
     }
 
     if (reference) {
-      const existingTransaction = await PaystackTransaction.findOne({ reference });
+      const existingTransaction = await DB.PaystackTransaction.findOne({ reference });
       if (existingTransaction && existingTransaction.campaignCreated) {
-        const existingCampaign = await Campaign.findOne({ paystackReference: reference });
+        const existingCampaign = await DB.Campaign.findOne({ paystackReference: reference });
         if (existingCampaign) {
           return res.status(201).json({ success: true, message: 'Campaign already created', campaign: existingCampaign });
         }
@@ -718,23 +1076,30 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
       amountPaid,
       companyId: req.user.id,
       socialMediaPlatforms: socialMediaPlatforms || [],
+      keyMessage: keyMessage || '',
+      brandAssets: [],
       status: 'active',
       paystackReference: reference || null,
       createdAt: new Date().toISOString()
     };
 
-    await Campaign.create(campaign);
+    await DB.Campaign.create(campaign);
+
+    await ActivityLog.create({
+      type: 'campaign_created',
+      icon: '📢',
+      description: `New campaign "${campaign.title}" created`,
+      metadata: { campaignId: String(campaign.id) }
+    });
 
     if (reference) {
-      await PaystackTransaction.updateOne(
+      await DB.PaystackTransaction.updateOne(
         { reference },
         { campaignCreated: true, campaignId }
       );
     }
 
-    console.log('Campaign created:', campaignId);
-
-    const companyUser = await User.findOne({ id: req.user.id });
+    const companyUser = await DB.User.findOne({ id: req.user.id });
     if (companyUser) {
       sendCampaignConfirmationEmail(companyUser.name, companyUser.email, campaign)
         .catch(err => console.error('Campaign confirmation email failed:', err.message));
@@ -750,18 +1115,98 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== CAMPAIGN BRAND ASSETS UPLOAD ====================
+app.post('/api/campaigns/:campaignId/brand-assets', authenticateToken, upload.array('files', 10), async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    }
+
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+    if (!campaign) {
+      req.files.forEach(file => fs.unlinkSync(file.path));
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    if (campaign.companyId !== req.user.id) {
+      req.files.forEach(file => fs.unlinkSync(file.path));
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const uploadedAssets = req.files.map(file => ({
+      filename: file.originalname,
+      fileUrl: `/uploads/${file.filename}`,
+      fileType: file.mimetype,
+      fileSize: file.size,
+      uploadedAt: new Date().toISOString()
+    }));
+
+    const totalAssets = (campaign.brandAssets || []).length + uploadedAssets.length;
+    if (totalAssets > 10) {
+      req.files.forEach(file => fs.unlinkSync(file.path));
+      return res.status(400).json({
+        success: false,
+        message: `Cannot upload more than 10 files. Current: ${campaign.brandAssets?.length || 0}, Attempting to add: ${uploadedAssets.length}`
+      });
+    }
+
+    const updatedBrandAssets = [...(campaign.brandAssets || []), ...uploadedAssets];
+    await DB.Campaign.updateOne({ id: campaignId }, { brandAssets: updatedBrandAssets });
+
+    res.json({ success: true, message: 'Files uploaded successfully', assets: uploadedAssets });
+  } catch (error) {
+    console.error('Brand assets upload error:', error);
+    if (req.files) {
+      req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
+    }
+    res.status(500).json({ success: false, message: 'Failed to upload files: ' + error.message });
+  }
+});
+
+// ==================== DELETE CAMPAIGN BRAND ASSET ====================
+app.delete('/api/campaigns/:campaignId/brand-assets/:assetIndex', authenticateToken, async (req, res) => {
+  try {
+    const { campaignId, assetIndex } = req.params;
+    const index = parseInt(assetIndex);
+
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
+    if (campaign.companyId !== req.user.id) return res.status(403).json({ success: false, message: 'Unauthorized' });
+
+    const assets = campaign.brandAssets || [];
+    if (index < 0 || index >= assets.length) {
+      return res.status(400).json({ success: false, message: 'Invalid asset index' });
+    }
+
+    const assetToDelete = assets[index];
+    const filePath = path.join(uploadsDir, path.basename(assetToDelete.fileUrl));
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    assets.splice(index, 1);
+    await DB.Campaign.updateOne({ id: campaignId }, { brandAssets: assets });
+
+    res.json({ success: true, message: 'Asset deleted successfully' });
+  } catch (error) {
+    console.error('Delete asset error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete asset: ' + error.message });
+  }
+});
+
 app.get('/api/campaigns', async (req, res) => {
   try {
-    const campaigns = await Campaign.find({});
+    const campaigns = await DB.Campaign.find({});
     res.json({ success: true, campaigns });
   } catch (error) {
+    console.error('Fetch campaigns error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
 });
 
 app.get('/api/campaigns/company/:companyId', async (req, res) => {
   try {
-    const campaigns = await Campaign.find({ companyId: req.params.companyId });
+    const campaigns = await DB.Campaign.find({ companyId: req.params.companyId });
     res.json({ success: true, campaigns });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
@@ -773,16 +1218,12 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
     const { campaignId } = req.params;
     const { proofUrl, proofDescription, platforms, screenshot } = req.body;
 
-    if (!proofUrl) {
-      return res.status(400).json({ success: false, message: 'Proof URL required' });
-    }
+    if (!proofUrl) return res.status(400).json({ success: false, message: 'Proof URL required' });
 
-    const campaign = await Campaign.findOne({ id: campaignId });
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found' });
-    }
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
 
     const submission = {
       id: uuidv4(),
@@ -799,7 +1240,7 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
       createdAt: new Date().toISOString()
     };
 
-    await Submission.create(submission);
+    await DB.Submission.create(submission);
     res.json({ success: true, message: 'Submission received', submission });
   } catch (error) {
     console.error('Submission error:', error);
@@ -810,11 +1251,9 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
 app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, res) => {
   try {
     const { campaignId } = req.params;
-    const campaign = await Campaign.findOne({ id: campaignId });
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
 
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found' });
-    }
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
     if (!campaign.subscribedPromoters) campaign.subscribedPromoters = [];
 
@@ -822,7 +1261,7 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
       return res.status(400).json({ success: false, message: 'Already subscribed to this campaign' });
     }
 
-    const promoter = await User.findOne({ id: req.user.id });
+    const promoter = await DB.User.findOne({ id: req.user.id });
 
     campaign.subscribedPromoters.push({
       promoterId: req.user.id,
@@ -830,7 +1269,7 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
       subscribedAt: new Date().toISOString()
     });
 
-    await Campaign.updateOne({ id: campaignId }, { subscribedPromoters: campaign.subscribedPromoters });
+    await DB.Campaign.updateOne({ id: campaignId }, { subscribedPromoters: campaign.subscribedPromoters });
     res.json({ success: true, message: 'Successfully subscribed to campaign' });
   } catch (error) {
     console.error('Subscription error:', error);
@@ -840,7 +1279,7 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
 
 app.get('/api/campaigns/:campaignId/submissions', authenticateToken, async (req, res) => {
   try {
-    const submissions = await Submission.find({ campaignId: req.params.campaignId });
+    const submissions = await DB.Submission.find({ campaignId: req.params.campaignId });
     res.json({ success: true, submissions });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
@@ -849,10 +1288,8 @@ app.get('/api/campaigns/:campaignId/submissions', authenticateToken, async (req,
 
 app.get('/api/campaigns/:campaignId', async (req, res) => {
   try {
-    const campaign = await Campaign.findOne({ id: req.params.campaignId });
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found' });
-    }
+    const campaign = await DB.Campaign.findOne({ id: req.params.campaignId });
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
     res.json({ success: true, campaign });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch campaign' });
@@ -862,7 +1299,7 @@ app.get('/api/campaigns/:campaignId', async (req, res) => {
 // ==================== WALLET ROUTES ====================
 app.get('/api/wallet', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, wallet: { balance: user.walletBalance, bankDetails: user.bankDetails } });
   } catch (error) {
@@ -877,7 +1314,7 @@ app.post('/api/wallet/bank-details', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Account details required' });
     }
     const bankDetails = { accountNumber, bankCode, accountName, addedAt: new Date().toISOString() };
-    await User.updateOne({ id: req.user.id }, { bankDetails });
+    await DB.User.updateOne({ id: req.user.id }, { bankDetails });
     res.json({ success: true, message: 'Bank details saved', bankDetails });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to save bank details' });
@@ -896,8 +1333,8 @@ app.put('/api/users/update-bank', authenticateToken, async (req, res) => {
       accountNumber: bankDetails.accountNumber,
       updatedAt: new Date().toISOString()
     };
-    await User.updateOne({ id: req.user.id }, { bankDetails: updatedBankDetails });
-    const user = await User.findOne({ id: req.user.id });
+    await DB.User.updateOne({ id: req.user.id }, { bankDetails: updatedBankDetails });
+    const user = await DB.User.findOne({ id: req.user.id });
     res.json({
       success: true,
       message: 'Bank details updated successfully',
@@ -914,7 +1351,7 @@ app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
     const { amount } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
 
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     if (user.walletBalance < amount) return res.status(400).json({ success: false, message: 'Insufficient balance' });
     if (!user.bankDetails) return res.status(400).json({ success: false, message: 'Bank details required before withdrawal' });
@@ -930,9 +1367,9 @@ app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    await Withdrawal.create(withdrawal);
+    await DB.Withdrawal.create(withdrawal);
     const newBalance = user.walletBalance - amount;
-    await User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
+    await DB.User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
     res.json({ success: true, message: 'Withdrawal request submitted', withdrawal, newBalance });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Withdrawal failed' });
@@ -941,7 +1378,7 @@ app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
 
 app.get('/api/wallet/withdrawals/pending', authenticateToken, async (req, res) => {
   try {
-    const userWithdrawals = await Withdrawal.find({ userId: req.user.id, status: 'pending' });
+    const userWithdrawals = await DB.Withdrawal.find({ userId: req.user.id, status: 'pending' });
     const pendingAmount = userWithdrawals.reduce((sum, w) => sum + w.amount, 0);
     res.json({ success: true, withdrawals: userWithdrawals, pendingAmount });
   } catch (error) {
@@ -954,7 +1391,7 @@ app.post('/api/withdrawals', authenticateToken, async (req, res) => {
     const { amount, bankDetails } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
 
-    const user = await User.findOne({ id: req.user.id });
+    const user = await DB.User.findOne({ id: req.user.id });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     const detailsToUse = bankDetails || user.bankDetails;
@@ -973,9 +1410,9 @@ app.post('/api/withdrawals', authenticateToken, async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    await Withdrawal.create(withdrawal);
+    await DB.Withdrawal.create(withdrawal);
     const newBalance = user.walletBalance - amount;
-    await User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
+    await DB.User.updateOne({ id: req.user.id }, { walletBalance: newBalance });
     res.status(201).json({ success: true, message: 'Withdrawal request created', withdrawal, newBalance });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Withdrawal failed' });
@@ -993,7 +1430,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const users = await User.find({}, { password: 0 });
+    const users = await DB.User.find({}, { password: 0 });
     res.json({ success: true, users });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch users' });
@@ -1005,7 +1442,7 @@ app.get('/api/admin/campaigns', authenticateToken, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const campaigns = await Campaign.find({});
+    const campaigns = await DB.Campaign.find({});
     res.json({ success: true, campaigns });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
@@ -1017,12 +1454,12 @@ app.get('/api/admin/submissions', authenticateToken, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const submissions = await Submission.find({});
-    const campaigns = await Campaign.find({});
-    const enrichedSubmissions = submissions.map(sub => ({
-      ...sub.toObject(),
-      campaignName: campaigns.find(c => c.id === sub.campaignId)?.title || 'Unknown'
-    }));
+    const submissions = await DB.Submission.find({});
+    const campaigns = await DB.Campaign.find({});
+    const enrichedSubmissions = submissions.map(sub => {
+      const s = typeof sub.toObject === 'function' ? sub.toObject() : sub;
+      return { ...s, campaignName: campaigns.find(c => c.id === s.campaignId)?.title || 'Unknown' };
+    });
     res.json({ success: true, submissions: enrichedSubmissions });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
@@ -1041,21 +1478,31 @@ app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req,
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const submission = await Submission.findOne({ id: submissionId });
+    const submission = await DB.Submission.findOne({ id: submissionId });
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
 
     const updateData = { status, reviewedAt: new Date().toISOString() };
 
     if (status === 'approved' && approvalAmount) {
       updateData.approvalAmount = approvalAmount;
-      const user = await User.findOne({ id: submission.userId });
+      const user = await DB.User.findOne({ id: submission.userId });
       if (user) {
-        await User.updateOne({ id: submission.userId }, { walletBalance: user.walletBalance + approvalAmount });
+        await DB.User.updateOne({ id: submission.userId }, { walletBalance: user.walletBalance + approvalAmount });
       }
     }
 
-    await Submission.updateOne({ id: submissionId }, updateData);
-    const updatedSubmission = await Submission.findOne({ id: submissionId });
+    await DB.Submission.updateOne({ id: submissionId }, updateData);
+    const updatedSubmission = await DB.Submission.findOne({ id: submissionId });
+    
+    if (status === 'approved') {
+      await ActivityLog.create({
+        type: 'submission_approved',
+        icon: '✅',
+        description: `Submission approved for campaign "${updatedSubmission.campaignName || ''}"`,
+        metadata: { submissionId: String(updatedSubmission._id || updatedSubmission.id) }
+      });
+    }
+    
     res.json({ success: true, message: `Submission ${status}`, submission: updatedSubmission });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update submission' });
@@ -1067,7 +1514,7 @@ app.get('/api/admin/withdrawals', authenticateToken, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const withdrawals = await Withdrawal.find({});
+    const withdrawals = await DB.Withdrawal.find({});
     res.json({ success: true, withdrawals });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch withdrawals' });
@@ -1086,21 +1533,31 @@ app.patch('/api/admin/withdrawals/:withdrawalId', authenticateToken, async (req,
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const withdrawal = await Withdrawal.findOne({ id: withdrawalId });
+    const withdrawal = await DB.Withdrawal.findOne({ id: withdrawalId });
     if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
 
     const oldStatus = withdrawal.status;
-    await Withdrawal.updateOne({ id: withdrawalId }, { status, reviewedAt: new Date().toISOString() });
+    await DB.Withdrawal.updateOne({ id: withdrawalId }, { status, reviewedAt: new Date().toISOString() });
 
     if (status === 'rejected' && oldStatus === 'pending') {
       const userId = withdrawal.userId || withdrawal.promoterId;
-      const user = await User.findOne({ id: userId });
+      const user = await DB.User.findOne({ id: userId });
       if (user) {
-        await User.updateOne({ id: userId }, { walletBalance: user.walletBalance + withdrawal.amount });
+        await DB.User.updateOne({ id: userId }, { walletBalance: user.walletBalance + withdrawal.amount });
       }
     }
 
-    const updatedWithdrawal = await Withdrawal.findOne({ id: withdrawalId });
+    const updatedWithdrawal = await DB.Withdrawal.findOne({ id: withdrawalId });
+    
+    if (status === 'completed') {
+      await ActivityLog.create({
+        type: 'withdrawal_completed',
+        icon: '💸',
+        description: `Withdrawal of NGN ${updatedWithdrawal.amount?.toLocaleString()} processed`,
+        metadata: { amount: updatedWithdrawal.amount }
+      });
+    }
+    
     res.json({ success: true, message: `Withdrawal marked as ${status}`, withdrawal: updatedWithdrawal });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update withdrawal' });
@@ -1119,15 +1576,15 @@ app.post('/api/admin/withdrawals/:withdrawalId/review', authenticateToken, async
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const withdrawal = await Withdrawal.findOne({ id: withdrawalId });
+    const withdrawal = await DB.Withdrawal.findOne({ id: withdrawalId });
     if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
 
-    await Withdrawal.updateOne({ id: withdrawalId }, { status, reviewedAt: new Date().toISOString() });
+    await DB.Withdrawal.updateOne({ id: withdrawalId }, { status, reviewedAt: new Date().toISOString() });
 
     if (status === 'rejected') {
-      const user = await User.findOne({ id: withdrawal.userId });
+      const user = await DB.User.findOne({ id: withdrawal.userId });
       if (user) {
-        await User.updateOne({ id: withdrawal.userId }, { walletBalance: user.walletBalance + withdrawal.amount });
+        await DB.User.updateOne({ id: withdrawal.userId }, { walletBalance: user.walletBalance + withdrawal.amount });
       }
     }
 
@@ -1142,9 +1599,9 @@ app.delete('/api/admin/campaigns/:campaignId', authenticateToken, async (req, re
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const campaign = await Campaign.findOne({ id: req.params.campaignId });
+    const campaign = await DB.Campaign.findOne({ id: req.params.campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
-    await Campaign.deleteOne({ id: req.params.campaignId });
+    await DB.Campaign.deleteOne({ id: req.params.campaignId });
     res.json({ success: true, message: 'Campaign deleted successfully', campaign });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to delete campaign' });
@@ -1163,11 +1620,11 @@ app.patch('/api/admin/campaigns/:campaignId', authenticateToken, async (req, res
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const campaign = await Campaign.findOne({ id: campaignId });
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
-    await Campaign.updateOne({ id: campaignId }, { status, statusUpdatedAt: new Date().toISOString() });
-    const updatedCampaign = await Campaign.findOne({ id: campaignId });
+    await DB.Campaign.updateOne({ id: campaignId }, { status, statusUpdatedAt: new Date().toISOString() });
+    const updatedCampaign = await DB.Campaign.findOne({ id: campaignId });
     res.json({ success: true, message: `Campaign status updated to ${status}`, campaign: updatedCampaign });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update campaign' });
@@ -1179,10 +1636,10 @@ app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
-    const users = await User.find({});
-    const campaigns = await Campaign.find({});
-    const submissions = await Submission.find({});
-    const withdrawals = await Withdrawal.find({});
+    const users = await DB.User.find({});
+    const campaigns = await DB.Campaign.find({});
+    const submissions = await DB.Submission.find({});
+    const withdrawals = await DB.Withdrawal.find({});
 
     const totalCampaignBudget = campaigns.reduce((sum, c) => sum + (parseFloat(c.budget) || 0), 0);
     const totalWithdrawalAmount = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
@@ -1214,10 +1671,283 @@ app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
 
 app.get('/api/submissions/my-submissions', authenticateToken, async (req, res) => {
   try {
-    const submissions = await Submission.find({ userId: req.user.id });
+    const submissions = await DB.Submission.find({ userId: req.user.id });
     res.json({ success: true, submissions });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch submissions' });
+  }
+});
+
+// ==================== CAMPAIGN ASSETS (CLOUDINARY) ====================
+
+// POST /api/campaigns/:campaignId/assets/upload - Company uploads assets
+app.post('/api/campaigns/:campaignId/assets/upload', authenticateToken, upload.array('files', 10), async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+
+    if (!campaign) {
+      if (req.files) req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    if (campaign.companyId !== req.user.id) {
+      if (req.files) req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files provided' });
+    }
+
+    // Check max files
+    const existingAssets = await DB.CampaignAsset.find({ campaign_id: campaignId, is_active: true });
+    if (existingAssets.length + req.files.length > 10) {
+      req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
+      return res.status(400).json({
+        success: false,
+        message: `Max 10 files per campaign. Current: ${existingAssets.length}, Attempting: ${req.files.length}`
+      });
+    }
+
+    const uploadedAssets = [];
+    const errors = [];
+
+    for (const file of req.files) {
+      try {
+        // Determine file type
+        let fileType = 'pdf';
+        if (file.mimetype.startsWith('image/')) fileType = 'image';
+        else if (file.mimetype.startsWith('video/')) fileType = 'video';
+        else if (file.mimetype.startsWith('audio/')) fileType = 'audio';
+
+        // Add timestamp to filename to avoid conflicts
+        const uniqueName = `${Date.now()}-${file.originalname}`;
+        const folderPath = `spreadfast/campaign-assets/${campaignId}`;
+
+        // Upload to Cloudinary
+        const uploadResult = await cloudinary.uploader.upload(file.path, {
+          folder: folderPath,
+          public_id: uniqueName.replace(/\.[^/.]+$/, ''),
+          resource_type: fileType === 'video' ? 'video' : fileType === 'audio' ? 'video' : 'auto',
+          quality: fileType === 'image' ? 'auto' : undefined,
+          fetch_format: fileType === 'image' ? 'auto' : undefined,
+          flags: fileType === 'video' ? 'progressive' : undefined
+        });
+
+        // Save metadata to DB
+        const asset = await DB.CampaignAsset.create({
+          campaign_id: campaignId,
+          company_id: req.user.id,
+          file_name: file.originalname,
+          file_type: fileType,
+          file_size: Math.round(file.size / 1024),
+          cloudinary_public_id: uploadResult.public_id,
+          cloudinary_url: uploadResult.secure_url,
+          is_active: true
+        });
+
+        uploadedAssets.push({
+          id: asset._id || asset.id,
+          file_name: file.originalname,
+          file_type: fileType,
+          file_size: Math.round(file.size / 1024),
+          uploaded_at: new Date().toISOString()
+        });
+
+        // Clean up local file
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      } catch (fileError) {
+        errors.push({ file: file.originalname, error: fileError.message });
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      }
+    }
+
+    if (uploadedAssets.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'All files failed to upload',
+        errors
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `${uploadedAssets.length} file(s) uploaded successfully`,
+      assets: uploadedAssets,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Asset upload error:', error);
+    if (req.files) {
+      req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
+    }
+    res.status(500).json({ success: false, message: 'Upload failed: ' + error.message });
+  }
+});
+
+// GET /api/campaigns/:campaignId/assets/preview — public, no auth, for campaign cards
+app.get('/api/campaigns/:campaignId/assets/preview', async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
+
+    const assets = await DB.CampaignAsset.find({ campaign_id: campaignId, is_active: true });
+    const preview = assets.slice(0, 3).map(a => ({
+      id: a._id || a.id,
+      file_name: a.file_name,
+      file_type: a.file_type,
+      url: a.cloudinary_url
+    }));
+
+    res.json({ success: true, assets: preview, total: assets.length });
+  } catch (error) {
+    console.error('Asset preview error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch asset preview' });
+  }
+});
+
+// GET /api/campaigns/:campaignId/assets - Get asset list
+app.get('/api/campaigns/:campaignId/assets', authenticateToken, async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    // If requester is company, show all assets
+    // If requester is promoter, check subscription
+    let assets = [];
+
+    if (campaign.companyId === req.user.id) {
+      // Company - show all assets
+      assets = await DB.CampaignAsset.find({ campaign_id: campaignId, is_active: true });
+    } else {
+      // Check subscribedPromoters array instead (matches how subscribe saves)
+        const isSubscribed = campaign.subscribedPromoters?.some(
+          p => p.promoterId === req.user.id
+        );
+
+        if (!isSubscribed) {
+          return res.status(403).json({
+            success: false,
+            message: 'Subscribe to this campaign to access assets'
+          });
+        }
+
+      assets = await DB.CampaignAsset.find({ campaign_id: campaignId, is_active: true });
+    }
+
+    res.json({
+      success: true,
+      assets: assets.map(a => ({
+        id: a._id || a.id,
+        file_name: a.file_name,
+        file_type: a.file_type,
+        file_size: a.file_size,
+        url: a.cloudinary_url,
+        download_url: a.cloudinary_url,
+        uploaded_at: a.uploaded_at
+      }))
+    });
+  } catch (error) {
+    console.error('Get assets error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch assets' });
+  }
+});
+
+// GET /api/campaigns/:campaignId/assets/:assetId/download - Get signed URL for download
+app.get('/api/campaigns/:campaignId/assets/:assetId/download', authenticateToken, async (req, res) => {
+  try {
+    const { campaignId, assetId } = req.params;
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    // Find asset by MongoDB _id
+    let asset = null;
+    try {
+      asset = await DB.CampaignAsset.findOne({ _id: assetId });
+    } catch (e) {
+      return res.status(400).json({ success: false, message: 'Invalid asset ID' });
+    }
+
+    if (!asset || !asset.is_active) {
+      return res.status(404).json({ success: false, message: 'Asset not found' });
+    }
+
+    // Verify access — company owner or subscribed promoter
+    const isOwner = campaign.companyId === req.user.id;
+    const isSubscribed = campaign.subscribedPromoters?.some(p => p.promoterId === req.user.id);
+
+    if (!isOwner && !isSubscribed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Subscribe to this campaign to download assets'
+      });
+    }
+
+    // Generate signed Cloudinary URL valid for 1 hour
+    const resourceType = asset.file_type === 'video' ? 'video' : asset.file_type === 'audio' ? 'video' : 'image';
+    const signedUrl = cloudinary.url(asset.cloudinary_public_id, {
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      resource_type: resourceType,
+      flags: 'attachment'
+    });
+
+    res.json({
+      success: true,
+      download_url: signedUrl,
+      file_name: asset.file_name,
+      file_type: asset.file_type,
+      expires_in: 3600
+    });
+  } catch (error) {
+    console.error('Download URL error:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate download URL' });
+  }
+});
+
+// DELETE /api/campaigns/:campaignId/assets/:assetId - Delete asset
+app.delete('/api/campaigns/:campaignId/assets/:assetId', authenticateToken, async (req, res) => {
+  try {
+    const { campaignId, assetId } = req.params;
+    const campaign = await DB.Campaign.findOne({ id: campaignId });
+
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    if (campaign.companyId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const asset = await DB.CampaignAsset.findOne({ _id: assetId || { $eq: assetId } });
+    if (!asset) {
+      return res.status(404).json({ success: false, message: 'Asset not found' });
+    }
+
+    // Delete from Cloudinary
+    await cloudinary.uploader.destroy(asset.cloudinary_public_id, {
+      resource_type: asset.file_type === 'video' ? 'video' : asset.file_type === 'audio' ? 'video' : 'image'
+    });
+
+    // Mark as inactive in DB
+    await DB.CampaignAsset.updateOne(
+      { _id: assetId || { $eq: assetId } },
+      { is_active: false }
+    );
+
+    res.json({ success: true, message: 'Asset deleted successfully' });
+  } catch (error) {
+    console.error('Delete asset error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete asset' });
   }
 });
 
