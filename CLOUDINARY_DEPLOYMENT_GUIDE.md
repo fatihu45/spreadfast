@@ -80,17 +80,7 @@ Go to: **Render Dashboard → Your Service → Settings → Environment**
 
 Add these variables:
 ```
-CLOUDINARY_CLOUD_NAME=dfrffeugj
-CLOUDINARY_API_KEY=321965639866157
-CLOUDINARY_API_SECRET=b4p6EFnYbBLtF34jDZ7FrC1PPB8
-MONGODB_URI=mongodb+srv://tryspreadfast_db_user:Vox9lmq8AJqlzjvQ@cluster0.69hrjey.mongodb.net/spreadfast?retryWrites=true&w=majority&appName=Cluster0
-JWT_SECRET=f25e95e6da9e8a2000f7427d90afa2d119e5b24f9fd0473efe1a2cdb11c47c65fac485974fb9e71721a929e275a3ebcb7e351e56105f865d8b58af6b94a9c3b0
-PAYSTACK_SECRET_KEY=sk_live_64ed83b4efb3c4b94da5d7054b25930afeea1d49
-PAYSTACK_PUBLIC_KEY=pk_live_b9020945be35d2ad505d846b24787151604f5505
-ADMIN_EMAIL=tryspreadfast@gmail.com
-EMAIL_USER=tryspreadfast@gmail.com
-EMAIL_PASS=pwod swnacgapugxc
-RESEND_API_KEY=re_SftJiWFq_BjqD59o5m5iQfqdVhs5s7pBX
+check tg saved msgs
 ```
 
 #### 2. Redeploy Service
