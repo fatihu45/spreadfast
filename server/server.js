@@ -581,6 +581,38 @@ const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign
   console.log('Campaign confirmation email sent to:', companyEmail);
 };
 
+const sendPasswordResetEmail = async (name, email, resetToken) => {
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+  const subject = 'Reset your SpreadFast password';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
+        <h1 style="color: white; margin: 0;">Password Reset Request</h1>
+      </div>
+      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
+        <h2 style="color: #15803d;">Hi ${name}!</h2>
+        <p style="color: #444; font-size: 16px;">
+          We received a request to reset your SpreadFast password. Click the button below to choose a new one.
+          This link expires in 30 minutes.
+        </p>
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${resetUrl}"
+             style="background-color: #15803d; color: white; padding: 15px 30px;
+                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+            Reset Password →
+          </a>
+        </div>
+        <p style="color: #999; font-size: 13px; margin-top: 30px;">
+          If you didn't request this, you can safely ignore this email — your password won't be changed.
+        </p>
+      </div>
+      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">© 2025 SpreadFast. All rights reserved.</p>
+    </div>
+  `;
+  await sendEmail(email, subject, html);
+  console.log('Password reset email sent to:', email);
+};
+
 const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NODE_ENV !== 'production') {
     console.log('📧 [DEV] Skipping promoter email alerts in development');
     return;
@@ -856,6 +888,74 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ success: false, message: 'Failed to get user' });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email required' });
+    }
+
+    const genericResponse = {
+      success: true,
+      message: 'If that email is registered, a reset link has been sent.'
+    };
+
+    const user = await DB.User.findOne({ email });
+    if (!user) {
+      // Same response whether or not the user exists — prevents email enumeration
+      return res.json(genericResponse);
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await DB.User.updateOne(
+      { id: user.id },
+      { resetPasswordTokenHash: tokenHash, resetPasswordExpires: expires }
+    );
+
+    sendPasswordResetEmail(user.name, user.email, rawToken)
+      .catch(err => console.error('Password reset email failed:', err.message));
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process request' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Token and new password required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await DB.User.findOne({ resetPasswordTokenHash: tokenHash });
+
+    if (!user || !user.resetPasswordExpires || new Date(user.resetPasswordExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'Reset link is invalid or has expired' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await DB.User.updateOne(
+      { id: user.id },
+      { password: hashedPassword, resetPasswordTokenHash: null, resetPasswordExpires: null }
+    );
+
+    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reset password' });
   }
 });
 

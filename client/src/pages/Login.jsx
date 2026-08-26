@@ -89,6 +89,8 @@ export default function Login() {
         </button>
         
         <p>Don't have an account? <a href="/register">Register here</a></p>
+
+        <p><a href="/forgot-password">Forgot your password?</a></p>
       </form>
     </div>
   );

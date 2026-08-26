@@ -16,7 +16,9 @@ const userSchema = new mongoose.Schema({
     twitter: { type: String, default: '' },
     facebook: { type: String, default: '' },
     youtube: { type: String, default: '' }
-  }
+  },
+  resetPasswordTokenHash: { type: String, default: null },
+  resetPasswordExpires: { type: Date, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.models.User || mongoose.model('User', userSchema);
