@@ -1,10 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [openFaq, setOpenFaq] = useState(null);
 
   const handleCreateCampaign = () => {
     if (user?.role === 'company') {
@@ -29,6 +30,29 @@ export default function LandingPage() {
       navigate('/register?role=promoter');
     }
   };
+
+  const faqs = [
+    {
+      q: 'How is engagement verified?',
+      a: 'Every promoter submission is tracked and checked against the campaign requirements before it counts toward payout. No automated bots or fake engagement is counted — only real, verifiable interactions.',
+    },
+    {
+      q: "What if a promoter doesn't deliver?",
+      a: "Businesses only pay for verified results. If a promoter's submission doesn't meet the campaign requirements, it simply doesn't count toward their share of the payout — there's no upfront risk to the business.",
+    },
+    {
+      q: 'How much does it cost to run a campaign?',
+      a: 'Campaign slots are ₦10,000 per 2 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
+    },
+    {
+      q: 'How do promoters get paid?',
+      a: 'Promoters earn a share of the campaign pool based on their percentage of total group engagement. Withdrawals are processed through Paystack, with a minimum withdrawal of ₦1,000.',
+    },
+    {
+      q: 'What platforms can I promote on?',
+      a: 'Instagram, TikTok, X (Twitter), and WhatsApp are all supported for campaign promotion.',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-white">
@@ -62,8 +86,11 @@ export default function LandingPage() {
       <section className="bg-gradient-to-r from-green-700 to-green-900 text-white py-20">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <h1 className="text-5xl font-bold mb-6">Get Real Customers Through Real People</h1>
-          <p className="text-xl mb-10 text-green-50">
-            SpreadFast helps businesses and brands get viral promotion from creators, while creators earn money by creating and sharing ads with their followers. No bots, no automation - just real marketing that works.
+          <p className="text-xl mb-6 text-green-50">
+            SpreadFast helps Nigerian businesses get viral promotion from real people, while promoters earn money by sharing campaigns with their followers. No bots, no automation - just real marketing that works.
+          </p>
+          <p className="text-base mb-10 text-green-100">
+            Pay only for verified results. No upfront risk.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <button
@@ -78,6 +105,24 @@ export default function LandingPage() {
             >
               Join as Promoter
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust / Guarantee Strip */}
+      <section className="bg-green-800 text-white py-6">
+        <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+          <div>
+            <p className="font-bold text-lg">Pay for results only</p>
+            <p className="text-green-100 text-sm">No payout until engagement is verified</p>
+          </div>
+          <div>
+            <p className="font-bold text-lg">Secure payments</p>
+            <p className="text-green-100 text-sm">Powered by Paystack, in Naira</p>
+          </div>
+          <div>
+            <p className="font-bold text-lg">Built for Nigeria</p>
+            <p className="text-green-100 text-sm">Local promoters, local businesses</p>
           </div>
         </div>
       </section>
@@ -153,18 +198,97 @@ export default function LandingPage() {
       <section className="bg-green-50 py-20">
         <div className="max-w-6xl mx-auto px-4">
           <div className="max-w-3xl mx-auto">
-            <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">How Promoters Earn</h2>
+            <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">How Promoters Earn</h2>
+            <p className="text-center text-gray-600 mb-16">Your payout is a direct share of the campaign pool - the more you drive, the more you earn</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
+                <div className="text-3xl mb-2">💰</div>
+                <h3 className="font-bold text-gray-800 mb-1">Campaign Pool</h3>
+                <p className="text-sm text-gray-600">A brand funds a pool for each campaign</p>
+              </div>
+              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
+                <div className="text-3xl mb-2">📊</div>
+                <h3 className="font-bold text-gray-800 mb-1">Your Share</h3>
+                <p className="text-sm text-gray-600">Calculated from your % of total group engagement</p>
+              </div>
+              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
+                <div className="text-3xl mb-2">🏦</div>
+                <h3 className="font-bold text-gray-800 mb-1">Get Paid</h3>
+                <p className="text-sm text-gray-600">Withdraw via Paystack, min ₦1,000</p>
+              </div>
+            </div>
+
             <div className="bg-white border-2 border-green-700 rounded-lg p-8 shadow-md">
-              <p className="text-gray-700 leading-relaxed mb-4">
-                As a promoter on SpreadFast, your earnings are based entirely on your performance. The more your audience engages with a campaign, the more you earn — with no flat fees and no guesswork.
-              </p>
-              <p className="text-gray-700 leading-relaxed mb-4">
-                Every campaign has a pool of funds contributed by the brand. Your share of that pool is calculated based on how much of the total group engagement came from you.
-              </p>
               <p className="text-gray-700 leading-relaxed">
-                The more you drive interactions, the bigger your slice of the campaign pool.
+                Every campaign has a pool of funds contributed by the brand. Your share of that pool is calculated based on how much of the total group engagement came from you - no flat fees, no guesswork. The more interactions you drive, the bigger your slice of the pool.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="py-20">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Simple, Transparent Pricing</h2>
+          <p className="text-center text-gray-600 mb-16">No hidden fees. You only pay for what you use.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="border-2 border-green-700 rounded-lg p-8">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">For Businesses</h3>
+              <ul className="space-y-3 text-gray-600">
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 2 promoter slots</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% platform fee on campaign creation</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Pay only for verified engagement</li>
+              </ul>
+              <button
+                onClick={handleCreateCampaign}
+                className="mt-6 w-full bg-green-700 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
+              >
+                Create a Campaign
+              </button>
+            </div>
+            <div className="border-2 border-gray-200 rounded-lg p-8">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">For Promoters</h3>
+              <ul className="space-y-3 text-gray-600">
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Earn a share of every campaign pool</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% fee on withdrawals</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Minimum withdrawal ₦1,000</li>
+              </ul>
+              <button
+                onClick={handleJoinAsPromoter}
+                className="mt-6 w-full bg-gray-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-gray-900 transition"
+              >
+                Join as Promoter
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="bg-gray-50 py-20">
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Frequently Asked Questions</h2>
+          <div className="space-y-4">
+            {faqs.map((item, idx) => (
+              <div key={idx} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                  className="w-full text-left px-6 py-4 flex justify-between items-center font-semibold text-gray-800 hover:bg-gray-50 transition"
+                >
+                  {item.q}
+                  <span className="text-green-700 text-xl flex-shrink-0 ml-4">
+                    {openFaq === idx ? '−' : '+'}
+                  </span>
+                </button>
+                {openFaq === idx && (
+                  <div className="px-6 pb-4 text-gray-600 leading-relaxed">
+                    {item.a}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -183,12 +307,12 @@ export default function LandingPage() {
               Contact on WhatsApp
             </a>
             <a
-              href="https://t.me/spreadfast"
+              href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
               target="_blank"
               rel="noopener noreferrer"
               className="border-2 border-white text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
             >
-              Join our Telegram community
+              Join our WhatsApp creator community
             </a>
           </div>
         </div>
@@ -207,7 +331,7 @@ export default function LandingPage() {
               <ul className="text-gray-400 space-y-2">
                 <li><button onClick={handleCreateCampaign} className="hover:text-white transition">Create Campaign</button></li>
                 <li><a href="#" className="hover:text-white transition">View Promoters</a></li>
-                <li><a href="#" className="hover:text-white transition">Pricing</a></li>
+                <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
               </ul>
             </div>
             <div>
@@ -215,14 +339,14 @@ export default function LandingPage() {
               <ul className="text-gray-400 space-y-2">
                 <li><button onClick={handleJoinAsPromoter} className="hover:text-white transition">Find Campaigns</button></li>
                 <li><a href="#" className="hover:text-white transition">How to Earn</a></li>
-                <li><a href="#" className="hover:text-white transition">FAQ</a></li>
+                <li><a href="#faq" className="hover:text-white transition">FAQ</a></li>
               </ul>
             </div>
             <div>
               <h4 className="text-sm font-bold mb-4 uppercase">Connect</h4>
               <ul className="text-gray-400 space-y-2">
-                <li><a href="https://t.me/spreadfast" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Telegram</a></li>
-                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp</a></li>
+                <li><a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp Creator Community</a></li>
+                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp Support</a></li>
               </ul>
             </div>
           </div>
