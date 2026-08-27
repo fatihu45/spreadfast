@@ -48,7 +48,7 @@ export default function LandingPage() {
     },
     {
       q: 'How much does it cost to run a campaign?',
-      a: 'Campaign slots are ₦10,000 per 5 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
+      a: 'Campaign slots are ₦10,000 per 2 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
     },
     {
       q: 'How do promoters get paid?',
@@ -246,7 +246,7 @@ export default function LandingPage() {
             <div className="border-2 border-green-700 rounded-lg p-8">
               <h3 className="text-xl font-bold mb-4 text-gray-800">For Businesses</h3>
               <ul className="space-y-3 text-gray-600">
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 5 promoter slots</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 2 promoter slots</li>
                 <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% platform fee on campaign creation</li>
                 <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Pay only for verified engagement</li>
               </ul>
@@ -316,12 +316,12 @@ export default function LandingPage() {
               Contact on WhatsApp
             </a>
             <a
-              href="https://t.me/spreadfast"
+              href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
               target="_blank"
               rel="noopener noreferrer"
               className="border-2 border-white text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
             >
-              Join our Telegram community
+              Join our whatsapp creator community
             </a>
           </div>
         </div>
@@ -354,8 +354,8 @@ export default function LandingPage() {
             <div>
               <h4 className="text-sm font-bold mb-4 uppercase">Connect</h4>
               <ul className="text-gray-400 space-y-2">
-                <li><a href="https://t.me/spreadfast" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Telegram</a></li>
-                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp</a></li>
+                <li><a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">whatsapp community</a></li>
+                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp support</a></li>
               </ul>
             </div>
           </div>
