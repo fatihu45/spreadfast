@@ -1,6 +1,12 @@
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import {
+  MegaphoneIcon, ShareIcon, GrowthIcon,
+  PeopleIcon, ShieldCheckIcon, GlobeIcon, BoltIcon,
+  PoolIcon, ShareChartIcon, BankIcon,
+  LockIcon, PinIcon, VerifiedIcon,
+} from './Icons';
 
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
@@ -42,7 +48,7 @@ export default function LandingPage() {
     },
     {
       q: 'How much does it cost to run a campaign?',
-      a: 'Campaign slots are ₦10,000 per 2 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
+      a: 'Campaign slots are ₦10,000 per 5 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
     },
     {
       q: 'How do promoters get paid?',
@@ -112,16 +118,19 @@ export default function LandingPage() {
       {/* Trust / Guarantee Strip */}
       <section className="bg-green-800 text-white py-6">
         <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-          <div>
-            <p className="font-bold text-lg">Pay for results only</p>
+          <div className="flex flex-col items-center">
+            <VerifiedIcon />
+            <p className="font-bold text-lg mt-2">Pay for results only</p>
             <p className="text-green-100 text-sm">No payout until engagement is verified</p>
           </div>
-          <div>
-            <p className="font-bold text-lg">Secure payments</p>
+          <div className="flex flex-col items-center">
+            <LockIcon />
+            <p className="font-bold text-lg mt-2">Secure payments</p>
             <p className="text-green-100 text-sm">Powered by Paystack, in Naira</p>
           </div>
-          <div>
-            <p className="font-bold text-lg">Built for Nigeria</p>
+          <div className="flex flex-col items-center">
+            <PinIcon />
+            <p className="font-bold text-lg mt-2">Built for Nigeria</p>
             <p className="text-green-100 text-sm">Local promoters, local businesses</p>
           </div>
         </div>
@@ -134,21 +143,21 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
               <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold">1</span>
+                <MegaphoneIcon size={30} color="#ffffff" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">Request Advert</h3>
               <p className="text-gray-600 text-center">Businesses create ad campaigns with their budget and requirements</p>
             </div>
             <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
               <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold">2</span>
+                <ShareIcon size={30} color="#ffffff" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">People Post It</h3>
               <p className="text-gray-600 text-center">Promoters join campaigns and share ads on their social media platforms</p>
             </div>
             <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
               <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold">3</span>
+                <GrowthIcon size={30} color="#ffffff" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">Get Customers</h3>
               <p className="text-gray-600 text-center">Businesses reach real audiences and grow their customer base</p>
@@ -163,28 +172,28 @@ export default function LandingPage() {
           <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Why Choose SpreadFast?</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             <div className="flex gap-4">
-              <div className="text-green-700 text-3xl flex-shrink-0">✓</div>
+              <div className="flex-shrink-0"><PeopleIcon /></div>
               <div>
                 <h3 className="text-xl font-bold mb-2 text-gray-800">Real People, Real Reach</h3>
                 <p className="text-gray-600">Authentic promoters with genuine followers on their platforms</p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="text-green-700 text-3xl flex-shrink-0">✓</div>
+              <div className="flex-shrink-0"><ShieldCheckIcon /></div>
               <div>
                 <h3 className="text-xl font-bold mb-2 text-gray-800">Simple & Transparent</h3>
                 <p className="text-gray-600">No hidden fees, no automation - just real marketing</p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="text-green-700 text-3xl flex-shrink-0">✓</div>
+              <div className="flex-shrink-0"><GlobeIcon /></div>
               <div>
                 <h3 className="text-xl font-bold mb-2 text-gray-800">Multi-Platform Support</h3>
                 <p className="text-gray-600">Campaign across Instagram, TikTok, X, and WhatsApp</p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="text-green-700 text-3xl flex-shrink-0">✓</div>
+              <div className="flex-shrink-0"><BoltIcon /></div>
               <div>
                 <h3 className="text-xl font-bold mb-2 text-gray-800">Quick & Easy Setup</h3>
                 <p className="text-gray-600">Create campaigns or join in minutes, not hours</p>
@@ -203,17 +212,17 @@ export default function LandingPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
               <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="text-3xl mb-2">💰</div>
+                <div className="flex justify-center mb-2"><PoolIcon /></div>
                 <h3 className="font-bold text-gray-800 mb-1">Campaign Pool</h3>
                 <p className="text-sm text-gray-600">A brand funds a pool for each campaign</p>
               </div>
               <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="text-3xl mb-2">📊</div>
+                <div className="flex justify-center mb-2"><ShareChartIcon /></div>
                 <h3 className="font-bold text-gray-800 mb-1">Your Share</h3>
                 <p className="text-sm text-gray-600">Calculated from your % of total group engagement</p>
               </div>
               <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="text-3xl mb-2">🏦</div>
+                <div className="flex justify-center mb-2"><BankIcon /></div>
                 <h3 className="font-bold text-gray-800 mb-1">Get Paid</h3>
                 <p className="text-sm text-gray-600">Withdraw via Paystack, min ₦1,000</p>
               </div>
@@ -237,7 +246,7 @@ export default function LandingPage() {
             <div className="border-2 border-green-700 rounded-lg p-8">
               <h3 className="text-xl font-bold mb-4 text-gray-800">For Businesses</h3>
               <ul className="space-y-3 text-gray-600">
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 2 promoter slots</li>
+                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 5 promoter slots</li>
                 <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% platform fee on campaign creation</li>
                 <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Pay only for verified engagement</li>
               </ul>
@@ -307,12 +316,12 @@ export default function LandingPage() {
               Contact on WhatsApp
             </a>
             <a
-              href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
+              href="https://t.me/spreadfast"
               target="_blank"
               rel="noopener noreferrer"
               className="border-2 border-white text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
             >
-              Join our WhatsApp creator community
+              Join our Telegram community
             </a>
           </div>
         </div>
@@ -345,8 +354,8 @@ export default function LandingPage() {
             <div>
               <h4 className="text-sm font-bold mb-4 uppercase">Connect</h4>
               <ul className="text-gray-400 space-y-2">
-                <li><a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp Creator Community</a></li>
-                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp Support</a></li>
+                <li><a href="https://t.me/spreadfast" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Telegram</a></li>
+                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp</a></li>
               </ul>
             </div>
           </div>
