@@ -1,17 +1,18 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import {
-  MegaphoneIcon, ShareIcon, GrowthIcon,
-  PeopleIcon, ShieldCheckIcon, GlobeIcon, BoltIcon,
-  PoolIcon, ShareChartIcon, BankIcon,
-  LockIcon, PinIcon, VerifiedIcon,
-} from './Icons';
+import { MegaphoneIcon, PeopleIcon, ShareIcon } from './Icons';
+import { Button, Container } from '../components/ui';
+
+import LandingHeroVisual from '../components/LandingHeroVisual';
+import './Landing.css';
 
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const [openFaq, setOpenFaq] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef(null);
 
   const handleCreateCampaign = () => {
     if (user?.role === 'company') {
@@ -48,7 +49,7 @@ export default function LandingPage() {
     },
     {
       q: 'How much does it cost to run a campaign?',
-      a: 'Campaign slots are ₦10,000 per 2 promoter slots, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
+      a: 'Campaigns cost ₦20,000 per promoter, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
     },
     {
       q: 'How do promoters get paid?',
@@ -61,308 +62,182 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation Bar */}
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-green-700">SpreadFast</h1>
-          <div className="flex gap-4">
-            {user ? (
-              <>
-                <span className="text-gray-700 font-medium">Welcome, {user.name}</span>
-                <Link to="/dashboard" className="text-green-700 hover:text-green-800 font-semibold">
-                  Dashboard
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="text-green-700 hover:text-green-800 font-semibold">
-                  Login
-                </Link>
-                <Link to="/register" className="bg-green-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-800">
-                  Register
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+    <div className="sf-landing">
+      <a className="sf-skip-link" href="#landing-main">Skip to content</a>
+      <header className="landing-header" onKeyDown={event => {
+        if (event.key === 'Escape' && menuOpen) {
+          setMenuOpen(false);
+          menuButton.current?.focus();
+        }
+      }}>
+        <Container className="landing-header-inner">
+          <Link to="/" aria-label="SpreadFast home" className="landing-logo"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /></Link>
+          <Button ref={menuButton} variant="ghost" className="landing-menu-toggle"
+            aria-expanded={menuOpen} aria-controls="landing-navigation"
+            aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+            onClick={() => setMenuOpen(!menuOpen)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+              <path d={menuOpen ? 'm6 6 12 12M6 18 18 6' : 'M4 7h16M4 12h16M4 17h16'} />
+            </svg>
+          </Button>
+          <nav id="landing-navigation" aria-label="Main navigation"
+            className={'landing-navigation' + (menuOpen ? ' is-open' : '')}>
+            <div className="landing-section-links">
+              <a href="#businesses" onClick={() => setMenuOpen(false)}>For Businesses</a>
+              <a href="#creators" onClick={() => setMenuOpen(false)}>For Creators</a>
+              <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+              <a href="#faq" onClick={() => setMenuOpen(false)}>FAQ</a>
+            </div>
+            <div className="landing-account-links">
+              {user ? (
+                <>
+                  <span className="landing-welcome">Welcome, {user.name}</span>
+                  <Link to="/dashboard" className="sf-control sf-button sf-button--primary">Dashboard</Link>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="landing-login">Log in</Link>
+                  <Link to="/register" className="sf-control sf-button sf-button--primary">Get Started</Link>
+                </>
+              )}
+            </div>
+          </nav>
+        </Container>
+      </header>
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-green-700 to-green-900 text-white py-20">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <h1 className="text-5xl font-bold mb-6">Get Real Customers Through Real People</h1>
-          <p className="text-xl mb-6 text-green-50">
-            SpreadFast helps Nigerian businesses get viral promotion from real people, while promoters earn money by sharing campaigns with their followers. No bots, no automation - just real marketing that works.
-          </p>
-          <p className="text-base mb-10 text-green-100">
-            Pay only for verified results. No upfront risk.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <button
-              onClick={handleCreateCampaign}
-              className="bg-white text-green-700 px-8 py-3 rounded-lg font-bold hover:bg-green-50 transition"
-            >
-              Create Campaign
-            </button>
-            <button
-              onClick={handleJoinAsPromoter}
-              className="bg-green-800 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-900 transition border border-green-600"
-            >
-              Join as Promoter
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust / Guarantee Strip */}
-      <section className="bg-green-800 text-white py-6">
-        <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-          <div className="flex flex-col items-center">
-            <VerifiedIcon />
-            <p className="font-bold text-lg mt-2">Pay for results only</p>
-            <p className="text-green-100 text-sm">No payout until engagement is verified</p>
-          </div>
-          <div className="flex flex-col items-center">
-            <LockIcon />
-            <p className="font-bold text-lg mt-2">Secure payments</p>
-            <p className="text-green-100 text-sm">Powered by Paystack, in Naira</p>
-          </div>
-          <div className="flex flex-col items-center">
-            <PinIcon />
-            <p className="font-bold text-lg mt-2">Built for Nigeria</p>
-            <p className="text-green-100 text-sm">Local promoters, local businesses</p>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Our Process</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
-              <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <MegaphoneIcon size={30} color="#ffffff" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">Request Advert</h3>
-              <p className="text-gray-600 text-center">Businesses create ad campaigns with their budget and requirements</p>
-            </div>
-            <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
-              <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <ShareIcon size={30} color="#ffffff" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">People Post It</h3>
-              <p className="text-gray-600 text-center">Promoters join campaigns and share ads on their social media platforms</p>
-            </div>
-            <div className="p-8 border border-gray-200 rounded-lg hover:shadow-lg transition">
-              <div className="bg-green-700 text-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <GrowthIcon size={30} color="#ffffff" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3 text-center text-gray-800">Get Customers</h3>
-              <p className="text-gray-600 text-center">Businesses reach real audiences and grow their customer base</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="bg-gray-50 py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Why Choose SpreadFast?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0"><PeopleIcon /></div>
-              <div>
-                <h3 className="text-xl font-bold mb-2 text-gray-800">Real People, Real Reach</h3>
-                <p className="text-gray-600">Authentic promoters with genuine followers on their platforms</p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0"><ShieldCheckIcon /></div>
-              <div>
-                <h3 className="text-xl font-bold mb-2 text-gray-800">Simple & Transparent</h3>
-                <p className="text-gray-600">No hidden fees, no automation - just real marketing</p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0"><GlobeIcon /></div>
-              <div>
-                <h3 className="text-xl font-bold mb-2 text-gray-800">Multi-Platform Support</h3>
-                <p className="text-gray-600">Campaign across Instagram, TikTok, X, and WhatsApp</p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-shrink-0"><BoltIcon /></div>
-              <div>
-                <h3 className="text-xl font-bold mb-2 text-gray-800">Quick & Easy Setup</h3>
-                <p className="text-gray-600">Create campaigns or join in minutes, not hours</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How Promoters Earn Section */}
-      <section className="bg-green-50 py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">How Promoters Earn</h2>
-            <p className="text-center text-gray-600 mb-16">Your payout is a direct share of the campaign pool - the more you drive, the more you earn</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="flex justify-center mb-2"><PoolIcon /></div>
-                <h3 className="font-bold text-gray-800 mb-1">Campaign Pool</h3>
-                <p className="text-sm text-gray-600">A brand funds a pool for each campaign</p>
-              </div>
-              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="flex justify-center mb-2"><ShareChartIcon /></div>
-                <h3 className="font-bold text-gray-800 mb-1">Your Share</h3>
-                <p className="text-sm text-gray-600">Calculated from your % of total group engagement</p>
-              </div>
-              <div className="bg-white border border-green-200 rounded-lg p-6 text-center shadow-sm">
-                <div className="flex justify-center mb-2"><BankIcon /></div>
-                <h3 className="font-bold text-gray-800 mb-1">Get Paid</h3>
-                <p className="text-sm text-gray-600">Withdraw via Paystack, min ₦1,000</p>
-              </div>
-            </div>
-
-            <div className="bg-white border-2 border-green-700 rounded-lg p-8 shadow-md">
-              <p className="text-gray-700 leading-relaxed">
-                Every campaign has a pool of funds contributed by the brand. Your share of that pool is calculated based on how much of the total group engagement came from you - no flat fees, no guesswork. The more interactions you drive, the bigger your slice of the pool.
+      <main id="landing-main" tabIndex={-1}>
+        <section className="landing-hero" aria-labelledby="landing-title">
+          <Container className="landing-hero-grid">
+            <div className="landing-hero-copy">
+              <p className="landing-eyebrow"><span aria-hidden="true" />People-powered growth</p>
+              <h1 id="landing-title">Get your business<br className="landing-title-break" /> in front of real people.</h1>
+              <p className="landing-hero-description">
+                Connect with verified creators who bring your brand to life through authentic advertising content.
+                Simple, human, effective.
               </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Simple, Transparent Pricing</h2>
-          <p className="text-center text-gray-600 mb-16">No hidden fees. You only pay for what you use.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="border-2 border-green-700 rounded-lg p-8">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">For Businesses</h3>
-              <ul className="space-y-3 text-gray-600">
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> ₦10,000 per 2 promoter slots</li>
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% platform fee on campaign creation</li>
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Pay only for verified engagement</li>
-              </ul>
-              <button
-                onClick={handleCreateCampaign}
-                className="mt-6 w-full bg-green-700 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
-              >
-                Create a Campaign
-              </button>
-            </div>
-            <div className="border-2 border-gray-200 rounded-lg p-8">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">For Promoters</h3>
-              <ul className="space-y-3 text-gray-600">
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Earn a share of every campaign pool</li>
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> 5% fee on withdrawals</li>
-                <li className="flex gap-2"><span className="text-green-700 font-bold">•</span> Minimum withdrawal ₦1,000</li>
-              </ul>
-              <button
-                onClick={handleJoinAsPromoter}
-                className="mt-6 w-full bg-gray-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-gray-900 transition"
-              >
-                Join as Promoter
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="bg-gray-50 py-20">
-        <div className="max-w-3xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-16 text-gray-800">Frequently Asked Questions</h2>
-          <div className="space-y-4">
-            {faqs.map((item, idx) => (
-              <div key={idx} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
-                  className="w-full text-left px-6 py-4 flex justify-between items-center font-semibold text-gray-800 hover:bg-gray-50 transition"
-                >
-                  {item.q}
-                  <span className="text-green-700 text-xl flex-shrink-0 ml-4">
-                    {openFaq === idx ? '−' : '+'}
-                  </span>
-                </button>
-                {openFaq === idx && (
-                  <div className="px-6 pb-4 text-gray-600 leading-relaxed">
-                    {item.a}
-                  </div>
-                )}
+              <div className="landing-hero-actions">
+                <Button size="lg" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true">↗</span></Button>
+                <Button size="lg" variant="secondary" onClick={handleJoinAsPromoter}>Earn with SpreadFast</Button>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+              <div className="landing-trust" aria-label="Why SpreadFast">
+                <span><strong>Real people</strong><small>Authentic content</small></span>
+                <span><strong>Local reach</strong><small>Built for Nigeria</small></span>
+                <span><strong>Secure payments</strong><small>Powered by Paystack</small></span>
+              </div>
+            </div>
+            <LandingHeroVisual />
+          </Container>
+        </section>
 
-      {/* CTA Section */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-8">Contact Us</h2>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <a
-              href="https://wa.me/+2349071023617"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-white text-green-700 px-6 py-3 rounded-lg font-bold hover:bg-green-50 transition"
-            >
-              Contact on WhatsApp
-            </a>
-            <a
-              href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-2 border-white text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 transition"
-            >
-              Join our whatsapp creator community
-            </a>
-          </div>
-        </div>
-      </section>
+        <section className="landing-how" aria-labelledby="how-title">
+          <Container>
+            <div className="landing-section-heading">
+              <p className="landing-eyebrow">A little content. A real connection.</p>
+              <h2 id="how-title">How SpreadFast Works</h2>
+              <p>Three simple steps to get your brand seen — or start creating.</p>
+            </div>
+            <ol className="landing-steps">
+              <li id="businesses">
+                <span className="landing-step-icon" aria-hidden="true"><MegaphoneIcon color="currentColor" size={28} /></span>
+                <h3>1. Businesses</h3>
+                <p>Create a campaign. Share your brief, choose your budget, and tell your story.</p>
+                <span className="landing-step-arrow" aria-hidden="true">⟶</span>
+              </li>
+              <li id="creators">
+                <span className="landing-step-icon" aria-hidden="true"><ShareIcon color="currentColor" size={28} /></span>
+                <h3>2. Creators</h3>
+                <p>Join a campaign, create authentic content, and submit your post for review.</p>
+                <span className="landing-step-arrow" aria-hidden="true">⟶</span>
+              </li>
+              <li>
+                <span className="landing-step-icon" aria-hidden="true"><PeopleIcon color="currentColor" size={28} /></span>
+                <h3>3. Customers</h3>
+                <p>Discover your brand through real people. Build connections that inspire action.</p>
+              </li>
+            </ol>
+          </Container>
+        </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-12">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h3 className="text-lg font-bold mb-4">SpreadFast</h3>
-              <p className="text-gray-400">Get real customers through real people</p>
+        <section id="pricing" className="landing-pricing" aria-labelledby="pricing-title">
+          <Container>
+            <div className="landing-section-heading">
+              <h2 id="pricing-title">A simple way to get started.</h2>
+              <p>For the brands with a story. And the people who bring it to life.</p>
             </div>
-            <div>
-              <h4 className="text-sm font-bold mb-4 uppercase">For Companies</h4>
-              <ul className="text-gray-400 space-y-2">
-                <li><button onClick={handleCreateCampaign} className="hover:text-white transition">Create Campaign</button></li>
-                <li><a href="#" className="hover:text-white transition">View Promoters</a></li>
-                <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
-              </ul>
+            <div className="landing-pricing-grid">
+              <article className="landing-price-card">
+                <p className="landing-eyebrow">For Businesses</p>
+                <h3>Put your brand out there.</h3>
+                <p className="landing-price">₦20,000 <span>per promoter</span></p>
+                <ul><li>5% platform fee on campaign creation</li><li>Pay only for verified engagement</li></ul>
+                <Button onClick={handleCreateCampaign}>Create a Campaign</Button>
+              </article>
+              <article className="landing-price-card">
+                <p className="landing-eyebrow">For Creators</p>
+                <h3>Make content. Make an impact.</h3>
+                <p>Earn a share of every campaign pool.</p>
+                <ul><li>5% fee on withdrawals</li><li>Minimum withdrawal ₦1,000</li></ul>
+                <Button variant="secondary" onClick={handleJoinAsPromoter}>Join as Promoter</Button>
+              </article>
             </div>
-            <div>
-              <h4 className="text-sm font-bold mb-4 uppercase">For Promoters</h4>
-              <ul className="text-gray-400 space-y-2">
-                <li><button onClick={handleJoinAsPromoter} className="hover:text-white transition">Find Campaigns</button></li>
-                <li><a href="#" className="hover:text-white transition">How to Earn</a></li>
-                <li><a href="#faq" className="hover:text-white transition">FAQ</a></li>
-              </ul>
+          </Container>
+        </section>
+
+        <section id="faq" className="landing-faq" aria-labelledby="faq-title">
+          <Container className="landing-faq-grid">
+            <div className="landing-section-heading">
+              <p className="landing-eyebrow">A few things to know</p>
+              <h2 id="faq-title">Good questions.<br />Clear answers.</h2>
+              <a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="landing-text-link">Contact on WhatsApp <span aria-hidden="true">↗</span></a>
             </div>
-            <div>
-              <h4 className="text-sm font-bold mb-4 uppercase">Connect</h4>
-              <ul className="text-gray-400 space-y-2">
-                <li><a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">whatsapp community</a></li>
-                <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">WhatsApp support</a></li>
-              </ul>
+            <div className="landing-faq-list">
+              {faqs.map((item, idx) => (
+                <div key={item.q} className="landing-faq-item">
+                  <button type="button" id={'faq-question-' + idx}
+                    aria-expanded={openFaq === idx} aria-controls={'faq-answer-' + idx}
+                    onClick={() => setOpenFaq(openFaq === idx ? null : idx)}>
+                    {item.q}<span aria-hidden="true">{openFaq === idx ? '−' : '+'}</span>
+                  </button>
+                  <div id={'faq-answer-' + idx} hidden={openFaq !== idx}
+                    aria-labelledby={'faq-question-' + idx} className="landing-faq-answer">{item.a}</div>
+                </div>
+              ))}
             </div>
+          </Container>
+        </section>
+
+        <section className="landing-community">
+          <Container className="landing-community-inner">
+            <div><h2>Better together.</h2><p>Meet the people creating with SpreadFast.</p></div>
+            <a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
+              target="_blank" rel="noopener noreferrer" className="sf-control sf-button sf-button--secondary">
+              Join our WhatsApp creator community <span aria-hidden="true">↗</span>
+            </a>
+          </Container>
+        </section>
+      </main>
+
+      <footer className="landing-footer">
+        <Container>
+          <div className="landing-footer-grid">
+            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>Get real customers through real people.</p></div>
+            <div><h2>For Companies</h2><ul>
+              <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
+              <li><a href="#">View Promoters</a></li>
+              <li><a href="#pricing">Pricing</a></li>
+            </ul></div>
+            <div><h2>For Promoters</h2><ul>
+              <li><button type="button" onClick={handleJoinAsPromoter}>Find Campaigns</button></li>
+              <li><a href="#">How to Earn</a></li>
+              <li><a href="#faq">FAQ</a></li>
+            </ul></div>
+            <div><h2>Connect</h2><ul>
+              <li><a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t" target="_blank" rel="noopener noreferrer">WhatsApp community</a></li>
+              <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer">WhatsApp support</a></li>
+            </ul></div>
           </div>
-          <div className="border-t border-gray-700 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 SpreadFast. All rights reserved.</p>
-          </div>
-        </div>
+          <p className="landing-copyright">© 2026 SpreadFast. All rights reserved.</p>
+        </Container>
       </footer>
     </div>
   );
