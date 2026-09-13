@@ -61,3 +61,5 @@ test('missing campaign disables submission and history renders individual post l
   expect(host.querySelector('.submission-history-links a').href).toBe('https://instagram.com/p/123');
   expect(host.querySelectorAll('.submission-history-links a')).toHaveLength(1); expect(host.textContent).toContain('4200');
 });
+
+test('submission history failures are distinct from an empty history',async()=>{apiCallAuth.mockResolvedValueOnce({success:false,message:'History unavailable'});await render();expect(host.querySelector('.submission-history').textContent).toContain('History unavailable');expect(host.querySelector('.submission-history').textContent).not.toContain('No submissions yet');apiCallAuth.mockResolvedValueOnce({success:true,submissions:[]});await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='Retry submissions').click());expect(host.querySelector('.submission-history').textContent).toContain('No submissions yet');});

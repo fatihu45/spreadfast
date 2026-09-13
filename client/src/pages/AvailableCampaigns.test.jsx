@@ -127,3 +127,5 @@ test('detail tabs show campaign data and explain earnings without inventing a re
   expect(card('a').querySelector('.campaign-detail-numbers').textContent).toContain('45,000');
   expect(card('a').querySelector('.campaign-detail-numbers').textContent).not.toContain('60,000');
  });
+
+test('campaign API failures show an error and can be retried',async()=>{apiCall.mockResolvedValueOnce({success:false,message:'Service unavailable'});await render();expect(host.querySelector('[role="alert"]').textContent).toContain('Service unavailable');expect(host.textContent).not.toContain('No campaigns found');await click([...host.querySelectorAll('button')].find(b=>b.textContent==='Retry campaigns'));expect(card('a')).toBeDefined();});

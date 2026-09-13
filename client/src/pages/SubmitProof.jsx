@@ -38,6 +38,7 @@ export default function SubmitProof() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submissions, setSubmissions] = useState([]);
+  const [submissionsError, setSubmissionsError] = useState('');
 
   const [campaign, setCampaign] = useState(null);
   const [campaignImage, setCampaignImage] = useState('');
@@ -78,6 +79,7 @@ export default function SubmitProof() {
   }, []);
 
   const fetchSubmissions = async () => {
+    setSubmissionsLoading(true); setSubmissionsError('');
     if (!token) {
       setSubmissionsLoading(false);
       return;
@@ -87,8 +89,9 @@ export default function SubmitProof() {
       const data = await apiCallAuth('/api/submissions/my-submissions', token);
       if (data.success) {
         setSubmissions(data.submissions || []);
-      }
+      } else setSubmissionsError(data.message || 'Failed to load submissions');
     } catch (error) {
+      setSubmissionsError('Failed to load submissions');
       console.error('Failed to fetch submissions:', error);
     } finally {
       setSubmissionsLoading(false);
@@ -192,7 +195,7 @@ export default function SubmitProof() {
       </aside>
     </div>
     <Card className="submission-history"><h2>Your submissions</h2>
-      {submissionsLoading ? <p role="status">Loading submissions...</p> : submissions.length === 0 ? <p>No submissions yet. Your posts will appear here after you submit.</p> : submissions.map(submission => {
+      {submissionsLoading ? <p role="status">Loading submissions...</p> : submissionsError ? <Alert tone="error">{submissionsError} <Button size="sm" variant="secondary" onClick={fetchSubmissions}>Retry submissions</Button></Alert> : submissions.length === 0 ? <p>No submissions yet. Your posts will appear here after you submit.</p> : submissions.map(submission => {
         let links = [];
         try { const parsed = JSON.parse(submission.proofUrl); if (parsed && typeof parsed === 'object') links = Object.entries(parsed); } catch { if (submission.proofUrl) links = [['Post', submission.proofUrl]]; }
         return <article key={submission.id}><div className="submission-history-heading"><h3>{submission.campaignTitle || submission.campaignId}</h3><CampaignStatusBadge status={submission.status} /></div>

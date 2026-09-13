@@ -1,98 +1,47 @@
-import { Alert, AuthLayout } from '../components/ui';
+import { Alert, AuthLayout, Button } from '../components/ui';
 import React, { useEffect, useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiCallAuth } from '../utils/api';
+import { pollCampaign } from '../utils/pollCampaign';
 
 export default function PaymentCallback() {
-  const { token } = useContext(AuthContext);
+  const { token, loading } = useContext(AuthContext);
   const [searchParams] = useSearchParams();
   const reference = searchParams.get('reference');
+  const navigate = useNavigate();
   const [status, setStatus] = useState('verifying');
   const [error, setError] = useState('');
-
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (reference) {
-      verifyPaymentAndCreateCampaign();
+    let active = true, cancelPoll, redirect;
+    setError(''); setStatus('verifying');
+    if (!reference) { setError('Payment reference is missing. Contact support if you have already paid.'); setStatus('failed'); return; }
+    if (loading) return;
+    if (!token) { setError('Log in to confirm this payment, then return to this page.'); setStatus('failed'); return; }
+    const fail = message => { if (active) { setError(message); setStatus('failed'); } };
+    async function confirm() {
+      try {
+        const verified = await apiCallAuth('/api/payments/verify', token, {method: 'POST', body: JSON.stringify({reference})});
+        if (!active) return;
+        if (!verified.success) { fail(verified.message || 'Could not verify payment. Retry using the same reference.'); return; }
+        cancelPoll = pollCampaign({immediate: true,
+          check: () => apiCallAuth('/api/payments/campaign-status/' + encodeURIComponent(reference), token),
+          onConfirmed: () => { if (active) { setStatus('success'); redirect = setTimeout(() => navigate('/company?refresh=true', {replace: true}), 2000); } },
+          onExpired: () => fail('Payment confirmation is taking longer than expected. Retry confirmation or contact support with reference: ' + reference)
+        });
+      } catch (error) { fail(error.message || 'Could not confirm payment. Please retry.'); }
     }
-  }, [reference]);
-
-  const verifyPaymentAndCreateCampaign = async () => {
-    try {
-      // Step 1: Verify payment with backend
-      const verifyData = await apiCallAuth(
-        '/api/payments/verify',
-        token,
-        {
-          method: 'POST',
-          body: JSON.stringify({ reference })
-        }
-      );
-
-      if (!verifyData.success) {
-        setStatus('failed');
-        setError(verifyData.message || 'Payment verification failed');
-        return;
-      }
-
-      // Step 2: Retrieve pending campaign data from session storage
-      const pendingCampaignStr = sessionStorage.getItem('pendingCampaignData');
-      if (!pendingCampaignStr) {
-        setStatus('failed');
-        setError('Campaign data not found. Please create campaign again.');
-        return;
-      }
-
-      const pendingCampaign = JSON.parse(pendingCampaignStr);
-
-      // Step 3: Create campaign with payment reference
-      const campaignData = await apiCallAuth(
-        '/api/campaigns',
-        token,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            title: pendingCampaign.title,
-            description: pendingCampaign.description,
-            budget: pendingCampaign.budget,
-            socialMediaPlatforms: pendingCampaign.socialMediaPlatforms,
-            reference: reference
-          })
-        }
-      );
-
-      if (!campaignData.success) {
-        setStatus('failed');
-        setError(campaignData.message || 'Failed to create campaign');
-        return;
-      }
-
-      // Step 4: Clear session storage and redirect with refresh flag
-      sessionStorage.removeItem('pendingCampaignData');
-      setStatus('success');
-      
-      // Redirect after 2 seconds with refresh parameter to trigger UI update
-      // Use .then() to ensure data is committed, then force hard refresh as fallback
-      setTimeout(() => {
-        // First attempt: redirect to trigger fetchCampaigns in CompanyDashboard
-        window.location.href = '/company?refresh=true';
-      }, 2000);
-      
-      // Fallback: Hard refresh after 4 seconds to force data reload from campaigns.json
-      setTimeout(() => {
-        window.location.reload();
-      }, 4000);
-    } catch (error) {
-      console.error('Payment callback error:', error);
-      setStatus('failed');
-      setError('Verification failed. Please contact support.');
-    }
-  };
-
+    confirm();
+    return () => { active = false; cancelPoll?.(); clearTimeout(redirect); };
+  }, [reference, token, loading, retry, navigate]);
   return <AuthLayout className="sf-payment-status">
     <h1>Campaign payment</h1>
     {status === 'verifying' && <Alert>Verifying payment and creating campaign...</Alert>}
     {status === 'success' && <><Alert tone="success">Payment Successful!</Alert><p>Your campaign has been created successfully.</p><p>Redirecting to dashboard...</p></>}
-    {status === 'failed' && <><Alert tone="error"><strong>Process Failed</strong><p>{error}</p></Alert><a href="/company" className="sf-control sf-button sf-button--secondary">Back to Dashboard</a></>}
+    {status === 'failed' && <><Alert tone="error"><strong>Confirmation incomplete</strong><p>{error}</p></Alert>
+      {reference && token && <Button onClick={() => setRetry(value => value + 1)}>Retry confirmation</Button>}
+      {!token && <Link to="/login" className="sf-control sf-button sf-button--secondary">Log in</Link>}
+      <Link to="/company" className="sf-control sf-button sf-button--secondary">Back to Dashboard</Link></>}
   </AuthLayout>;
 }

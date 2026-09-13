@@ -1,4 +1,6 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
+
+import { readResponse } from '../utils/readResponse';
 
 export const AuthContext = createContext();
 
@@ -10,11 +12,18 @@ export function AuthProvider({ children }) {
     try {
       return localStorage.getItem('token') || sessionStorage.getItem('token');
     } catch (e) {
-      return sessionStorage.getItem('token');
+      try { return sessionStorage.getItem('token'); } catch { return null; }
     }
   });
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState('');
+
+  const validation = useRef({ generation: 0, controller: null, retry: null });
+  const cancelValidation = () => {
+    validation.current.generation++;
+    validation.current.controller?.abort();
+    clearTimeout(validation.current.retry);
+  };
 
   useEffect(() => {
     if (token) {
@@ -24,6 +33,7 @@ export function AuthProvider({ children }) {
       addDebug('⚠️ No token found');
       setLoading(false);
     }
+    return cancelValidation;
   }, [token]);
 
   const addDebug = (message) => {
@@ -31,71 +41,31 @@ export function AuthProvider({ children }) {
     setDebugInfo(prev => prev + '\n' + message);
   };
 
-  const fetchUser = async (retryCount = 0) => {
+  const fetchUser = async (retryCount = 0, generation) => {
+    if (generation === undefined) { cancelValidation(); generation = validation.current.generation; }
+    if (!token || generation !== validation.current.generation) return;
+    const controller = new AbortController();
+    validation.current.controller = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-      addDebug(`📡 Validating token (attempt ${retryCount + 1})...`);
-      
-      const response = await fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: 'include',
-        signal: controller.signal
+      const response = await fetch(API_URL + '/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + token }, credentials: 'include', signal: controller.signal
       });
-
-      clearTimeout(timeoutId);
-      addDebug(`✓ Response: ${response.status} ${response.statusText}`);
-      
-      const data = await response.json();
-
-      if (data.success) {
-        setUser(data.user);
-        addDebug(`✓ User validated successfully: ${data.user.name}`);
-        setLoading(false);
-      } else if (response.status === 401) {
-        // Token is invalid - clear it
-        addDebug('❌ Token invalid (401) - clearing tokens');
-        clearAllTokens();
-        setToken(null);
-        setLoading(false);
-      } else {
-        // Other error - don't clear token, just log
-        addDebug(`⚠️ Auth failed: ${data.message || 'Unknown error'}`);
-        setLoading(false);
+      if (generation !== validation.current.generation) return;
+      if (response.status === 401) {
+        clearAllTokens(); setToken(null); setUser(null); setLoading(false); return;
       }
+      const data = await readResponse(response);
+      if (generation !== validation.current.generation) return;
+      if (data.success) setUser(data.user);
+      setLoading(false);
     } catch (error) {
-      console.error('Fetch user error:', error);
-      addDebug(`❌ Error: ${error.name} - ${error.message}`);
-      
-      if (error.name === 'AbortError') {
-        // Network timeout - retry with exponential backoff
-        if (retryCount < 3) {
-          const delayMs = Math.min(15000 * Math.pow(2, retryCount), 60000);
-          addDebug(`⏳ Timeout - retrying in ${delayMs}ms...`);
-          setTimeout(() => fetchUser(retryCount + 1), delayMs);
-          return;
-        } else {
-          // Max retries reached - give up but DON'T clear token
-          addDebug('⚠️ Max retries reached - keeping token in case network recovers');
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // Network error (not timeout) - retry but don't clear token
+      if (generation !== validation.current.generation) return;
       if (retryCount < 3) {
-        const delayMs = Math.min(5000 * Math.pow(2, retryCount), 30000);
-        addDebug(`🔄 Network error - retrying in ${delayMs}ms...`);
-        setTimeout(() => fetchUser(retryCount + 1), delayMs);
-        return;
-      } else {
-        // Give up retrying but keep token
-        addDebug('⚠️ Network errors persist - keeping token in case network recovers');
-        setLoading(false);
-        return;
-      }
-    }
+        const delay = Math.min((error.name === 'AbortError' ? 15000 : 5000) * Math.pow(2, retryCount), 60000);
+        validation.current.retry = setTimeout(() => fetchUser(retryCount + 1, generation), delay);
+      } else setLoading(false);
+    } finally { clearTimeout(timeoutId); }
   };
 
   const register = async (name, email, password, role, socialMedia = {}) => {
@@ -113,11 +83,7 @@ export function AuthProvider({ children }) {
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await readResponse(response);
       if (data.success) {
         saveToken(data.token);
         setToken(data.token);
@@ -164,11 +130,7 @@ export function AuthProvider({ children }) {
       clearTimeout(timeoutId);
       addDebug('✓ Response received: ' + response.status + ' ' + response.statusText);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await readResponse(response);
       addDebug('✓ Data parsed: ' + (data.success ? 'SUCCESS' : 'FAILED'));
 
       if (data.success) {
@@ -221,6 +183,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    cancelValidation();
+    setLoading(false);
     clearAllTokens();
     setToken(null);
     setUser(null);

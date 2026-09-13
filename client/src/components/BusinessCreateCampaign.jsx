@@ -41,7 +41,6 @@ export default function BusinessCreateCampaign({ values, onChange, brief, onBrie
     <ol className="business-create-steps" aria-label="Campaign creation progress"><li aria-current={!review ? 'step' : undefined}><span>1</span> Campaign details</li><li aria-current={review ? 'step' : undefined}><span>2</span> Review &amp; payment</li></ol>
     {error && <Alert tone="error">{error}</Alert>}
     {validation && <Alert tone="error">{validation}</Alert>}
-    {success && <Alert tone="success">{success}</Alert>}
     {status && <Alert tone="info">{status}</Alert>}
     <form id="create-campaign" tabIndex={-1} onSubmit={submit} className="business-create-form">
       <div className="business-create-layout">

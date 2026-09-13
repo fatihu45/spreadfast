@@ -25,6 +25,7 @@ export default function AvailableCampaigns() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [campaignAssets, setCampaignAssets] = useState({});
   const [subscribedCampaigns, setSubscribedCampaigns] = useState([]);
@@ -69,6 +70,7 @@ export default function AvailableCampaigns() {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const data = await apiCall('/api/campaigns');
       if (data.success) {
         // Filter to only active campaigns
@@ -76,10 +78,10 @@ export default function AvailableCampaigns() {
         setCampaigns(activeCampaigns);
         setFilteredCampaigns(activeCampaigns);
         await fetchAssetPreviews(activeCampaigns);
-      }
+      } else { setLoadError(data.message || 'Failed to load campaigns'); }
     } catch (error) {
       console.error('Fetch error:', error);
-      setError('Failed to load campaigns');
+      setLoadError('Failed to load campaigns');
     } finally {
       setLoading(false);
     }
@@ -190,6 +192,7 @@ export default function AvailableCampaigns() {
   return <section className="campaign-marketplace" aria-label="Campaign marketplace">
     <PageHeader title="Available Campaigns" description="Find campaigns that match your style and audience." />
     {error && <Alert tone="error">{error}</Alert>}
+    {loadError && <Alert tone="error">{loadError} <Button size="sm" variant="secondary" onClick={fetchCampaigns}>Retry campaigns</Button></Alert>}
     {successMessage && <Alert tone="success">{successMessage}</Alert>}
 
     <SearchBar value={searchTerm} onChange={event => handleSearch(event.target.value)} onClear={() => handleSearch('')} placeholder="Search campaigns..." />
@@ -203,10 +206,10 @@ export default function AvailableCampaigns() {
       ].map(platform => <Button key={platform.key} size="sm" variant="ghost" aria-pressed={selectedPlatforms.includes(platform.key)}
         onClick={() => handlePlatformFilter(platform.key)}>{platform.label}</Button>)}
     </div>
-    <p className="marketplace-results" aria-live="polite">{filteredCampaigns.length} {filteredCampaigns.length === 1 ? 'campaign' : 'campaigns'} available</p>
+    <p hidden={!!loadError} className="marketplace-results" aria-live="polite">{filteredCampaigns.length} {filteredCampaigns.length === 1 ? 'campaign' : 'campaigns'} available</p>
 
     <div className="marketplace-list">
-      {filteredCampaigns.length === 0 ? <Card><EmptyState title="No campaigns found" description="Try adjusting your filters or check back later." /></Card>
+      {filteredCampaigns.length === 0 ? <Card><EmptyState title={loadError ? 'Campaigns could not be loaded' : 'No campaigns found'} description="Try adjusting your filters or check back later." /></Card>
         : filteredCampaigns.map(campaign => {
           const totalSlots = creatorSlots(campaign);
           const subscribedCount = campaign.subscribedPromoters?.length || 0;

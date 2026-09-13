@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import axios from 'axios';
+import { readResponse } from './readResponse';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -22,12 +23,13 @@ export const updateAdminSettings = (data) => API.patch('/admin/settings', data);
  * @returns {Promise} - Response data
  */
 export async function apiCall(endpoint, options = {}) {
+  let timeoutId;
   try {
     const url = `${API_BASE_URL}${endpoint}`;
     
     // Add timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds for large file uploads
+    timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds for large file uploads
 
     // Don't set Content-Type if body is FormData (browser will set it automatically)
     const isFormData = options.body instanceof FormData;
@@ -44,12 +46,7 @@ export async function apiCall(endpoint, options = {}) {
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
+    return await readResponse(response);
   } catch (error) {
     console.error('API call error:', error);
     
@@ -64,7 +61,7 @@ export async function apiCall(endpoint, options = {}) {
       success: false, 
       message: error.message || 'API request failed' 
     };
-  }
+  } finally { clearTimeout(timeoutId); }
 }
 
 /**

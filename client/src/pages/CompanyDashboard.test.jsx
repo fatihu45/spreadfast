@@ -97,3 +97,24 @@ test('removing a rejected asset never removes a different valid file', async () 
   expect(host.querySelector('.company-overview-campaign-budget').textContent).toContain('60,000');
   expect(host.textContent).not.toContain('7.5%');
  });
+
+async function enterCheckout(){await change(field('Campaign name'),'Payment audit');await change(field('Key message'),'Actual brief');await change(field('Budget (NGN)'),'20000');await act(async()=>Simulate.change(host.querySelector('input[type="checkbox"]')));await act(async()=>Simulate.submit(host.querySelector('#create-campaign')));}
+test('payment failures stay visible after navigating back to overview',async()=>{
+ let finish;apiCallAuth.mockImplementation(endpoint=>endpoint==='/api/payments/initiate'?new Promise(resolve=>finish=resolve):Promise.resolve({success:true,assets:[],submissions:[]}));
+ await render('/company#create-campaign');await enterCheckout();await act(async()=>Simulate.submit(host.querySelector('#create-campaign')));await click(host.querySelector('.company-create-back'));
+ await act(async()=>finish({success:false,message:'Payment service unavailable'}));
+ const alert=host.querySelector('[role="alert"]');expect(alert.textContent).toContain('Payment service unavailable');expect(alert.closest('[hidden]')).toBeNull();
+});
+test('V1 callback completes payment, failed assets stay retryable without another payment',async()=>{
+ let popup;const originalFetch=global.fetch;window.PaystackPop={setup:jest.fn(options=>{popup=options;return{openIframe:jest.fn()};})};
+ apiCallAuth.mockImplementation(async endpoint=>endpoint==='/api/payments/initiate'?{success:true,reference:'paid-ref',publicKey:'test-key'}:endpoint==='/api/campaigns'?{success:true,campaign:{id:'paid-campaign'}}:{success:true,assets:[],submissions:[]});
+ global.fetch=jest.fn().mockResolvedValueOnce({ok:false,json:async()=>({success:false,message:'Upload unavailable'})}).mockResolvedValueOnce({ok:true,json:async()=>({success:true})});
+ try{await render('/company#create-campaign');await act(async()=>Simulate.change(host.querySelector('input[type="file"]'),{target:{files:[new File(['brief'],'brief.pdf',{type:'application/pdf'})]}}));await enterCheckout();await act(async()=>Simulate.submit(host.querySelector('#create-campaign')));
+ expect(typeof popup.callback).toBe('function');expect(popup.onSuccess).toBeUndefined();expect(popup.amount).toBe(2000000);
+ await act(async()=>{popup.callback({reference:'paid-ref'});});
+ expect(host.textContent).toContain('assets were not uploaded');expect(host.textContent).toContain('brief.pdf');expect(field('Budget (NGN)').value).toBe('');
+ await click([...host.querySelectorAll('button')].find(b=>b.textContent==='Retry asset upload'));
+ expect(host.textContent).toContain('Campaign assets uploaded successfully');expect(apiCallAuth.mock.calls.filter(c=>c[0]==='/api/payments/initiate')).toHaveLength(1);
+ expect(global.fetch).toHaveBeenCalledTimes(2);expect(global.fetch.mock.calls.every(c=>c[0].endsWith('/api/campaigns/paid-campaign/assets/upload'))).toBe(true);
+ }finally{global.fetch=originalFetch;delete window.PaystackPop;}
+});

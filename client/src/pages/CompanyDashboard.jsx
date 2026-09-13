@@ -1,3 +1,5 @@
+import { Alert, Button } from '../components/ui';
+import { pollCampaign } from '../utils/pollCampaign';
 import { newCreatorCount, isValidCampaignBudget } from '../utils/campaignPricing';
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -38,12 +40,15 @@ export default function CompanyDashboard() {
   const [campaignSubmissions, setCampaignSubmissions] = useState({});
   const [statusMessage, setStatusMessage] = useState('');
   const [campaignAssets, setCampaignAssets] = useState({});
+  const [assetRetry, setAssetRetry] = useState(null);
+  const [retryingAssets, setRetryingAssets] = useState(false);
   const [campaignLoadState, setCampaignLoadState] = useState('loading');
   const [submissionLoadStates, setSubmissionLoadStates] = useState({});
 
 
   // Polling ref — so we can stop it when done
   const pollingRef = useRef(null);
+  const settlementStarted = useRef(false);
   const assetPreviewsRef = useRef([]);
 
   const calculatePromoterSlots = newCreatorCount;
@@ -128,7 +133,7 @@ export default function CompanyDashboard() {
 
   const stopPolling = () => {
     if (pollingRef.current) {
-      clearInterval(pollingRef.current);
+      pollingRef.current();
       pollingRef.current = null;
     }
   };
@@ -240,72 +245,47 @@ export default function CompanyDashboard() {
     }
   };
 
-  // Poll every 5 seconds to check if bank transfer has been confirmed
-  const startPollingForCampaign = (reference, authToken, apiUrl) => {
-    let attempts = 0;
-    const maxAttempts = 60; // 5 minutes max
-
-    setStatusMessage('Waiting for payment confirmation from your bank...');
-
-    pollingRef.current = setInterval(async () => {
-      attempts++;
-      console.log(`Polling attempt ${attempts} for reference:`, reference);
-
-      try {
-        const res = await fetch(
-          `${apiUrl}/api/payments/campaign-status/${reference}`,
-          {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-          }
-        );
-
-        const data = await res.json();
-        console.log('Poll response:', data);
-
-        if (data.success && data.campaignCreated) {
-          stopPolling();
-          setPaymentProcessing(false);
-          setStatusMessage('');
-          setSuccessMessage("Payment confirmed! Your campaign is now live to promoters.");
-          
-          // Upload brand assets if any
-          if (brandAssetFiles.length > 0 && data.campaign.id) {
-            const cId = data.campaign.id || data.campaign._id;
-            console.log('Uploading brand assets to campaign:', cId);
-            await uploadBrandAssets(cId, brandAssetFiles, authToken);
-          }
-
-          setTitle('');
-          setDescription('');
-          setCampaignBrief(emptyCampaignBrief);
-          setKeyMessage('');
-          setBudget('');
-          setBrandAssetFiles([]);
-          setBrandAssetPreviews([]);
-          setSocialMediaPlatforms({
-            tiktok: false, instagram: false,
-            twitter: false, facebook: false, youtube: false
-          });
-          fetchCampaigns();
-
-        } else if (attempts >= maxAttempts) {
-          stopPolling();
-          setPaymentProcessing(false);
-          setStatusMessage('');
-          setError(
-            'Payment is taking longer than expected. If you completed the transfer, ' +
-            'your campaign will appear shortly. Contact support with reference: ' + reference
-          );
-        } else {
-          setStatusMessage(
-            `Waiting for bank confirmation... (${attempts * 5}s elapsed). ` +
-            `Please complete your transfer if you have not already.`
-          );
-        }
-      } catch (err) {
-        console.error('Polling error:', err);
+  const finishCampaign = async (campaign, authToken) => {
+    setStatusMessage('');
+    if (brandAssetFiles.length) {
+      const uploaded = await uploadBrandAssets(campaign.id, brandAssetFiles, authToken);
+      if (!uploaded.success) {
+        setAssetRetry({ campaignId: campaign.id, files: brandAssetFiles, authToken });
+        setError('Your campaign is live, but its assets were not uploaded. ' + (uploaded.message || 'Please retry the upload below.'));
+      } else {
+        setBrandAssetFiles([]); setBrandAssetPreviews([]); setAssetRetry(null);
       }
-    }, 5000);
+    }
+    setSuccessMessage('Payment confirmed. Your campaign is now live.');
+    setTitle(''); setDescription(''); setCampaignBrief(emptyCampaignBrief); setKeyMessage(''); setBudget('');
+    setSocialMediaPlatforms({tiktok: false, instagram: false, twitter: false, facebook: false, youtube: false});
+    setPaymentProcessing(false); fetchCampaigns();
+  };
+
+  const retryAssetUpload = async () => {
+    if (!assetRetry || retryingAssets) return;
+    setRetryingAssets(true);
+    try {
+      const result = await uploadBrandAssets(assetRetry.campaignId, assetRetry.files, assetRetry.authToken);
+      if (result.success) {
+        setAssetRetry(null); setBrandAssetFiles([]); setBrandAssetPreviews([]); setError('');
+        setSuccessMessage('Campaign assets uploaded successfully.'); fetchCampaigns();
+      } else setError('Campaign assets could not be uploaded. ' + (result.message || 'Please retry.'));
+    } finally { setRetryingAssets(false); }
+  };
+
+  const startPollingForCampaign = (reference, authToken) => {
+    stopPolling();
+    setStatusMessage('Waiting for payment confirmation from your bank...');
+    pollingRef.current = pollCampaign({
+      check: () => apiCallAuth('/api/payments/campaign-status/' + encodeURIComponent(reference), authToken),
+      onConfirmed: async campaign => { pollingRef.current = null; if (settlementStarted.current) return; settlementStarted.current = true; await finishCampaign(campaign, authToken); },
+      onExpired: () => {
+        pollingRef.current = null; setPaymentProcessing(false); setStatusMessage('');
+        setError('Payment confirmation is taking longer than expected. If you have paid, do not pay again. Contact support with reference: ' + reference);
+      },
+      onProgress: seconds => setStatusMessage('Waiting for bank confirmation... (' + seconds + 's elapsed).')
+    });
   };
 
   const handlePaymentAndCreateCampaign = async (e) => {
@@ -337,6 +317,7 @@ export default function CompanyDashboard() {
 
     setPaymentProcessing(true);
 
+    settlementStarted.current = false;
     // Capture all values before popup opens
     const campaignTitle = title;
     const campaignDescription = buildCampaignBrief(description, campaignBrief);
@@ -384,7 +365,7 @@ export default function CompanyDashboard() {
         ref: paymentReference,
         currency: 'NGN',
 
-        onClose: () => {
+        onClose: function () {
           // Don't stop processing — polling continues in background
           // The user may have made the transfer before closing
           if (!pollingRef.current) {
@@ -393,7 +374,9 @@ export default function CompanyDashboard() {
           }
         },
 
-        onSuccess: (response) => {
+        callback: function (response) {
+          if (settlementStarted.current) return;
+          settlementStarted.current = true;
           // Card payment — stop polling and create campaign directly
           stopPolling();
           createCampaignAfterPayment(
@@ -434,7 +417,7 @@ export default function CompanyDashboard() {
       setPaymentProcessing(true);
       console.log('Creating campaign with reference:', reference);
 
-      const res = await fetch(`${apiUrl}/api/campaigns`, {
+      const data = await apiCallAuth('/api/campaigns', authToken, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -450,34 +433,12 @@ export default function CompanyDashboard() {
         })
       });
 
-      const data = await res.json();
-      console.log('Campaign creation response:', data);
-
-      if (!res.ok) {
+      if (!data.success) {
         throw new Error(data.message || 'Campaign creation failed');
       }
 
-      // Upload brand assets if any
-      if (brandAssetFiles.length > 0) {
-        console.log('Uploading brand assets...');
-        await uploadBrandAssets(data.campaign.id, brandAssetFiles, authToken);
-      }
-
-      setPaymentProcessing(false);
-      setStatusMessage('');
-      setSuccessMessage("Campaign created successfully! It is now live to promoters.");
-      setTitle('');
-      setDescription('');
-          setCampaignBrief(emptyCampaignBrief);
-      setKeyMessage('');
-      setBudget('');
-      setBrandAssetFiles([]);
-      setBrandAssetPreviews([]);
-      setSocialMediaPlatforms({
-        tiktok: false, instagram: false,
-        twitter: false, facebook: false, youtube: false
-      });
-      fetchCampaigns();
+      if (!data.success || !data.campaign?.id) throw new Error('Campaign confirmation is incomplete');
+      await finishCampaign(data.campaign, authToken);
 
     } catch (err) {
       console.error('Campaign creation error:', err);
@@ -492,6 +453,10 @@ export default function CompanyDashboard() {
 
   const creationOpen = location.hash === '#create-campaign' || paymentProcessing;
   return <section className="company-overview-page">
+    {error && <Alert tone="error">{error}</Alert>}
+    {successMessage && <Alert tone="success">{successMessage}</Alert>}
+    {statusMessage && <Alert>{statusMessage}</Alert>}
+    {assetRetry && <Button disabled={retryingAssets} onClick={retryAssetUpload}>{retryingAssets ? 'Uploading...' : 'Retry asset upload'}</Button>}
     <div hidden={creationOpen}>
       <CompanyOverview user={user} campaigns={campaigns} loadState={campaignLoadState}
         campaignSubmissions={campaignSubmissions} submissionLoadStates={submissionLoadStates} campaignAssets={campaignAssets}
@@ -506,7 +471,7 @@ export default function CompanyDashboard() {
         onPlatformChange={handleSocialMediaChange} onSelectAllPlatforms={handleSelectAllSocialMedia}
         assets={brandAssetPreviews} assetCount={brandAssetFiles.length} onAssetChange={handleBrandAssetFiles} onRemoveAsset={removeBrandAsset}
         creatorCount={calculatePromoterSlots(budget)} onPayment={handlePaymentAndCreateCampaign}
-        paymentProcessing={paymentProcessing} error={error} success={successMessage} status={statusMessage} />
+        paymentProcessing={paymentProcessing} success={successMessage} />
     </section>
   </section>;
 }
