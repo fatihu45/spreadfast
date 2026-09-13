@@ -1,3 +1,4 @@
+import { newCreatorCount, isValidCampaignBudget } from '../utils/campaignPricing';
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
@@ -45,10 +46,7 @@ export default function CompanyDashboard() {
   const pollingRef = useRef(null);
   const assetPreviewsRef = useRef([]);
 
-  const calculatePromoterSlots = (budgetAmount) => {
-    const amount = parseFloat(budgetAmount) || 0;
-    return Math.floor(amount / 5000) * 1;
-  };
+  const calculatePromoterSlots = newCreatorCount;
 
   const handleSocialMediaChange = (platform) => {
     setSocialMediaPlatforms(prev => ({
@@ -321,8 +319,8 @@ export default function CompanyDashboard() {
       return;
     }
 
-    if (isNaN(budget) || parseFloat(budget) < 10000) {
-      setError('Budget must be at least ₦10,000');
+    if (!isValidCampaignBudget(budget)) {
+      setError('Budget must be a multiple of ₦20,000 (one promoter)');
       return;
     }
 
@@ -498,7 +496,7 @@ export default function CompanyDashboard() {
       <CompanyOverview user={user} campaigns={campaigns} loadState={campaignLoadState}
         campaignSubmissions={campaignSubmissions} submissionLoadStates={submissionLoadStates} campaignAssets={campaignAssets}
         expandedCampaignId={expandedCampaignId} onToggleCampaign={id => setExpandedCampaignId(expandedCampaignId === id ? null : id)}
-        calculatePromoterSlots={calculatePromoterSlots} onRetry={fetchCampaigns} />
+        onRetry={fetchCampaigns} />
     </div>
     <section className="company-create-section" hidden={!creationOpen} aria-label="Create campaign">
       <Link to="/company" className="company-create-back">&larr; Back to overview</Link>

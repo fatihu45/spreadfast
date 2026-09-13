@@ -64,7 +64,7 @@ export default function CreatorWallet({ token, wallet, bankDetails, loading, err
         </Card>
         <div id="creator-withdrawal-form" hidden={!showWithdrawal}>
           {showWithdrawal && <Card className="creator-wallet-request"><h2>Request withdrawal</h2>
-            <p className="creator-wallet-withdrawal-terms">A 7.5% withdrawal fee applies. Minimum withdrawal: &#8358;1,000.</p>
+            <p className="creator-wallet-withdrawal-terms">Minimum withdrawal: &#8358;1,000.</p>
             {!bankDetails ? <><p>Add your bank account above before requesting a withdrawal.</p><Button variant="secondary" onClick={closeWithdrawal}>Close</Button></> : <form className="creator-wallet-form" onSubmit={async event => { event.preventDefault(); if (withdrawing) return; setWithdrawing(true); try { await onWithdraw(event); } finally { setWithdrawing(false); } }}>
               <FormField label="Withdrawal amount (NGN)" required><Input ref={amountRef} type="number" step="1000" min="1000" max={wallet?.balance || 0} value={withdrawalAmount} onChange={onAmountChange} placeholder="Enter amount" /></FormField>
               <div className="creator-wallet-form-actions"><Button type="submit" disabled={withdrawing || !canWithdraw}>{withdrawing ? 'Submitting...' : 'Request Withdrawal'}</Button><Button variant="secondary" disabled={withdrawing} onClick={closeWithdrawal}>Cancel</Button></div>

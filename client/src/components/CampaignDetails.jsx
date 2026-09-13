@@ -1,3 +1,4 @@
+import { creatorPool, creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, CampaignStatusBadge, PlatformBadge } from './ui';
 import UiIcon from './ui/UiIcon';
@@ -15,10 +16,11 @@ export default function CampaignDetails({ campaign, thumbnail, assets, totalSlot
   const name = campaign.title || campaign.name;
   const brief = campaign.description || campaign.caption;
   const platforms = campaign.socialMediaPlatforms || [];
-  const budget = campaign.budget ? '\u20a6' + parseFloat(campaign.budget).toLocaleString() : 'N/A';
+  const budget = creatorPool(campaign) ? '\u20a6' + Number(creatorPool(campaign)).toLocaleString() : 'N/A';
+  const earning = hasCurrentPricing(campaign) ? '\u20a6' + creatorEarning(campaign).toLocaleString() : 'Set on approval';
   const prefix = 'campaign-detail-' + campaign.id;
   const platformBadges = platforms.length ? <div className="sf-platform-list">{platforms.map(platform => <PlatformBadge key={platform} platform={platform} />)}</div> : <p>Platforms have not been specified.</p>;
-  const earningCopy = 'Your earning amount is set when your submission is approved. The campaign budget is the total campaign pool, not a guaranteed individual payout.';
+  const earningCopy = hasCurrentPricing(campaign) ? 'Earn ' + earning + ' when your campaign submission is approved. This is your take-home campaign earning, credited once per creator.' : 'Your earning amount is set when your submission is approved. The campaign budget is the total campaign pool, not a guaranteed individual payout.';
   function handleTabKey(event, index) {
     let next;
     if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
@@ -36,7 +38,7 @@ export default function CampaignDetails({ campaign, thumbnail, assets, totalSlot
         <div className="campaign-detail-title"><h2>{name}</h2><CampaignStatusBadge status={campaign.status || 'active'} /><span className="campaign-detail-slot-badge">{remainingSlots} slots left</span></div>
         <p>{brief}</p>
         {platformBadges}
-        <dl className="campaign-detail-numbers"><div><dt>Campaign budget</dt><dd>{budget}</dd></div><div><dt>Creator earning</dt><dd>Set on approval</dd></div></dl>
+        <dl className="campaign-detail-numbers"><div><dt>{hasCurrentPricing(campaign) ? 'Creator pool' : 'Campaign budget'}</dt><dd>{budget}</dd></div><div><dt>Creator earning</dt><dd>{earning}</dd></div></dl>
         <Button fullWidth disabled={remainingSlots === 0} onClick={onJoin}>{remainingSlots === 0 ? 'All Slots Filled' : 'Join Campaign'}</Button>
         {isSubscribed && <p className="campaign-detail-joined">You have joined this campaign.</p>}
       </div>
@@ -63,7 +65,7 @@ export default function CampaignDetails({ campaign, thumbnail, assets, totalSlot
         <div><dt>Available creator slots</dt><dd>{remainingSlots}</dd></div>
         <div><dt>Creator slots filled</dt><dd>{subscribedCount} of {totalSlots}</dd></div>
         <div><dt>Platforms</dt><dd>{platformBadges}</dd></div>
-        <div><dt>Creator earning</dt><dd>Set on approval</dd></div>
+        <div><dt>Creator earning</dt><dd>{earning}</dd></div>
       </dl><Button fullWidth variant="secondary" onClick={onSubmit}>Submit Proof</Button></aside>
     </div>
   </div>;

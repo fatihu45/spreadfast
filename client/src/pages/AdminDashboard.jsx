@@ -1,3 +1,4 @@
+import { creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
@@ -212,7 +213,7 @@ export default function AdminDashboard() {
             <StatCard label="Submissions" value={stats.totalSubmissions} icon={<UiIcon name="globe" />} description={<>Pending: {stats.pendingSubmissions}</>} />
             <StatCard label="Withdrawals" value={money(stats.totalWithdrawalAmount)} icon={<UiIcon name="wallet" />} description={<>Pending: {money(stats.pendingWithdrawalAmount)}</>} />
           </div>
-          <Card className="sf-admin-revenue"><div><p className="sf-small sf-muted">Platform fees (5%)</p><h2 className="sf-title">{money((stats.totalCampaignFees || 0) + (stats.totalWithdrawalFees || 0))}</h2></div><dl className="sf-admin-details"><Detail label="Campaign fees">{money(stats.totalCampaignFees)}</Detail><Detail label="Withdrawal fees">{money(stats.totalWithdrawalFees)}</Detail></dl></Card>
+          <Card className="sf-admin-revenue"><div><p className="sf-small sf-muted">Platform share (25%)</p><h2 className="sf-title">{money(stats.totalCampaignFees || 0)}</h2></div><dl className="sf-admin-details"><Detail label="Campaign fees">{money(stats.totalCampaignFees)}</Detail><Detail label="Creator allocation">{money(stats.totalCreatorAllocation)}</Detail><Detail label="Legacy campaign fees (estimate)">{money(stats.legacyCampaignFeeEstimate)}</Detail></dl></Card>
         </> : <Card><EmptyState title="Statistics unavailable" description="Platform statistics could not be loaded." /></Card>}
         <section aria-labelledby="admin-attention"><h2 id="admin-attention" className="sf-heading sf-admin-section-heading">Needs your attention</h2>
           <div className="sf-admin-attention">
@@ -230,7 +231,7 @@ export default function AdminDashboard() {
         {campaigns.map(campaign => <Card as="article" key={campaign._id || campaign.id}>
           <div className="sf-admin-record-heading"><h2 className="sf-heading">{campaign.title || campaign.name || 'Untitled Campaign'}</h2><Status value={campaign.status} /></div>
           <p className="sf-admin-description sf-small sf-muted">{campaign.description || 'No description provided.'}</p>
-          <dl className="sf-admin-details"><Detail label="Budget">{money(campaign.budget)}</Detail><Detail label="Platforms"><Platforms values={campaign.socialMediaPlatforms || []} /></Detail><Detail label="Promoters subscribed">{(campaign.subscribedPromoters || []).length}</Detail><Detail label="Created">{date(campaign.createdAt)}</Detail></dl>
+          <dl className="sf-admin-details"><Detail label="Budget">{money(campaign.budget)}</Detail>{hasCurrentPricing(campaign) && <><Detail label="Platform share (25%)">{money(campaign.pricing.platformAmount)}</Detail><Detail label="Creator pool">{money(campaign.pricing.creatorPool)}</Detail></>}<Detail label="Platforms"><Platforms values={campaign.socialMediaPlatforms || []} /></Detail><Detail label="Promoters subscribed">{(campaign.subscribedPromoters || []).length}</Detail><Detail label="Created">{date(campaign.createdAt)}</Detail></dl>
           <div className="sf-admin-actions">
             {campaign.status === 'active' && <Button variant="secondary" className="sf-admin-pause" onClick={() => handleCampaignStatusChange(campaign.id, 'paused')}>Pause</Button>}
             {campaign.status === 'paused' && <Button onClick={() => handleCampaignStatusChange(campaign.id, 'active')}>Resume</Button>}
@@ -248,9 +249,9 @@ export default function AdminDashboard() {
             <Detail label="Proof URL">{submission.proofUrl ? <a className="sf-admin-proof sf-text-link" href={submission.proofUrl} target="_blank" rel="noopener noreferrer">{submission.proofUrl}</a> : 'Not provided'}</Detail>
             {submission.approvalAmount > 0 && <Detail label="Approved amount">{money(submission.approvalAmount)}</Detail>}
           </dl>
-          {submission.status === 'pending' && <div className="sf-admin-actions"><Button onClick={() => setApprovalForm({ submissionId: submission.id, approvalAmount: 5000, visible: true })}>Approve</Button><Button variant="ghost" className="sf-admin-destructive" onClick={() => handleSubmissionReject(submission.id)}>Reject</Button></div>}
+          {submission.status === 'pending' && <div className="sf-admin-actions"><Button onClick={() => setApprovalForm({ submissionId: submission.id, approvalAmount: creatorEarning(campaigns.find(c => c.id === submission.campaignId) || submission) ?? 5000, visible: true })}>Approve</Button><Button variant="ghost" className="sf-admin-destructive" onClick={() => handleSubmissionReject(submission.id)}>Reject</Button></div>}
           {approvalForm.visible && approvalForm.submissionId === submission.id && <div className="sf-admin-approval">
-            <FormField label="Approval Amount (&#8358;)" id={'approval-' + submission.id}><Input type="number" value={approvalForm.approvalAmount} onChange={e => setApprovalForm({ ...approvalForm, approvalAmount: e.target.value })} /></FormField>
+            <FormField label="Approval Amount (&#8358;)" id={'approval-' + submission.id}><Input type="number" readOnly={hasCurrentPricing(campaigns.find(c => c.id === submission.campaignId) || submission)} value={approvalForm.approvalAmount} onChange={e => setApprovalForm({ ...approvalForm, approvalAmount: e.target.value })} /></FormField>
             <div className="sf-admin-actions"><Button onClick={() => handleSubmissionApproval(submission.id, approvalForm.approvalAmount)}>Confirm Approval</Button><Button variant="secondary" onClick={() => setApprovalForm({ submissionId: null, approvalAmount: 0, visible: false })}>Cancel</Button></div>
           </div>}
         </Card>)}

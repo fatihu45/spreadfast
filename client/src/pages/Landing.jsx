@@ -50,7 +50,7 @@ export default function LandingPage() {
     },
     {
       q: 'How much does it cost to run a campaign?',
-      a: 'Campaigns cost ₦20,000 per promoter, plus a 5% platform fee on campaign creation. There are no hidden charges beyond that.',
+      a: 'Campaigns cost ₦20,000 per promoter. Choose the number of promoters that fits your campaign.',
     },
     {
       q: 'How do promoters get paid?',

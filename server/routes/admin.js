@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { feeStats } = require('../services/campaignPricing');
+const { reviewSubmission } = require('../services/reviewSubmission');
 
 const { authenticateToken } = require('../middleware/auth');
 
@@ -26,7 +28,6 @@ router.get('/all-stats', auth, async (req, res) => {
     const submissions = await Submission.find({});
     const withdrawals = await Withdrawal.find({});
 
-    const totalCampaignBudget = campaigns.reduce((sum, c) => sum + (parseFloat(c.budget) || 0), 0);
     const totalWithdrawalAmount = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
 
     res.json({
@@ -48,8 +49,7 @@ router.get('/all-stats', auth, async (req, res) => {
         pendingWithdrawalAmount: withdrawals
           .filter(w => w.status === 'pending')
           .reduce((sum, w) => sum + w.amount, 0),
-        totalCampaignFees: totalCampaignBudget * 0.05,
-        totalWithdrawalFees: totalWithdrawalAmount * 0.05
+        ...feeStats(campaigns, await mongoose.model('PaystackTransaction').find({}))
       }
     });
   } catch (err) {
@@ -143,27 +143,11 @@ router.patch('/submissions/:submissionId', auth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const submission = await Submission.findOne({ id: req.params.submissionId });
-    if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
-
-    const update = { status, reviewedAt: new Date().toISOString() };
-
-    if (status === 'approved' && approvalAmount) {
-      update.approvalAmount = parseFloat(approvalAmount);
-      const user = await User.findOne({ id: submission.userId });
-      if (user) {
-        await User.updateOne(
-          { id: submission.userId },
-          { walletBalance: (user.walletBalance || 0) + parseFloat(approvalAmount) }
-        );
-      }
-    }
-
-    await Submission.updateOne({ id: req.params.submissionId }, update);
+    await reviewSubmission({Submission, User, Campaign: mongoose.model('Campaign')}, req.params.submissionId, status, approvalAmount);
     res.json({ success: true, message: `Submission ${status}` });
   } catch (err) {
     console.error('Admin submission patch error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 });
 

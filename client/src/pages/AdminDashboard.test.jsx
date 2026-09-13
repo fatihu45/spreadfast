@@ -9,7 +9,7 @@ jest.mock('../utils/api', () => ({ apiCallAuth: jest.fn() }));
 const act = React.act || legacyAct;
 jest.setTimeout(30000);
 let host, root, logout;
-const stats = { totalUsers: 17, totalPromoters: 12, totalCompanies: 5, totalCampaigns: 2, activeCampaigns: 1, totalSubmissions: 2, pendingSubmissions: 1, totalWithdrawalAmount: 9000, pendingWithdrawalAmount: 4000, pendingWithdrawals: 1, totalCampaignFees: 1000, totalWithdrawalFees: 450 };
+const stats = { totalUsers: 17, totalPromoters: 12, totalCompanies: 5, totalCampaigns: 2, activeCampaigns: 1, totalSubmissions: 2, pendingSubmissions: 1, totalWithdrawalAmount: 9000, pendingWithdrawalAmount: 4000, pendingWithdrawals: 1, totalCampaignFees: 5000, totalWithdrawalFees: 0, totalCreatorAllocation: 15000, legacyCampaignFeeEstimate: 1000 };
 const campaigns = [{ id: 'c1', title: 'Active campaign', budget: 20000, status: 'active', socialMediaPlatforms: ['tiktok'], subscribedPromoters: ['u1'], createdAt: '2026-09-01' }, { id: 'c2', title: 'Paused campaign', status: 'paused' }];
 const submissions = [{ id: 's1', userName: 'Creator One', campaignName: 'Active campaign', status: 'pending', proofUrl: 'https://example.com/post', proofDescription: 'Review this post', platforms: ['instagram'] }, { id: 's2', userName: 'Creator Two', status: 'approved', approvalAmount: 5000 }];
 const withdrawals = [{ id: 'w1', promoterName: 'Creator One', amount: 4000, status: 'pending', email: 'creator@example.com', bankDetails: { bankName: 'Test bank', accountName: 'Creator One', accountNumber: '1234567890' } }, { id: 'w2', amount: 5000, status: 'completed' }];
@@ -30,7 +30,9 @@ test('loads all existing endpoints and renders API statistics and fee totals', a
   await render();
   for (const endpoint of ['all-stats', 'campaigns', 'submissions', 'withdrawals']) expect(apiCallAuth).toHaveBeenCalledWith('/api/admin/' + endpoint, 'admin-token');
   expect([...host.querySelectorAll('.sf-stat-card__value')].map(n => n.textContent)).toEqual(['17', '2', '2', '\u20a69,000']);
-  expect(host.querySelector('.sf-admin-revenue').textContent).toContain('1,450');
+  expect(host.querySelector('.sf-admin-revenue').textContent).toContain('25%');
+  expect(host.querySelector('.sf-admin-revenue h2').textContent).toContain('5,000');
+  expect(host.querySelector('.sf-admin-revenue').textContent).toContain('15,000');
   expect(host.textContent).toContain('Promoters: 12'); expect(host.textContent).toContain('Businesses: 5');
   expect(host.querySelectorAll('.sf-admin-attention .sf-badge').length).toBe(3);
 });
@@ -80,3 +82,14 @@ test('loading and empty states remain in the shared shell', async () => {
   await tab('Submissions'); expect(host.textContent).toContain('No submissions found.'); await tab('Withdrawals'); expect(host.textContent).toContain('No withdrawal requests found.');
 });
 test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('Exit Admin in %s logs out and returns to login', async selector => { await render(); await click('Exit Admin', host.querySelector(selector)); expect(logout).toHaveBeenCalledTimes(1); expect(host.querySelector('output').textContent).toBe('/login'); });
+
+ test('new campaigns approve the fixed net earning and show the platform share to admin', async () => {
+  apiCallAuth.mockImplementation(async endpoint => endpoint.endsWith('/campaigns') ? {success:true, campaigns:[{...campaigns[0], pricing:{version:'creator-20000-included-25-v1', platformAmount:5000, creatorPool:15000, earningPerCreator:15000}}]}
+    : endpoint.endsWith('/submissions') ? {success:true, submissions:[{...submissions[0], campaignId:'c1'}]}
+    : endpoint.endsWith('/all-stats') ? {success:true, stats} : {success:true, withdrawals:[]});
+  await render(); await tab('Campaigns');
+  expect(host.textContent).toContain('Platform share (25%)'); expect(host.textContent).toContain('15,000');
+  await tab('Submissions'); await click('Approve');
+  const input=host.querySelector('input[type="number"]'); expect(input.value).toBe('15000'); expect(input.readOnly).toBe(true);
+  await click('Confirm Approval'); mutation('/api/admin/submissions/s1', 'PATCH', {status:'approved', approvalAmount:15000});
+ });

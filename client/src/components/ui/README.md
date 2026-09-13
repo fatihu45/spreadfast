@@ -1,6 +1,6 @@
 # SpreadFast design system
 
-Phase 1 supplies presentation primitives, not page redesigns. Components do not
+Shared components supply presentation primitives. Components do not
 fetch data, choose routes, authenticate users or manage payments. Pass existing
 API values and handlers from the page that owns them.
 
@@ -167,3 +167,11 @@ Unknown statuses get neutral styling rather than being presented as active.
 Component behavior checks: `npm test -- --watchAll=false --runInBand --runTestsByPath src/components/ui/components.test.jsx`
 (run from `client`). They cover route preservation, form associations, native
 submission, disabled controls, callbacks, missing/zero values and avatar recovery.
+
+## UI consistency audit
+
+Use Alert for error, warning, success and information messages; it preserves child content and supplies a decorative status icon plus the correct live-region role. Use AuthLayout for account/recovery screens, and FileTypeIcon for asset types. UiIcon owns the line-icon set; avoid emoji glyphs in presentation. BrandMark uses the official logo asset.
+
+Dashboard page widths, headings and gutters belong to AppShell/DashboardShell. Avoid page-specific overrides and duplicated wrapper cards. Buttons use the 44px control-height token. Keep image/illustration styling separate from interactive control styles.
+
+Retained legacy selectors are centralized in styles/legacy-ui.css; do not add global form, header, nav or button surface styles.

@@ -1,3 +1,4 @@
+import { creatorSlots } from '../utils/campaignPricing';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, CampaignStatusBadge, EmptyState, PageHeader, PlatformBadge, StatCard } from './ui';
@@ -11,7 +12,7 @@ function CampaignImage({ src }) {
   return <div className="company-overview-image">{src && src !== failed ? <img src={src} alt="" loading="lazy" onError={() => setFailed(src)} /> : <UiIcon name="campaign" />}</div>;
 }
 export default function CompanyOverview({ user, campaigns, loadState, campaignSubmissions, submissionLoadStates, campaignAssets,
-  expandedCampaignId, onToggleCampaign, calculatePromoterSlots, onRetry }) {
+  expandedCampaignId, onToggleCampaign, onRetry }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const promoters = campaigns.flatMap(campaign => campaign.subscribedPromoters || []);
@@ -35,7 +36,7 @@ export default function CompanyOverview({ user, campaigns, loadState, campaignSu
       {loadState === 'success' && <div className="company-overview-list">{campaigns.map(campaign => {
         const expanded = expandedCampaignId === campaign.id;
         const assigned = campaign.subscribedPromoters?.length || 0;
-        const slots = calculatePromoterSlots(campaign.budget || campaign.amountPaid || 0);
+        const slots = creatorSlots(campaign);
         const available = Math.max(0, slots - assigned);
         const assets = campaignAssets[campaign.id] || [];
         const image = assets.find(asset => asset.file_type === 'image' && asset.url)?.url || campaign.brandAssets?.find(asset => asset.fileType?.startsWith('image/'))?.fileUrl;

@@ -1,3 +1,4 @@
+import { creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -130,7 +131,7 @@ export default function PromotionDashboard() {
             const to = '/submit-proof?campaignId=' + encodeURIComponent(campaign.id);
             return <CampaignCard key={campaign.id} title={campaign.title || campaign.name || 'Untitled campaign'} status={campaign.status || 'unknown'}
               imageSrc={assetUrl(thumbnail)} platforms={Array.isArray(campaign.socialMediaPlatforms) ? [...new Set(campaign.socialMediaPlatforms)] : []}
-              budget={money(campaign.budget) ?? unavailable} budgetLabel="Campaign budget" to={to}
+              budget={money(hasCurrentPricing(campaign) ? creatorEarning(campaign) : campaign.budget) ?? unavailable} budgetLabel={hasCurrentPricing(campaign) ? "Your earning per campaign" : "Campaign budget"} to={to}
               metadata={<><p>{ownSubmissions.length} {ownSubmissions.length === 1 ? 'submission' : 'submissions'}</p><CampaignBrief campaign={campaign} assets={assets} /></>}
               actions={<Link to={to} className="creator-text-link">Submit proof <span aria-hidden="true"><UiIcon name="arrow" /></span></Link>} />;
           })}

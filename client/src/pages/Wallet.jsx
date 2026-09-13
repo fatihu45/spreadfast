@@ -1,3 +1,4 @@
+import Alert from '../components/ui/Alert';
 import UiIcon from '../components/ui/UiIcon';
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
@@ -204,8 +205,8 @@ export default function Wallet() {
 
       <div className="wallet-section">
         <h3><UiIcon name="wallet" /> Bank Details</h3>
-        {error && <div className="error">{error}</div>}
-        {success && <div className="success">{success}</div>}
+        {error && <Alert tone="error">{error}</Alert>}
+        {success && <Alert tone="success">{success}</Alert>}
 
         {bankDetails ? (
           <div>
@@ -291,16 +292,13 @@ export default function Wallet() {
 
       <div className="wallet-section">
         <h3>Request Withdrawal</h3>
-        {error && <div className="error">{error}</div>}
-        {success && <div className="success">{success}</div>}
+        {error && <Alert tone="error">{error}</Alert>}
+        {success && <Alert tone="success">{success}</Alert>}
 
         <div style={{ marginBottom: '20px' }}>
-          <div style={{ marginBottom: '12px', padding: '12px', background: 'rgb(var(--sf-warning-soft))', border: '1px solid rgb(var(--sf-border))', borderRadius: '6px', fontSize: '14px', color: 'rgb(var(--sf-warning))' }}>
-            <strong><UiIcon name="info" /> A 7.5% withdrawal fee applies to all withdrawals.</strong>
-          </div>
-          <div style={{ padding: '12px', background: 'rgb(var(--sf-warning-soft))', border: '1px solid rgb(var(--sf-border))', borderRadius: '6px', fontSize: '14px', color: 'rgb(var(--sf-warning))' }}>
-            <strong><UiIcon name="info" /> Minimum withdrawal amount is ₦1,000.</strong>
-          </div>
+          <Alert tone="warning">
+            <strong>Minimum withdrawal amount is ₦1,000.</strong>
+          </Alert>
         </div>
 
         {!bankDetails ? (
@@ -311,16 +309,7 @@ export default function Wallet() {
           <form onSubmit={handleWithdrawal}>
             <div className="form-group">
               <label>Available Balance</label>
-              <div style={{
-                background: 'rgb(var(--sf-primary-soft))',
-                border: '1px solid rgb(var(--sf-border))',
-                borderRadius: '6px',
-                padding: '12px',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                color: 'rgb(var(--sf-primary))',
-                marginBottom: '15px'
-              }}>
+              <div className="wallet-available-amount">
                 ₦{(wallet?.balance || 0).toLocaleString()}
               </div>
             </div>
@@ -343,7 +332,7 @@ export default function Wallet() {
               Request Withdrawal
             </button>
           </form>
-        )}}
+        )}
       </div>
 
       {pendingWithdrawals.length > 0 && (

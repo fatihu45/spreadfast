@@ -115,3 +115,15 @@ test('detail tabs show campaign data and explain earnings without inventing a re
   expect(host.querySelector('output').textContent).toBe('/available-campaigns');
   expect(apiCallAuth).not.toHaveBeenCalled();
 });
+
+ test('new paid campaigns show net creator earnings and purchased capacity', async () => {
+  campaigns[0] = {...campaigns[0], budget: 60000, pricing: {version: 'creator-20000-included-25-v1', creatorCount: 3, creatorPool: 45000, earningPerCreator: 15000}};
+  await render();
+  expect(card('a').querySelector('.marketplace-budget').textContent).toContain('Your earning per campaign');
+  expect(card('a').querySelector('.marketplace-budget strong').textContent).toContain('15,000');
+  expect(card('a').querySelector('.marketplace-slots').textContent).toBe('1 creator slot left');
+  await click(card('a').querySelector('.marketplace-view'));
+  expect(card('a').querySelector('.campaign-detail-numbers').textContent).toContain('Creator pool');
+  expect(card('a').querySelector('.campaign-detail-numbers').textContent).toContain('45,000');
+  expect(card('a').querySelector('.campaign-detail-numbers').textContent).not.toContain('60,000');
+ });

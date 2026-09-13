@@ -15,6 +15,8 @@ const cloudinary = require('cloudinary').v2;
 
 // ==================== IMPORT MODELS ====================
 const User = require('./models/user');
+const { quoteCampaign, hasCurrentPricing, creatorSlots, feeStats, verifyCharge } = require('./services/campaignPricing');
+const { reviewSubmission } = require('./services/reviewSubmission');
 
 const app = express();
 
@@ -39,7 +41,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({ verify: (req, res, buffer) => { if (req.originalUrl === '/api/payments/webhook') req.rawBody = buffer; } }));
 
 // ==================== ROUTES AFTER CORS ====================
 const adminRoutes = require('./routes/admin');
@@ -160,7 +162,16 @@ const localDB = {
     },
     updateOne: (query, update) => {
       let data = readJSON('users.json');
-      data = data.map(item => matchQuery([item], query).length ? { ...item, ...update } : item);
+      data = data.map(item => {
+        if (!matchQuery([item], query).length) return item;
+        const next = { ...item };
+        for (const [key, value] of Object.entries(update)) {
+          if (key === '$inc') for (const [field, increment] of Object.entries(value)) next[field] = (next[field] || 0) + increment;
+          else if (key === '$push') for (const [field, entry] of Object.entries(value)) next[field] = [...(next[field] || []), entry];
+          else next[key] = value;
+        }
+        return next;
+      });
       writeJSON('users.json', data);
       return Promise.resolve({ nModified: 1 });
     }
@@ -179,6 +190,7 @@ const localDB = {
     },
     create: (doc) => {
       const data = readJSON('campaigns.json');
+      if (data.some(c => c.id === doc.id)) return Promise.resolve(data.find(c => c.id === doc.id));
       data.push(doc);
       writeJSON('campaigns.json', data);
       return Promise.resolve(doc);
@@ -313,7 +325,13 @@ const localDB = {
 function matchQuery(data, query) {
   if (!query || Object.keys(query).length === 0) return data;
   return data.filter(item =>
-    Object.entries(query).every(([key, val]) => item[key] === val)
+    Object.entries(query).every(([key, val]) => {
+      if (val && typeof val === 'object' && '$ne' in val) {
+        const [parent, child] = key.split('.');
+        return child ? !(item[parent] || []).some(entry => entry[child] === val.$ne) : item[key] !== val.$ne;
+      }
+      return item[key] === val;
+    })
   );
 }
 
@@ -342,6 +360,16 @@ const DB = new Proxy({}, {
     return localDB[model];
   }
 });
+
+async function persistPaidCampaign(campaign) {
+  if (!hasCurrentPricing(campaign)) return DB.Campaign.create(campaign);
+  const existing = await DB.Campaign.findOne({id: campaign.id});
+  if (existing) return existing;
+  try { return await DB.Campaign.create(campaign); } catch (error) {
+    if (error.code !== 11000) throw error;
+    return DB.Campaign.findOne({id: campaign.id});
+  }
+}
 
 // ==================== MONGODB CONNECTION ====================
 const connectDB = async () => {
@@ -380,6 +408,7 @@ const campaignSchema = new mongoose.Schema({
   description: { type: String, default: '' },
   budget: { type: String, required: true },
   amountPaid: { type: Number, default: 0 },
+  pricing: { type: Object, default: undefined },
   companyId: { type: String, required: true },
   socialMediaPlatforms: { type: [String], default: [] },
   keyMessage: { type: String, default: '' },
@@ -426,6 +455,7 @@ const submissionSchema = new mongoose.Schema({
   screenshot: { type: String, default: '' },
   status: { type: String, default: 'pending' },
   approvalAmount: { type: Number, default: 0 },
+  pricing: { type: Object, default: undefined },
   reviewedAt: { type: String, default: null },
   createdAt: { type: String, default: () => new Date().toISOString() }
 });
@@ -454,6 +484,7 @@ const paystackTransactionSchema = new mongoose.Schema({
   email: { type: String, required: true },
   amount: { type: Number, required: true },
   campaignName: { type: String, required: true },
+  pricing: { type: Object, default: undefined },
   description: { type: String, default: '' },
   keyMessage: { type: String, default: '' },
   socialMediaPlatforms: { type: [String], default: [] },
@@ -623,7 +654,7 @@ const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NO
       console.log('No promoters to notify');
       return;
     }
-    const promoterSlots = Math.floor(parseFloat(campaign.budget) / 5000);
+    const promoterSlots = creatorSlots(campaign);
     const subject = `🔔 New Campaign Available: "${campaign.title}" — Earn Money Now!`;
 
     const emailPromises = promoters.map(async (promoter) => {
@@ -642,7 +673,7 @@ const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NO
               <h3 style="color: #15803d; margin-top: 0;">📢 ${campaign.title}</h3>
               <table style="width: 100%; color: #444;">
                 <tr><td style="padding: 8px 0;"><strong>Description:</strong></td><td>${campaign.description || 'Promote this brand on social media'}</td></tr>
-                <tr><td style="padding: 8px 0;"><strong>Campaign Budget:</strong></td><td style="color: #15803d;"><strong>₦${parseFloat(campaign.budget).toLocaleString()}</strong></td></tr>
+                <tr><td style="padding: 8px 0;"><strong>Creator pool:</strong></td><td style="color: #15803d;"><strong>₦${parseFloat(campaign.budget).toLocaleString()}</strong></td></tr>
                 <tr><td style="padding: 8px 0;"><strong>Available Slots:</strong></td><td><strong>${promoterSlots} promoters needed</strong></td></tr>
                 <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
                 <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Open for Subscription ✅</strong></td></tr>
@@ -682,7 +713,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
   const secret = paystackConfig.secretKey;
   const hash = crypto
     .createHmac('sha512', secret)
-    .update(req.body)
+    .update(req.rawBody || req.body)
     .digest('hex');
 
   if (hash !== req.headers['x-paystack-signature']) {
@@ -692,7 +723,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
 
   let event;
   try {
-    event = JSON.parse(req.body);
+    event = Buffer.isBuffer(req.body) ? JSON.parse(req.body) : req.body;
   } catch (e) {
     return res.status(400).send('Invalid JSON');
   }
@@ -707,7 +738,8 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
       const transaction = await DB.PaystackTransaction.findOne({ reference });
 
       if (transaction && !transaction.campaignCreated) {
-        const campaignId = uuidv4();
+        verifyCharge(transaction, event.data);
+        const campaignId = transaction.pricing ? 'payment-' + transaction.id : uuidv4();
         const campaign = {
           id: campaignId,
           title: transaction.campaignName,
@@ -715,6 +747,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
           keyMessage: transaction.keyMessage || '',
           budget: transaction.amount.toString(),
           amountPaid: transaction.amount,
+          pricing: transaction.pricing,
           companyId: transaction.userId,
           socialMediaPlatforms: transaction.socialMediaPlatforms || [],
           keyMessage: transaction.keyMessage || '',
@@ -723,7 +756,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
           createdAt: new Date().toISOString()
         };
 
-        await DB.Campaign.create(campaign);
+        await persistPaidCampaign(campaign);
         await DB.PaystackTransaction.updateOne(
           { reference },
           { campaignCreated: true, campaignId, status: 'completed' }
@@ -968,6 +1001,10 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Amount and campaign name required' });
     }
 
+    let pricing;
+    try { pricing = quoteCampaign(amount); } catch (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     const user = await DB.User.findOne({ id: req.user.id });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -975,7 +1012,8 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
 
     const response = await axios.post('https://api.paystack.co/transaction/initialize', {
       email: user.email,
-      amount: Math.round(amount * 100),
+      amount: pricing.grossAmount * 100,
+      currency: 'NGN',
       metadata: { campaignName, userId: user.id, userName: user.name }
     }, {
       headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }
@@ -987,7 +1025,8 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
         reference: response.data.data.reference,
         userId: user.id,
         email: user.email,
-        amount,
+        amount: pricing.grossAmount,
+        pricing,
         campaignName,
         description: description || '',
         keyMessage: keyMessage || '',
@@ -1027,6 +1066,8 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
 
     if (response.data.status && response.data.data.status === 'success') {
       const transaction = response.data.data;
+      const stored = await DB.PaystackTransaction.findOne({ reference, userId: req.user.id });
+      verifyCharge(stored, transaction);
       await DB.PaystackTransaction.updateOne(
         { reference },
         { status: 'completed', verifiedAt: new Date().toISOString() }
@@ -1041,7 +1082,7 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
     res.status(400).json({ success: false, message: 'Payment verification failed' });
   } catch (error) {
     console.error('Verification error:', error);
-    res.status(500).json({ success: false, message: 'Verification failed' });
+    res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Verification failed' });
   }
 });
 
@@ -1068,7 +1109,7 @@ app.get('/api/payments/status/:reference', authenticateToken, async (req, res) =
 app.get('/api/payments/campaign-status/:reference', authenticateToken, async (req, res) => {
   try {
     const { reference } = req.params;
-    const transaction = await DB.PaystackTransaction.findOne({ reference });
+    const transaction = await DB.PaystackTransaction.findOne({ reference, userId: req.user.id });
 
     if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
@@ -1086,8 +1127,9 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
       );
 
       if (response.data.status && response.data.data.status === 'success') {
+        verifyCharge(transaction, response.data.data);
         if (!transaction.campaignCreated) {
-          const campaignId = uuidv4();
+          const campaignId = transaction.pricing ? 'payment-' + transaction.id : uuidv4();
           const campaign = {
             id: campaignId,
             title: transaction.campaignName,
@@ -1095,6 +1137,7 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
             keyMessage: transaction.keyMessage || '',
             budget: transaction.amount.toString(),
             amountPaid: transaction.amount,
+            pricing: transaction.pricing,
             companyId: transaction.userId,
             socialMediaPlatforms: transaction.socialMediaPlatforms || [],
             status: 'active',
@@ -1102,7 +1145,7 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
             createdAt: new Date().toISOString()
           };
 
-          await DB.Campaign.create(campaign);
+          await persistPaidCampaign(campaign);
           await DB.PaystackTransaction.updateOne(
             { reference },
             { campaignCreated: true, campaignId, status: 'completed' }
@@ -1140,40 +1183,29 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title and budget required' });
     }
 
-    if (reference) {
-      const existingTransaction = await DB.PaystackTransaction.findOne({ reference });
-      if (existingTransaction && existingTransaction.campaignCreated) {
-        const existingCampaign = await DB.Campaign.findOne({ paystackReference: reference });
-        if (existingCampaign) {
-          return res.status(201).json({ success: true, message: 'Campaign already created', campaign: existingCampaign });
-        }
-      }
+    if (!reference) return res.status(400).json({success: false, message: 'A verified campaign payment is required.'});
+    const transaction = await DB.PaystackTransaction.findOne({reference, userId: req.user.id});
+    if (!transaction) return res.status(404).json({success: false, message: 'Transaction not found'});
+    if (Number(budget) !== Number(transaction.amount)) return res.status(400).json({success: false, message: 'Budget must match the paid amount.'});
+    if (transaction.campaignCreated) {
+      const existingCampaign = await DB.Campaign.findOne({paystackReference: reference});
+      if (existingCampaign) return res.status(201).json({success: true, message: 'Campaign already created', campaign: existingCampaign});
+      return res.status(410).json({success: false, message: 'This payment has already funded a campaign that was removed.'});
     }
-
-    let amountPaid = parseFloat(budget);
-
-    if (reference) {
-      try {
-        const response = await axios.get(
-          `https://api.paystack.co/transaction/verify/${reference}`,
-          { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, timeout: 10000 }
-        );
-        if (!response.data.status || response.data.data.status !== 'success') {
-          return res.status(400).json({ success: false, message: 'Payment not verified' });
-        }
-        amountPaid = response.data.data.amount / 100;
-      } catch (paymentError) {
-        console.log('Payment verification skipped or failed:', paymentError.message);
-      }
-    }
-
-    const campaignId = uuidv4();
+    const response = await axios.get(
+      'https://api.paystack.co/transaction/verify/' + reference,
+      {headers: {Authorization: 'Bearer ' + paystackConfig.secretKey}, timeout: 10000}
+    );
+    verifyCharge(transaction, response.data.data);
+    const amountPaid = Number(transaction.amount);
+    const campaignId = transaction.pricing ? 'payment-' + transaction.id : uuidv4();
     const campaign = {
       id: campaignId,
       title,
       description: description || '',
       budget: budget.toString(),
       amountPaid,
+      pricing: transaction.pricing,
       companyId: req.user.id,
       socialMediaPlatforms: socialMediaPlatforms || [],
       keyMessage: keyMessage || '',
@@ -1183,7 +1215,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    await DB.Campaign.create(campaign);
+    await persistPaidCampaign(campaign);
 
     await ActivityLog.create({
       type: 'campaign_created',
@@ -1211,7 +1243,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
     res.status(201).json({ success: true, message: 'Campaign created successfully', campaign });
   } catch (error) {
     console.error('Campaign creation error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create campaign: ' + error.message });
+    res.status(error.statusCode || 500).json({ success: false, message: 'Failed to create campaign: ' + error.message });
   }
 });
 
@@ -1323,6 +1355,9 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
     const campaign = await DB.Campaign.findOne({ id: campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
+    if (hasCurrentPricing(campaign) && !(campaign.subscribedPromoters || []).some(p => p.promoterId === req.user.id)) {
+      return res.status(400).json({success: false, message: 'Join the campaign before submitting your post.'});
+    }
     const user = await DB.User.findOne({ id: req.user.id });
 
     const submission = {
@@ -1337,6 +1372,7 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
       screenshot: screenshot || '',
       status: 'pending',
       approvalAmount: 0,
+      pricing: campaign.pricing,
       createdAt: new Date().toISOString()
     };
 
@@ -1361,6 +1397,9 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
       return res.status(400).json({ success: false, message: 'Already subscribed to this campaign' });
     }
 
+    if (hasCurrentPricing(campaign) && (campaign.status !== 'active' || campaign.subscribedPromoters.length >= creatorSlots(campaign))) {
+      return res.status(400).json({success: false, message: 'No creator slots available.'});
+    }
     const promoter = await DB.User.findOne({ id: req.user.id });
 
     campaign.subscribedPromoters.push({
@@ -1369,7 +1408,24 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
       subscribedAt: new Date().toISOString()
     });
 
-    await DB.Campaign.updateOne({ id: campaignId }, { subscribedPromoters: campaign.subscribedPromoters });
+    if (hasCurrentPricing(campaign) && isMongoConnected()) {
+      const joined = await DB.Campaign.updateOne({id: campaignId, status: 'active',
+        'subscribedPromoters.promoterId': {$ne: req.user.id},
+        $expr: {$lt: [{$size: {$ifNull: ['$subscribedPromoters', []]}}, creatorSlots(campaign)]}
+      }, {$push: {subscribedPromoters: campaign.subscribedPromoters[campaign.subscribedPromoters.length - 1]}});
+      if (!joined.modifiedCount) return res.status(400).json({success: false, message: 'Already joined or no creator slots available.'});
+    } else if (hasCurrentPricing(campaign)) {
+      const campaigns = readJSON('campaigns.json');
+      const current = campaigns.find(c => c.id === campaignId);
+      if (!current || current.status !== 'active' || (current.subscribedPromoters || []).length >= creatorSlots(current)
+          || (current.subscribedPromoters || []).some(p => p.promoterId === req.user.id)) {
+        return res.status(400).json({success: false, message: 'Already joined or no creator slots available.'});
+      }
+      current.subscribedPromoters = [...(current.subscribedPromoters || []), campaign.subscribedPromoters[campaign.subscribedPromoters.length - 1]];
+      writeJSON('campaigns.json', campaigns);
+    } else {
+      await DB.Campaign.updateOne({ id: campaignId }, { subscribedPromoters: campaign.subscribedPromoters });
+    }
     res.json({ success: true, message: 'Successfully subscribed to campaign' });
   } catch (error) {
     console.error('Subscription error:', error);
@@ -1578,21 +1634,7 @@ app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req,
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    const submission = await DB.Submission.findOne({ id: submissionId });
-    if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
-
-    const updateData = { status, reviewedAt: new Date().toISOString() };
-
-    if (status === 'approved' && approvalAmount) {
-      updateData.approvalAmount = approvalAmount;
-      const user = await DB.User.findOne({ id: submission.userId });
-      if (user) {
-        await DB.User.updateOne({ id: submission.userId }, { walletBalance: user.walletBalance + approvalAmount });
-      }
-    }
-
-    await DB.Submission.updateOne({ id: submissionId }, updateData);
-    const updatedSubmission = await DB.Submission.findOne({ id: submissionId });
+    const updatedSubmission = await reviewSubmission(DB, submissionId, status, approvalAmount);
     
     if (status === 'approved') {
       await ActivityLog.create({
@@ -1605,7 +1647,7 @@ app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req,
     
     res.json({ success: true, message: `Submission ${status}`, submission: updatedSubmission });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to update submission' });
+    res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to update submission' });
   }
 });
 
@@ -1741,7 +1783,6 @@ app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
     const submissions = await DB.Submission.find({});
     const withdrawals = await DB.Withdrawal.find({});
 
-    const totalCampaignBudget = campaigns.reduce((sum, c) => sum + (parseFloat(c.budget) || 0), 0);
     const totalWithdrawalAmount = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
 
     const stats = {
@@ -1759,8 +1800,7 @@ app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
       completedWithdrawals: withdrawals.filter(w => w.status === 'completed').length,
       totalWithdrawalAmount,
       pendingWithdrawalAmount: withdrawals.filter(w => w.status === 'pending').reduce((sum, w) => sum + w.amount, 0),
-      totalCampaignFees: totalCampaignBudget * 0.05,
-      totalWithdrawalFees: totalWithdrawalAmount * 0.05
+      ...feeStats(campaigns, await DB.PaystackTransaction.find({}))
     };
 
     res.json({ success: true, stats });

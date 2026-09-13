@@ -1,7 +1,6 @@
 .company-overview-page { width: 100%; max-width: var(--sf-content-width); margin-inline: auto; }
 .company-overview-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; margin-bottom: 36px; }
 .company-overview-stats .sf-stat-card { padding: 22px; }
-.company-overview-stats .sf-stat-card__value { font-size: clamp(1.25rem, 2vw, 1.75rem); overflow-wrap: anywhere; }
 .company-overview-stats .sf-stat-card__label { font-size: .75rem; }
 .company-overview-stats .sf-small { font-size: .6875rem; }
 .company-overview-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }

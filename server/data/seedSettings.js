@@ -3,8 +3,8 @@ const PlatformSettings = require('../models/PlatformSettings');
 require('dotenv').config();
 
 const defaults = [
-  { key: 'minCampaignBudget',        value: 10000,   dataType: 'number' },
-  { key: 'platformFeePercent',       value: 7.5,     dataType: 'number' },
+  { key: 'minCampaignBudget',        value: 20000,   dataType: 'number' },
+  { key: 'platformFeePercent',       value: 25 ,     dataType: 'number' },
   { key: 'minDurationDays',          value: 3,       dataType: 'number' },
   { key: 'maxFilesPerCampaign',      value: 10,      dataType: 'number' },
   { key: 'maxFileSizeMB',            value: 20,      dataType: 'number' },

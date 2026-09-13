@@ -47,7 +47,7 @@ test('Create Campaign keeps existing hash link and form state when returning to 
 });
 test('creation retains its authenticated payment request and error behavior', async () => {
   await render('/company#create-campaign'); const form = host.querySelector('#create-campaign');
-  await change(field('Campaign name'), 'Real business'); await change(form.querySelector('textarea'), 'Campaign description'); await change(form.querySelector('textarea[maxlength="500"]'), 'Campaign key message'); await change(form.querySelector('input[min="10000"]'), '20000');
+  await change(field('Campaign name'), 'Real business'); await change(form.querySelector('textarea'), 'Campaign description'); await change(form.querySelector('textarea[maxlength="500"]'), 'Campaign key message'); await change(form.querySelector('input[min="20000"]'), '20000');
   await act(async () => Simulate.change(form.querySelectorAll('input[type="checkbox"]')[0])); await act(async () => Simulate.submit(form));
   expect(apiCallAuth.mock.calls.filter(call => call[0] === '/api/payments/initiate')).toHaveLength(0);
   await act(async () => Simulate.submit(form));
@@ -74,7 +74,7 @@ test('extended brief survives review, editing, and the existing payment payload'
   await change(field('Campaign goal'), 'Build brand awareness'); await change(field('Description'), 'Our introduction'); await change(field('Content requirements'), 'One product demonstration'); await change(field('Target location'), 'Lagos'); await change(field('Creator requirements'), 'Food creators'); await change(field('Campaign duration (days)'), '14');
   await act(async () => Simulate.change(host.querySelector('input[type="checkbox"]')));
   await act(async () => Simulate.submit(host.querySelector('#create-campaign')));
-  expect(host.querySelector('.business-create-review').textContent).toContain('Food creators'); expect(host.querySelector('.business-create-review').textContent).toContain('4 slots');
+  expect(host.querySelector('.business-create-review').textContent).toContain('Food creators'); expect(host.querySelector('.business-create-review').textContent).toContain('1 slot');
   expect(apiCallAuth.mock.calls.some(call => call[0] === '/api/payments/initiate')).toBe(false);
   await click([...host.querySelectorAll('button')].find(el => el.textContent === 'Edit campaign')); expect(field('Target location').value).toBe('Lagos');
   await act(async () => Simulate.submit(host.querySelector('#create-campaign'))); await act(async () => Simulate.submit(host.querySelector('#create-campaign')));
@@ -89,3 +89,11 @@ test('removing a rejected asset never removes a different valid file', async () 
   await click(host.querySelector('[aria-label="Remove bad.txt"]')); expect(host.textContent).toContain('1/10 files selected'); expect(host.textContent).toContain('brief.pdf');
   await click(host.querySelector('[aria-label="Remove brief.pdf"]')); expect(host.textContent).toContain('0/10 files selected');
 });
+
+ test('versioned campaigns use purchased capacity and keep the full business budget', async () => {
+  campaigns[0] = {...campaigns[0], budget: 60000, pricing: {version: 'creator-20000-included-25-v1', creatorCount: 3, creatorPool: 45000, earningPerCreator: 15000}};
+  await render();
+  expect(host.querySelector('.company-overview-campaign-status').textContent).toContain('2/3 promoters assigned');
+  expect(host.querySelector('.company-overview-campaign-budget').textContent).toContain('60,000');
+  expect(host.textContent).not.toContain('7.5%');
+ });

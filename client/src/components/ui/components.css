@@ -148,3 +148,5 @@
 .sf-alert--error { background: rgb(var(--sf-danger-soft)); color: rgb(var(--sf-danger)); }
 .sf-alert--success { background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-primary-hover)); }
 .sf-alert--warning { background: rgb(var(--sf-warning-soft)); color: rgb(var(--sf-warning)); }
+
+.sf-brand img { display: block; width: 156px; max-width: 100%; height: auto; }

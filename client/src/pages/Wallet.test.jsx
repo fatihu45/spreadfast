@@ -46,7 +46,7 @@ test('withdraw keeps validation and sends the original authenticated request the
   await change(input, '3000'); await submit(form);
   expect(apiCallAuth).toHaveBeenCalledWith('/api/wallet/withdraw', 'auth-token', { method: 'POST', body: JSON.stringify({ amount: 3000 }) });
   expect(host.querySelector('.sf-wallet-balance-card__value').textContent).toContain('21,000.00'); expect(host.querySelectorAll('.creator-wallet-transactions li')).toHaveLength(3);
-  expect(host.textContent).toContain('7.5% withdrawal fee');
+  expect(host.textContent).not.toContain('7.5% withdrawal fee');
 });
 test('change account preserves bank endpoint, full account number, and auth context update', async () => {
   await render(); await click(button('Change account')); const input = host.querySelector('input[name="accountNumber"]'); expect(input.value).toBe('0123456789');

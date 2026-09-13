@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['promoter', 'company', 'admin'], default: 'promoter' },
   status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
   walletBalance: { type: Number, default: 0 },
+  campaignCredits: { type: [{ campaignId: String, submissionId: String, amount: Number, creditedAt: String }], default: [] },
   bankDetails: { type: Object, default: null },
   lastLogin: { type: Date },
   socialMedia: {

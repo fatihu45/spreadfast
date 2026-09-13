@@ -1,3 +1,4 @@
+import { creatorSlots, creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -48,14 +49,11 @@ export default function AvailableCampaigns() {
   };
 
   // Calculate slots from budget
-  const calculateSlots = (budget) => {
-    const amount = parseFloat(budget) || 0;
-    return Math.floor(amount / 5000) * 1;
-  };
+
 
   // Get remaining slots
   const getRemainingSlots = (campaign) => {
-    const totalSlots = calculateSlots(campaign.budget || campaign.amountPaid || 0);
+    const totalSlots = creatorSlots(campaign);
     const subscribedCount = campaign.subscribedPromoters?.length || 0;
     return Math.max(0, totalSlots - subscribedCount);
   };
@@ -210,7 +208,7 @@ export default function AvailableCampaigns() {
     <div className="marketplace-list">
       {filteredCampaigns.length === 0 ? <Card><EmptyState title="No campaigns found" description="Try adjusting your filters or check back later." /></Card>
         : filteredCampaigns.map(campaign => {
-          const totalSlots = calculateSlots(campaign.budget || campaign.amountPaid || 0);
+          const totalSlots = creatorSlots(campaign);
           const subscribedCount = campaign.subscribedPromoters?.length || 0;
           const remainingSlots = getRemainingSlots(campaign);
           const assets = campaignAssets[campaign.id] || [];
@@ -229,7 +227,7 @@ export default function AvailableCampaigns() {
                 <p className="marketplace-description">{campaign.description || campaign.caption}</p>
                 <div className="marketplace-card-meta">
                   {campaign.socialMediaPlatforms?.length > 0 && <div className="sf-platform-list">{campaign.socialMediaPlatforms.map(platform => <PlatformBadge key={platform} platform={platform} />)}</div>}
-                  <div className="marketplace-budget"><span>Campaign budget</span><strong>{campaign.budget ? '\u20a6' + parseFloat(campaign.budget).toLocaleString() : 'N/A'}</strong></div>
+                  <div className="marketplace-budget"><span>{hasCurrentPricing(campaign) ? 'Your earning per campaign' : 'Campaign budget'}</span><strong>{hasCurrentPricing(campaign) ? '\u20a6' + creatorEarning(campaign).toLocaleString() : campaign.budget ? '\u20a6' + parseFloat(campaign.budget).toLocaleString() : 'N/A'}</strong></div>
                   <p className={'marketplace-slots' + (remainingSlots === 0 ? ' marketplace-slots--full' : '')}>{remainingSlots} creator {remainingSlots === 1 ? 'slot' : 'slots'} left</p>
                 </div>
               </div>

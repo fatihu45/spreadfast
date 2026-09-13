@@ -21,7 +21,7 @@
 .creator-wallet-history-note { color: rgb(var(--sf-muted)); font-size: .6875rem; line-height: 1.7; margin: -6px 0 20px; }
 .creator-wallet-transactions { list-style: none; padding: 0; margin: 0; }
 .creator-wallet-transactions li { display: flex; gap: 12px; align-items: start; padding: 20px 0; border-top: 1px solid rgb(var(--sf-border)); }
-.creator-wallet-transaction-icon.is-withdrawal { background: #fff4eb; color: #a34d16; }
+.creator-wallet-transaction-icon.is-withdrawal { background: rgb(var(--sf-warning-soft)); color: rgb(var(--sf-warning)); }
 .creator-wallet-transaction-copy { flex: 1; min-width: 0; }
 .creator-wallet-transaction-copy h3 { font-size: .8125rem; font-weight: 600; margin-bottom: 8px; }
 .creator-wallet-transaction-copy p { font-size: .6875rem; color: rgb(var(--sf-muted)); overflow-wrap: anywhere; margin-bottom: 8px; }
