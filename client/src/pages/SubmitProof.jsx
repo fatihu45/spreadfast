@@ -1,10 +1,13 @@
+import Alert from '../components/ui/Alert';
 /* eslint-disable */
 
 import React, { useState, useContext, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { apiCallAuth } from '../utils/api';
-import './Pages.css';
+import { apiCall, apiCallAuth } from '../utils/api';
+import { Button, Card, CampaignStatusBadge, FormField, Input, PageHeader, PlatformBadge } from '../components/ui';
+import UiIcon from '../components/ui/UiIcon';
+import './SubmitProof.css';
 
 export default function SubmitProof() {
   const { token } = useContext(AuthContext);
@@ -35,6 +38,38 @@ export default function SubmitProof() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submissions, setSubmissions] = useState([]);
+
+  const [campaign, setCampaign] = useState(null);
+  const [campaignImage, setCampaignImage] = useState('');
+  const [campaignError, setCampaignError] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [readingFile, setReadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setCampaign(null); setCampaignImage(''); setCampaignError(''); setImageFailed(false);
+    if (!campaignId) { setCampaignError('Choose a campaign before submitting your post.'); return; }
+    apiCall('/api/campaigns/' + campaignId).then(data => {
+      if (!cancelled) { if (data.success && data.campaign) setCampaign(data.campaign); else setCampaignError('Campaign details are unavailable.'); }
+    }).catch(() => { if (!cancelled) setCampaignError('Campaign details are unavailable.'); });
+    apiCall('/api/campaigns/' + campaignId + '/assets/preview').then(data => {
+      if (!cancelled && data.success) setCampaignImage(data.assets?.find(asset => asset.file_type === 'image' && asset.url)?.url || '');
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [campaignId]);
+
+  const handleScreenshotFile = async file => {
+    if (!file) return;
+    setUploadError('');
+    if (!['image/png', 'image/jpeg'].includes(file.type)) { setUploadError('Choose a PNG or JPG image.'); return; }
+    if (file.size > 60 * 1024) { setUploadError('Choose an image under 60 KB, or paste a screenshot URL below.'); return; }
+    setReadingFile(true);
+    const reader = new FileReader();
+    reader.onload = () => { setFormData(prev => ({ ...prev, screenshot: reader.result })); setFileName(file.name); setReadingFile(false); };
+    reader.onerror = () => { setUploadError('This image could not be read. Please try again.'); setReadingFile(false); };
+    reader.readAsDataURL(file);
+  };
 
   // Fetch user's submissions on mount
   useEffect(() => {
@@ -88,261 +123,84 @@ export default function SubmitProof() {
     setFormData(prev => ({ ...prev, userName: e.target.value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('');
-    setError('');
-
-    // Validate at least one platform is selected
-    const selectedPlatforms = Object.keys(formData.selectedPlatforms).filter(
-      p => formData.selectedPlatforms[p]
-    );
-
-    if (selectedPlatforms.length === 0) {
-      setError('❌ Please select at least one platform');
-      setLoading(false);
-      return;
-    }
-
-    // Validate all selected platforms have links
-    const missingLinks = selectedPlatforms.filter(p => !formData.platformLinks[p]?.trim());
-    if (missingLinks.length > 0) {
-      setError(`❌ Please provide links for all selected platforms`);
-      setLoading(false);
-      return;
-    }
-
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (loading || readingFile || !campaignId) return;
+    setLoading(true); setMessage(''); setError('');
+    const selected = Object.keys(formData.selectedPlatforms).filter(p => formData.selectedPlatforms[p]);
+    if (!selected.length) { setError('Please select at least one platform'); setLoading(false); return; }
+    if (selected.some(p => !formData.platformLinks[p]?.trim())) { setError('Please provide links for all selected platforms'); setLoading(false); return; }
     try {
-      // Build proof object with platform links
       const proofData = {};
-      selectedPlatforms.forEach(platform => {
-        proofData[platform] = formData.platformLinks[platform];
-      });
-
-      const data = await apiCallAuth(
-        `/api/campaigns/${campaignId}/submit`,
-        token,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            proofUrl: JSON.stringify(proofData),
-            proofDescription: `${selectedPlatforms.join(', ')} - ${formData.userName}`,
-            platforms: selectedPlatforms,
-            screenshot: formData.screenshot
-          })
-        }
-      );
-
+      selected.forEach(platform => { proofData[platform] = formData.platformLinks[platform]; });
+      const payload = { proofUrl: JSON.stringify(proofData), proofDescription: selected.join(', ') + ' - ' + formData.userName, platforms: selected, screenshot: formData.screenshot };
+      if (new Blob([JSON.stringify(payload)]).size > 95 * 1024) { setError('Your submission is too large. Use a screenshot URL or shorter post links.'); return; }
+      const data = await apiCallAuth('/api/campaigns/' + campaignId + '/submit', token, { method: 'POST', body: JSON.stringify(payload) });
       if (data.success) {
-        setMessage('✅ Submission successful! Our team will review and approve soon.');
-        setFormData({
-          campaignId,
-          userName: '',
-          selectedPlatforms: {
-            tiktok: false,
-            instagram: false,
-            twitter: false,
-            facebook: false,
-            youtube: false
-          },
-          platformLinks: {
-            tiktok: '',
-            instagram: '',
-            twitter: '',
-            facebook: '',
-            youtube: ''
-          },
-          screenshot: ''
-        });
-        fetchSubmissions();
+        setMessage('Submission successful! Our team will review your post soon.');
+        setFormData({ campaignId, userName: '', selectedPlatforms: { tiktok: false, instagram: false, twitter: false, facebook: false, youtube: false }, platformLinks: { tiktok: '', instagram: '', twitter: '', facebook: '', youtube: '' }, screenshot: '' });
+        setFileName(''); setUploadError(''); fetchSubmissions();
         setTimeout(() => setMessage(''), 3000);
-      } else {
-        setError(data.message || '❌ Failed to submit. Please try again.');
-      }
-    } catch (err) {
-      console.error('Submission error:', err);
-      setError('❌ Failed to submit. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      } else setError(data.message || 'Failed to submit. Please try again.');
+    } catch (err) { console.error('Submission error:', err); setError('Failed to submit. Please try again.'); }
+    finally { setLoading(false); }
   };
 
-  const getStatusBadge = (status) => {
-    const badgeClass = {
-      'pending': 'badge-pending',
-      'approved': 'badge-approved',
-      'rejected': 'badge-rejected'
-    }[status] || 'badge-pending';
-
-    return <span className={`badge ${badgeClass}`}>{status.toUpperCase()}</span>;
-  };
-
-  const selectedPlatforms = Object.keys(formData.selectedPlatforms).filter(
-    p => formData.selectedPlatforms[p]
-  );
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-4xl font-bold text-center mb-4">Submit Your Proof</h1>
-        <p className="text-center text-gray-600 mb-8">Share your social media posts for approval</p>
-
-        {message && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-            {message}
+  const selectedPlatforms = Object.keys(formData.selectedPlatforms).filter(p => formData.selectedPlatforms[p]);
+  const platforms = [{ key: 'tiktok', label: 'TikTok' }, { key: 'instagram', label: 'Instagram' }, { key: 'youtube', label: 'YouTube' }, { key: 'twitter', label: 'X (Twitter)' }, { key: 'facebook', label: 'Facebook' }];
+  const thumbnail = campaignImage || campaign?.brandAssets?.find(asset => asset.fileType?.startsWith('image/'))?.fileUrl;
+  return <section className="submission-page">
+    <Link to="/available-campaigns" className="submission-back">&larr; Back to campaigns</Link>
+    <PageHeader title="Submit your post" description="Share your content for review." />
+    {message && <Alert tone="success">{message}</Alert>}
+    {error && <Alert tone="error">{error}</Alert>}
+    <div className="submission-layout">
+      <Card as="form" onSubmit={handleSubmit} className="submission-form">
+        <div className="submission-campaign">
+          <div className="submission-campaign-image">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" onError={() => setImageFailed(true)} /> : <UiIcon name="campaign" />}</div>
+          <div><h2>{campaign?.title || campaign?.name || (campaignError ? 'Campaign' : 'Loading campaign...')}</h2>
+            {campaign ? <CampaignStatusBadge status={campaign.status || 'active'} /> : <p>{campaignError || 'Fetching campaign details'}</p>}
+            {campaignError && campaignId && <small>Campaign ID: {campaignId}</small>}
           </div>
-        )}
-
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-8 mb-12">
-          <div className="mb-6">
-            <label className="block text-gray-700 font-bold mb-2">Campaign ID</label>
-            <input
-              type="text"
-              value={formData.campaignId}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-100"
-              disabled
-            />
-          </div>
-
-          <div className="mb-6">
-            <label className="block text-gray-700 font-bold mb-2">Your Name *</label>
-            <input
-              type="text"
-              value={formData.userName}
-              onChange={handleUserNameChange}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
-              required
-            />
-          </div>
-
-          <div className="mb-8">
-            <label className="block text-gray-700 font-bold mb-3">Select Platforms *</label>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <div className="space-y-3">
-                {[
-                  { key: 'tiktok', label: 'TikTok' },
-                  { key: 'instagram', label: 'Instagram' },
-                  { key: 'twitter', label: 'X (Twitter)' },
-                  { key: 'facebook', label: 'Facebook' },
-                  { key: 'youtube', label: 'YouTube' }
-                ].map(platform => (
-                  <label key={platform.key} className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.selectedPlatforms[platform.key]}
-                      onChange={() => handlePlatformChange(platform.key)}
-                      className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">{platform.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {selectedPlatforms.length > 0 && (
-            <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Platform Links</h3>
-              <div className="space-y-4">
-                {selectedPlatforms.map(platform => {
-                  const platformLabels = {
-                    tiktok: 'TikTok',
-                    instagram: 'Instagram',
-                    twitter: 'X (Twitter)',
-                    facebook: 'Facebook',
-                    youtube: 'YouTube'
-                  };
-                  
-                  return (
-                    <div key={platform}>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        {platformLabels[platform]} Post Link *
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.platformLinks[platform]}
-                        onChange={(e) => handlePlatformLinkChange(platform, e.target.value)}
-                        placeholder={`https://${platform}.com/post/xxxxx`}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-green-500"
-                        required
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="mb-6">
-            <label className="block text-gray-700 font-bold mb-2">Screenshot URL (Optional)</label>
-            <input
-              type="url"
-              value={formData.screenshot}
-              onChange={handleScreenshotChange}
-              placeholder="https://example.com/screenshot.jpg"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-primary"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-6 rounded-lg font-bold text-white transition bg-green-600 hover:bg-green-700 disabled:opacity-50"
-          >
-            {loading ? '⌛ Submitting...' : '✓ Submit Proofs'}
-          </button>
-        </form>
-
-        {/* Submissions History */}
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold mb-6">Your Submissions</h2>
-
-          {submissionsLoading ? (
-            <p className="text-gray-600">Loading submissions...</p>
-          ) : submissions.length === 0 ? (
-            <p className="text-gray-600">No submissions yet. Submit your first proof above!</p>
-          ) : (
-            <div className="space-y-4">
-              {submissions.map((submission) => (
-                <div key={submission.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-800">{submission.campaignTitle || submission.campaignId}</h3>
-                      <p className="text-sm text-gray-600">{submission.proofDescription}</p>
-                    </div>
-                    {getStatusBadge(submission.status)}
-                  </div>
-
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <p><strong>Submitted:</strong> {new Date(submission.createdAt).toLocaleDateString()}</p>
-                    {submission.status === 'approved' && submission.approvalAmount > 0 && (
-                      <p><strong className="text-green-600">Approved Amount:</strong> ₦{submission.approvalAmount}</p>
-                    )}
-                  </div>
-
-                  {submission.proofUrl && (
-                    <a
-                      href={submission.proofUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-green-600 hover:text-green-800 text-sm mt-3 inline-block"
-                    >
-                      View Submission →
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      </div>
+        <FormField label="Your name" required><Input value={formData.userName} onChange={handleUserNameChange} autoComplete="name" /></FormField>
+        <fieldset className="submission-platforms"><legend>Where did you post?</legend><p>Select all platforms you posted on.</p><div className="submission-platform-options">
+          {platforms.map(platform => <label key={platform.key} className={formData.selectedPlatforms[platform.key] ? 'is-selected' : ''}>
+            <input type="checkbox" checked={formData.selectedPlatforms[platform.key]} onChange={() => handlePlatformChange(platform.key)} />
+            <PlatformBadge platform={platform.key} />
+          </label>)}
+        </div></fieldset>
+        {selectedPlatforms.map(platform => <FormField key={platform} label={platforms.find(item => item.key === platform).label + ' post link'} required>
+          <Input type="url" value={formData.platformLinks[platform]} onChange={event => handlePlatformLinkChange(platform, event.target.value)} placeholder={'Paste your ' + platforms.find(item => item.key === platform).label + ' link here'} />
+        </FormField>)}
+        <div className="submission-screenshot"><span className="sf-label">Proof screenshot <span className="submission-muted">(optional)</span></span>
+          <label className="submission-upload" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!readingFile && !loading) handleScreenshotFile(event.dataTransfer.files[0]); }}>
+            <input aria-label="Upload screenshot" type="file" accept="image/png,image/jpeg" disabled={readingFile || loading} onChange={event => { handleScreenshotFile(event.target.files[0]); event.target.value = ''; }} />
+            {fileName && formData.screenshot.startsWith('data:image/') ? <img src={formData.screenshot} alt="Selected proof screenshot" /> : <UiIcon name="campaign" />}
+            <strong>{readingFile ? 'Reading screenshot...' : fileName || 'Upload screenshot'}</strong><span>Drag and drop or click to upload</span><small>PNG or JPG, up to 60 KB. Use a URL for larger images.</small>
+          </label>
+          {uploadError && <p role="alert" className="submission-upload-error">{uploadError}</p>}
+          {fileName && <Button size="sm" variant="ghost" onClick={() => { setFileName(''); setFormData(prev => ({ ...prev, screenshot: '' })); }}>Remove screenshot</Button>}
+          {!fileName && <FormField label="Or paste a screenshot URL"><Input type="url" value={formData.screenshot} onChange={handleScreenshotChange} placeholder="https://example.com/screenshot.jpg" /></FormField>}
+        </div>
+        <Button type="submit" fullWidth disabled={loading || readingFile || !campaignId}>{loading ? 'Submitting...' : 'Submit for Review'}</Button>
+      </Card>
+      <aside className="submission-tips"><h2>Tips for approval</h2><ul>
+        {['Show the full post clearly', 'Make sure your post is public', 'Include the brand clearly', 'Follow the campaign key message'].map(tip => <li key={tip}><span aria-hidden="true"><UiIcon name="check" /></span>{tip}</li>)}
+      </ul>{campaign?.keyMessage && <div className="submission-key-message"><h3>Key message</h3><p>{campaign.keyMessage}</p></div>}
+        <h3>Before you submit</h3><p>Check that your links open the correct posts and your screenshot is easy to read.</p>
+      </aside>
     </div>
-  );
+    <Card className="submission-history"><h2>Your submissions</h2>
+      {submissionsLoading ? <p role="status">Loading submissions...</p> : submissions.length === 0 ? <p>No submissions yet. Your posts will appear here after you submit.</p> : submissions.map(submission => {
+        let links = [];
+        try { const parsed = JSON.parse(submission.proofUrl); if (parsed && typeof parsed === 'object') links = Object.entries(parsed); } catch { if (submission.proofUrl) links = [['Post', submission.proofUrl]]; }
+        return <article key={submission.id}><div className="submission-history-heading"><h3>{submission.campaignTitle || submission.campaignId}</h3><CampaignStatusBadge status={submission.status} /></div>
+          <p>{submission.proofDescription}</p><p>Submitted: {new Date(submission.createdAt).toLocaleDateString()}</p>
+          {submission.status === 'approved' && submission.approvalAmount > 0 && <p className="submission-approved">Approved amount: &#8358;{submission.approvalAmount}</p>}
+          <div className="submission-history-links">{links.filter(([, url]) => typeof url === 'string' && /^https?:\/\//i.test(url)).map(([platform, url]) => <a key={platform} href={url} target="_blank" rel="noopener noreferrer">View {platform} post &rarr;</a>)}</div>
+        </article>;
+      })}
+    </Card>
+  </section>;
 }

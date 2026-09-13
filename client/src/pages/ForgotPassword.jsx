@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './Auth.css';
+import { Alert, AuthLayout, Button, FormField, Input } from '../components/ui';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -49,35 +49,16 @@ export default function ForgotPassword() {
     setLoading(false);
   };
 
-  return (
-    <div className="auth-container">
-      <form onSubmit={handleSubmit} className="auth-form">
-        <h2>Forgot Password</h2>
-
-        {error && <div className="error">{error}</div>}
-
-        {submitted ? (
-          <p>{message}</p>
-        ) : (
-          <>
-            <p>Enter your email and we'll send you a link to reset your password.</p>
-
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-
-            <button type="submit" disabled={loading}>
-              {loading ? 'Sending...' : 'Send Reset Link'}
-            </button>
-          </>
-        )}
-
-        <p><a href="/login">Back to login</a></p>
-      </form>
-    </div>
-  );
+  return <AuthLayout>
+    <h1>Forgot Password</h1>
+    {error && <Alert tone="error">{error}</Alert>}
+    <form onSubmit={handleSubmit} className="sf-signup-form">
+      {submitted ? <Alert tone="success">{message}</Alert> : <>
+        <p className="sf-signup-intro">Enter your email and we'll send you a link to reset your password.</p>
+        <fieldset><FormField label="Email" required><Input type="email" autoComplete="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} /></FormField></fieldset>
+        <Button type="submit" fullWidth disabled={loading}>{loading ? 'Sending...' : 'Send Reset Link'}</Button>
+      </>}
+      <p className="sf-signup-login"><a href="/login">Back to login</a></p>
+    </form>
+  </AuthLayout>;
 }

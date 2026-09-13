@@ -1,3 +1,5 @@
+import FileTypeIcon from './ui/FileTypeIcon';
+import UiIcon from './ui/UiIcon';
 import React, { useState, useEffect } from 'react';
 import { apiCallAuth } from '../utils/api';
 
@@ -64,29 +66,16 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
     }
   };
 
-  const getFileIcon = (fileType) => {
-    switch (fileType) {
-      case 'image':
-        return '🖼️';
-      case 'video':
-        return '🎬';
-      case 'pdf':
-        return '📄';
-      case 'audio':
-        return '🎵';
-      default:
-        return '📎';
-    }
-  };
+  const getFileIcon = fileType => <FileTypeIcon type={fileType} />;
 
   if (!isSubscribed || campaignStatus !== 'active') {
     return (
       <div className="my-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets</h3>
-        <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-8 text-center">
-          <div className="text-4xl mb-4">🔒</div>
-          <p className="text-gray-700 font-semibold mb-2">Subscribe to access brand assets</p>
-          <p className="text-gray-600 text-sm">
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets</h3>
+        <div className="bg-canvas border-2 border-line rounded-card p-8 text-center">
+          <div className="text-4xl mb-4"><UiIcon name="lock" /></div>
+          <p className="text-ink font-semibold mb-2">Subscribe to access brand assets</p>
+          <p className="text-muted text-sm">
             Join this campaign to see and download assets that help you create better content
           </p>
         </div>
@@ -97,11 +86,11 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
   if (campaignStatus !== 'active') {
     return (
       <div className="my-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets</h3>
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-8 text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <p className="text-gray-700 font-semibold mb-2">Campaign has ended</p>
-          <p className="text-gray-600 text-sm">
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets</h3>
+        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-card p-8 text-center">
+          <div className="text-4xl mb-4"><UiIcon name="clock" /></div>
+          <p className="text-ink font-semibold mb-2">Campaign has ended</p>
+          <p className="text-muted text-sm">
             Assets are no longer available for this campaign
           </p>
         </div>
@@ -112,9 +101,9 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
   if (loading) {
     return (
       <div className="my-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets</h3>
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets</h3>
         <div className="flex justify-center py-8">
-          <p className="text-gray-600">Loading assets...</p>
+          <p className="text-muted">Loading assets...</p>
         </div>
       </div>
     );
@@ -123,8 +112,8 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
   if (error) {
     return (
       <div className="my-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets</h3>
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets</h3>
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-card">
           {error}
         </div>
       </div>
@@ -134,11 +123,11 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
   if (!assets || assets.length === 0) {
     return (
       <div className="my-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets</h3>
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 text-center">
-          <div className="text-4xl mb-4">✨</div>
-          <p className="text-gray-700 font-semibold mb-2">No assets provided for this campaign</p>
-          <p className="text-gray-600 text-sm">
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets</h3>
+        <div className="bg-primary-soft border-2 border-line rounded-card p-8 text-center">
+          <div className="text-4xl mb-4"><UiIcon name="star" /></div>
+          <p className="text-ink font-semibold mb-2">No assets provided for this campaign</p>
+          <p className="text-muted text-sm">
             Create your own branded content following the brand guidelines
           </p>
         </div>
@@ -150,10 +139,10 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
     <div className="my-8">
       {/* Header with tip */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Brand Assets — Use these in your content</h3>
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-          <p className="text-sm text-gray-700">
-            💡 <strong>Tip:</strong> Use these assets in your posts to meet brand guidelines and increase your approval chances
+        <h3 className="text-xl font-bold text-ink mb-4">Brand Assets — Use these in your content</h3>
+        <div className="bg-primary-soft border-l-4 border-line p-4 rounded">
+          <p className="text-sm text-ink">
+            <UiIcon name="info" /> <strong>Tip:</strong> Use these assets in your posts to meet brand guidelines and increase your approval chances
           </p>
         </div>
       </div>
@@ -163,10 +152,10 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
         {assets.map((asset) => (
           <div
             key={asset.id}
-            className="border rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition"
+            className="border rounded-card overflow-hidden bg-white shadow-sm hover:shadow-card transition"
           >
             {/* Preview Area */}
-            <div className="relative bg-gray-100 aspect-square flex items-center justify-center group cursor-pointer">
+            <div className="relative bg-surface-muted aspect-square flex items-center justify-center group cursor-pointer">
               <div
                 className="text-4xl transition group-hover:scale-125"
                 onClick={() => setPreviewModal(asset)}
@@ -180,18 +169,18 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
               )}
               <button
                 onClick={() => setPreviewModal(asset)}
-                className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-40 transition flex items-center justify-center opacity-0 group-hover:opacity-100"
+                className="min-h-[44px] absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-40 transition flex items-center justify-center opacity-100"
               >
-                <span className="text-white text-3xl">👁</span>
+                <span className="text-white text-3xl"><UiIcon name="eye" /></span>
               </button>
             </div>
 
             {/* Asset Info */}
             <div className="p-3">
-              <p className="text-xs font-semibold text-gray-700 truncate mb-1">
+              <p className="text-xs font-semibold text-ink truncate mb-1">
                 {asset.file_name}
               </p>
-              <p className="text-xs text-gray-600 mb-3">
+              <p className="text-xs text-muted mb-3">
                 {asset.file_size} KB
               </p>
 
@@ -199,12 +188,12 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
               <button
                 onClick={() => handleDownload(asset)}
                 disabled={downloading[asset.id]}
-                className="w-full bg-blue-600 text-white text-xs font-semibold py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                className="min-h-[44px] w-full bg-primary text-white text-xs font-semibold py-2 rounded hover:bg-primary-hover transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-1"
               >
                 {downloading[asset.id] ? (
-                  <>⏳ Downloading...</>
+                  <><UiIcon name="clock" /> Downloading...</>
                 ) : (
-                  <>⬇️ Download</>
+                  <><UiIcon name="download" /> Download</>
                 )}
               </button>
             </div>
@@ -219,22 +208,22 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
           onClick={() => setPreviewModal(null)}
         >
           <div
-            className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto"
+            className="bg-white rounded-card max-w-2xl w-full max-h-[80vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
-              <h4 className="font-bold text-gray-800 truncate">{previewModal.file_name}</h4>
+              <h4 className="font-bold text-ink truncate">{previewModal.file_name}</h4>
               <button
                 onClick={() => setPreviewModal(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="min-h-[44px] text-muted hover:text-ink text-2xl"
               >
-                ✕
+                <UiIcon name="close" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="p-6 flex justify-center items-center min-h-[300px] bg-gray-50">
+            <div className="p-6 flex justify-center items-center min-h-[300px] bg-canvas">
               {previewModal.file_type === 'image' ? (
                 <img
                   src={previewModal.url}
@@ -257,25 +246,25 @@ export default function BrandAssets({ campaignId, token, campaignStatus, isSubsc
                 </audio>
               ) : (
                 <div className="text-center">
-                  <div className="text-6xl mb-4">📄</div>
-                  <p className="text-gray-600 mb-4">{previewModal.file_name}</p>
-                  <p className="text-sm text-gray-500">Click download to open PDF</p>
+                  <div className="text-6xl mb-4"><UiIcon name="file" /></div>
+                  <p className="text-muted mb-4">{previewModal.file_name}</p>
+                  <p className="text-sm text-muted">Click download to open PDF</p>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="bg-gray-50 border-t p-4 flex gap-3">
+            <div className="bg-canvas border-t p-4 flex gap-3">
               <button
                 onClick={() => handleDownload(previewModal)}
                 disabled={downloading[previewModal.id]}
-                className="flex-1 bg-green-600 text-white font-semibold py-2 rounded hover:bg-green-700 transition disabled:bg-gray-400"
+                className="min-h-[44px] flex-1 bg-primary text-white font-semibold py-2 rounded hover:bg-primary-hover transition disabled:bg-gray-400"
               >
-                {downloading[previewModal.id] ? 'Downloading...' : '⬇ Download'}
+                {downloading[previewModal.id] ? 'Downloading...' : <><UiIcon name="download" /> Download</>}
               </button>
               <button
                 onClick={() => setPreviewModal(null)}
-                className="flex-1 bg-gray-300 text-gray-800 font-semibold py-2 rounded hover:bg-gray-400 transition"
+                className="min-h-[44px] flex-1 bg-gray-300 text-ink font-semibold py-2 rounded hover:bg-gray-400 transition"
               >
                 Close
               </button>

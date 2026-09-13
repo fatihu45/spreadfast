@@ -1,7 +1,9 @@
+import UiIcon from '../components/ui/UiIcon';
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { apiCallAuth } from '../utils/api';
 import './Pages.css';
+import CreatorWallet from '../components/CreatorWallet';
 
 export default function Wallet() {
   const { token, user, updateUser } = useContext(AuthContext);
@@ -13,6 +15,7 @@ export default function Wallet() {
   const [success, setSuccess] = useState('');
   const [showBankForm, setShowBankForm] = useState(false);
   const [pendingWithdrawals, setPendingWithdrawals] = useState([]);
+  const [withdrawalsAvailable, setWithdrawalsAvailable] = useState(false);
   const [bankFormData, setBankFormData] = useState({
     bankName: '',
     accountNumber: '',
@@ -33,6 +36,7 @@ export default function Wallet() {
       
       if (withdrawalData.success) {
         setPendingWithdrawals(withdrawalData.withdrawals);
+        setWithdrawalsAvailable(true);
       }
     } catch (error) {
       setError('Failed to load wallet');
@@ -74,7 +78,7 @@ export default function Wallet() {
       );
 
       if (data.success) {
-        setSuccess('✓ Bank details saved successfully!');
+        setSuccess("Bank details saved successfully!");
         setBankDetails(data.user.bankDetails);
         
         // Update AuthContext with new user data including bank details
@@ -144,7 +148,7 @@ export default function Wallet() {
       );
 
       if (data.success) {
-        setSuccess('✓ Withdrawal request submitted successfully! Your request will be reviewed shortly.');
+        setSuccess("Withdrawal request submitted successfully! Your request will be reviewed shortly.");
         setWithdrawalAmount('');
         
         // Immediately update wallet balance
@@ -168,13 +172,22 @@ export default function Wallet() {
     }
   };
 
+  if (user?.role === 'promoter') return <CreatorWallet
+    token={token} wallet={wallet} bankDetails={bankDetails} loading={loading}
+    error={error} success={success} pendingWithdrawals={pendingWithdrawals} withdrawalsAvailable={withdrawalsAvailable}
+    bankFormData={bankFormData} showBankForm={showBankForm} withdrawalAmount={withdrawalAmount}
+    onBankChange={handleBankDetailsChange} onSaveBank={handleSaveBankDetails} onWithdraw={handleWithdrawal}
+    onAmountChange={event => setWithdrawalAmount(event.target.value)}
+    onEditBank={() => { if (bankDetails) setBankFormData(bankDetails); setShowBankForm(true); }}
+    onCancelBank={() => { setShowBankForm(false); setBankFormData({ bankName: '', accountNumber: '', accountName: '' }); }} />;
+
   if (loading) return <div className="loading">Loading wallet...</div>;
 
   const pendingTotal = pendingWithdrawals.reduce((sum, w) => sum + w.amount, 0);
 
   return (
     <div className="wallet-container">
-      <h1>💰 My Wallet</h1>
+      <h1><UiIcon name="wallet" /> My Wallet</h1>
 
       <div className="wallet-balance">
         <div className="balance-item">
@@ -183,14 +196,14 @@ export default function Wallet() {
         </div>
         {pendingTotal > 0 && (
           <div className="balance-item pending">
-            <h3>⏳ Pending Withdrawals</h3>
+            <h3><UiIcon name="clock" /> Pending Withdrawals</h3>
             <h2>₦{pendingTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         )}
       </div>
 
       <div className="wallet-section">
-        <h3>💳 Bank Details</h3>
+        <h3><UiIcon name="wallet" /> Bank Details</h3>
         {error && <div className="error">{error}</div>}
         {success && <div className="success">{success}</div>}
 
@@ -282,30 +295,30 @@ export default function Wallet() {
         {success && <div className="success">{success}</div>}
 
         <div style={{ marginBottom: '20px' }}>
-          <div style={{ marginBottom: '12px', padding: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', fontSize: '14px', color: '#92400e' }}>
-            <strong>ℹ️ A 7.5% withdrawal fee applies to all withdrawals.</strong>
+          <div style={{ marginBottom: '12px', padding: '12px', background: 'rgb(var(--sf-warning-soft))', border: '1px solid rgb(var(--sf-border))', borderRadius: '6px', fontSize: '14px', color: 'rgb(var(--sf-warning))' }}>
+            <strong><UiIcon name="info" /> A 7.5% withdrawal fee applies to all withdrawals.</strong>
           </div>
-          <div style={{ padding: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', fontSize: '14px', color: '#92400e' }}>
-            <strong>ℹ️ Minimum withdrawal amount is ₦1,000.</strong>
+          <div style={{ padding: '12px', background: 'rgb(var(--sf-warning-soft))', border: '1px solid rgb(var(--sf-border))', borderRadius: '6px', fontSize: '14px', color: 'rgb(var(--sf-warning))' }}>
+            <strong><UiIcon name="info" /> Minimum withdrawal amount is ₦1,000.</strong>
           </div>
         </div>
 
         {!bankDetails ? (
           <div className="no-bank-details">
-            ⚠️ You must add bank details before requesting a withdrawal.
+            <UiIcon name="alert" /> You must add bank details before requesting a withdrawal.
           </div>
         ) : (
           <form onSubmit={handleWithdrawal}>
             <div className="form-group">
               <label>Available Balance</label>
               <div style={{
-                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
-                border: '2px solid #667eea',
+                background: 'rgb(var(--sf-primary-soft))',
+                border: '1px solid rgb(var(--sf-border))',
                 borderRadius: '6px',
                 padding: '12px',
                 fontSize: '18px',
                 fontWeight: 'bold',
-                color: '#667eea',
+                color: 'rgb(var(--sf-primary))',
                 marginBottom: '15px'
               }}>
                 ₦{(wallet?.balance || 0).toLocaleString()}
@@ -335,7 +348,7 @@ export default function Wallet() {
 
       {pendingWithdrawals.length > 0 && (
         <div className="wallet-section">
-          <h3>⏳ Pending Withdrawal Requests</h3>
+          <h3><UiIcon name="clock" /> Pending Withdrawal Requests</h3>
           <div className="withdrawals-list">
             {pendingWithdrawals.map(withdrawal => (
               <div key={withdrawal.id} className="withdrawal-item">

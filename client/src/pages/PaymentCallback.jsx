@@ -1,3 +1,4 @@
+import { Alert, AuthLayout } from '../components/ui';
 import React, { useEffect, useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -88,23 +89,10 @@ export default function PaymentCallback() {
     }
   };
 
-  return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      {status === 'verifying' && <p>Verifying payment and creating campaign...</p>}
-      {status === 'success' && (
-        <>
-          <h2 style={{ color: 'green' }}>Payment Successful! ✓</h2>
-          <p>Your campaign has been created successfully.</p>
-          <p>Redirecting to dashboard...</p>
-        </>
-      )}
-      {status === 'failed' && (
-        <>
-          <h2 style={{ color: 'red' }}>Process Failed ✗</h2>
-          <p>{error}</p>
-          <a href="/company">← Back to Dashboard</a>
-        </>
-      )}
-    </div>
-  );
+  return <AuthLayout className="sf-payment-status">
+    <h1>Campaign payment</h1>
+    {status === 'verifying' && <Alert>Verifying payment and creating campaign...</Alert>}
+    {status === 'success' && <><Alert tone="success">Payment Successful!</Alert><p>Your campaign has been created successfully.</p><p>Redirecting to dashboard...</p></>}
+    {status === 'failed' && <><Alert tone="error"><strong>Process Failed</strong><p>{error}</p></Alert><a href="/company" className="sf-control sf-button sf-button--secondary">Back to Dashboard</a></>}
+  </AuthLayout>;
 }

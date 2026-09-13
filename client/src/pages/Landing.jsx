@@ -1,3 +1,4 @@
+import UiIcon from '../components/ui/UiIcon';
 import React, { useContext, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
@@ -110,13 +111,13 @@ export default function LandingPage() {
           <Container className="landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-eyebrow"><span aria-hidden="true" />People-powered growth</p>
-              <h1 id="landing-title">Get your business<br className="landing-title-break" /> in front of real people.</h1>
+              <h1 id="landing-title">Get more customers.<br className="landing-title-break" /> Grow your Business.</h1>
               <p className="landing-hero-description">
-                Connect with verified creators who bring your brand to life through authentic advertising content.
+                Connect with verified creators who bring your brand to life through authentic advertising.
                 Simple, human, effective.
               </p>
               <div className="landing-hero-actions">
-                <Button size="lg" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true">↗</span></Button>
+                <Button size="lg" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true"><UiIcon name="external" /></span></Button>
                 <Button size="lg" variant="secondary" onClick={handleJoinAsPromoter}>Earn with SpreadFast</Button>
               </div>
               <div className="landing-trust" aria-label="Why SpreadFast">
@@ -169,14 +170,14 @@ export default function LandingPage() {
                 <p className="landing-eyebrow">For Businesses</p>
                 <h3>Put your brand out there.</h3>
                 <p className="landing-price">₦20,000 <span>per promoter</span></p>
-                <ul><li>5% platform fee on campaign creation</li><li>Pay only for verified engagement</li></ul>
+                <ul><li>Work with verified promoters</li><li>Launch campaigns in minutes</li><li>Reach more customers with authentic content</li></ul>
                 <Button onClick={handleCreateCampaign}>Create a Campaign</Button>
               </article>
               <article className="landing-price-card">
                 <p className="landing-eyebrow">For Creators</p>
                 <h3>Make content. Make an impact.</h3>
                 <p>Earn a share of every campaign pool.</p>
-                <ul><li>5% fee on withdrawals</li><li>Minimum withdrawal ₦1,000</li></ul>
+                <ul><li>Work with growing brands</li><li>Join campaigns that fit your style</li><li>Turn your content into income</li></ul>
                 <Button variant="secondary" onClick={handleJoinAsPromoter}>Join as Promoter</Button>
               </article>
             </div>
@@ -188,7 +189,7 @@ export default function LandingPage() {
             <div className="landing-section-heading">
               <p className="landing-eyebrow">A few things to know</p>
               <h2 id="faq-title">Good questions.<br />Clear answers.</h2>
-              <a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="landing-text-link">Contact on WhatsApp <span aria-hidden="true">↗</span></a>
+              <a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer" className="landing-text-link">Contact on WhatsApp <span aria-hidden="true"><UiIcon name="external" /></span></a>
             </div>
             <div className="landing-faq-list">
               {faqs.map((item, idx) => (
@@ -211,7 +212,7 @@ export default function LandingPage() {
             <div><h2>Better together.</h2><p>Meet the people creating with SpreadFast.</p></div>
             <a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
               target="_blank" rel="noopener noreferrer" className="sf-control sf-button sf-button--secondary">
-              Join our WhatsApp creator community <span aria-hidden="true">↗</span>
+              Join our WhatsApp creator community <span aria-hidden="true"><UiIcon name="external" /></span>
             </a>
           </Container>
         </section>
@@ -220,7 +221,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <Container>
           <div className="landing-footer-grid">
-            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>Get real customers through real people.</p></div>
+            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>Get more customers. grow your business.</p></div>
             <div><h2>For Companies</h2><ul>
               <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
               <li><a href="#">View Promoters</a></li>

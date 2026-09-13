@@ -67,7 +67,7 @@ test('keeps header destinations, existing support links and working section anch
     expect(document.getElementById(href.slice(1))).not.toBeNull();
   });
   expect(host.querySelectorAll('h1')).toHaveLength(1);
-  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('Get your business in front of real people.');
+  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('Get more customers. Grow your Business.');
 });
 
 test('mobile navigation opens and closes by Escape with focus restored', () => {

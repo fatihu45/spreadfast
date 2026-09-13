@@ -1,3 +1,4 @@
+import UiIcon from './ui/UiIcon';
 import React, { useState, useEffect } from 'react';
 import './PolicyModal.css';
 
@@ -35,8 +36,8 @@ export default function PolicyModal({ isOpen, policyType, onClose }) {
           <h2>
             {policyType === 'terms' ? 'Terms & Conditions' : 'Privacy Policy'}
           </h2>
-          <button className="policy-modal-close" onClick={onClose}>
-            ✕
+          <button type="button" aria-label="Close policy" className="policy-modal-close" onClick={onClose}>
+            <UiIcon name="close" />
           </button>
         </div>
         
@@ -49,7 +50,7 @@ export default function PolicyModal({ isOpen, policyType, onClose }) {
         </div>
         
         <div className="policy-modal-footer">
-          <button className="policy-modal-button" onClick={onClose}>
+          <button type="button" className="policy-modal-button" onClick={onClose}>
             Close
           </button>
         </div>

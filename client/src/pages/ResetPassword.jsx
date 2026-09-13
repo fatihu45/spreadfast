@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './Auth.css';
+import { Alert, AuthLayout, Button, FormField, Input } from '../components/ui';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -68,44 +68,18 @@ export default function ResetPassword() {
     setLoading(false);
   };
 
-  return (
-    <div className="auth-container">
-      <form onSubmit={handleSubmit} className="auth-form">
-        <h2>Reset Password</h2>
-
-        {error && <div className="error">{error}</div>}
-
-        {success ? (
-          <>
-            <p>Your password has been reset successfully.</p>
-            <p><a href="/login">Go to login</a></p>
-          </>
-        ) : (
-          <>
-            <input
-              type="password"
-              placeholder="New password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
-
-            <button type="submit" disabled={loading || !token}>
-              {loading ? 'Resetting...' : 'Reset Password'}
-            </button>
-
-            <p><a href="/forgot-password">Request a new link</a></p>
-          </>
-        )}
-      </form>
-    </div>
-  );
+  return <AuthLayout>
+    <h1>Reset Password</h1>
+    {error && <Alert tone="error">{error}</Alert>}
+    <form onSubmit={handleSubmit} className="sf-signup-form">
+      {success ? <><Alert tone="success">Your password has been reset successfully.</Alert><p className="sf-signup-login"><a href="/login">Go to login</a></p></> : <>
+        <fieldset>
+          <FormField label="New password" required><Input type="password" autoComplete="new-password" placeholder="New password" value={newPassword} onChange={e => setNewPassword(e.target.value)} /></FormField>
+          <FormField label="Confirm new password" required><Input type="password" autoComplete="new-password" placeholder="Confirm new password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} /></FormField>
+        </fieldset>
+        <Button type="submit" fullWidth disabled={loading || !token}>{loading ? 'Resetting...' : 'Reset Password'}</Button>
+        <p className="sf-signup-login"><a href="/forgot-password">Request a new link</a></p>
+      </>}
+    </form>
+  </AuthLayout>;
 }

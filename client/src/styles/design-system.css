@@ -34,7 +34,10 @@
   --sf-space-24: 6rem;
   --sf-gutter: var(--sf-space-4);
   --sf-section-space: var(--sf-space-12);
-  --sf-radius-sm: 0.375rem;
+  --sf-radius-sm: 0.5rem;
+  --sf-radius-inner: 0.75rem;
+  --sf-control-height: 2.75rem;
+  --sf-dashboard-title-size: clamp(1.5rem, 2.2vw, 1.875rem);
   --sf-radius-control: 0.625rem;
   --sf-radius-card: 1rem;
   --sf-radius-panel: 1.5rem;
@@ -65,7 +68,7 @@ body { font-family: var(--sf-font-sans); background-color: rgb(var(--sf-canvas))
   justify-content: center;
   gap: var(--sf-space-2);
   width: auto;
-  min-height: 2.75rem;
+  min-height: var(--sf-control-height);
   margin: 0;
   padding: 0.625rem 1.25rem;
   border: 1px solid transparent;
@@ -106,7 +109,7 @@ form.sf-form { display: block; width: 100%; max-width: none; margin: 0; padding:
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 2.75rem;
+  min-height: var(--sf-control-height);
   margin: 0;
   padding: 0.625rem 0.875rem;
   border: 1px solid rgb(var(--sf-control-border));

@@ -1,0 +1,52 @@
+.creator-dashboard { width: 100%; max-width: var(--sf-content-width); margin-inline: auto; }
+.creator-greeting-wave { display: inline-block; margin-left: 4px; font-size: 0.85em; }
+.creator-dashboard .sf-wallet-balance-card { display: flex; flex-direction: row; align-items: center; justify-content: space-between; min-height: 142px; padding: 26px 28px; gap: 16px; background: linear-gradient(115deg, rgb(var(--sf-primary-hover)), rgb(var(--sf-primary))); color: white; border-color: transparent; }
+.creator-dashboard .sf-wallet-balance-card > div:first-child { min-width: 0; }
+.creator-dashboard .sf-wallet-balance-card__value { margin-bottom: 0; font-size: clamp(1.5rem, 3vw, 2.25rem); line-height: 1.2; }
+.creator-dashboard .sf-control.sf-button.creator-withdraw { border-radius: var(--sf-radius-pill); min-height: var(--sf-control-height); padding: 9px 22px; font-size: 0.75rem; color: rgb(var(--sf-primary-hover)); background: white; }
+.creator-dashboard-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.creator-dashboard .sf-stat-card { min-width: 0; padding: 22px; }
+.creator-dashboard .sf-stat-card__label { gap: 7px; font-size: 0.8125rem; }
+.creator-dashboard .sf-stat-card__label svg { width: 16px; height: 16px; }
+.creator-dashboard .sf-stat-card__value { font-size: 1.75rem; line-height: 1.2; margin-top: 16px; }
+.creator-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 32px 0 12px; }
+.creator-section-heading h2 { font-size: 1rem; font-weight: 650; letter-spacing: -0.02em; }
+.creator-dashboard .creator-section-heading .sf-button, .creator-text-link { font-size: 0.75rem; }
+.creator-text-link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: rgb(var(--sf-primary-hover)); font-weight: 600; text-decoration: none; }
+.creator-text-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.creator-text-link:focus-visible, .creator-dashboard summary:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 4px; }
+.creator-campaign-list { display: grid; gap: 12px; }
+.creator-dashboard .sf-campaign-card { padding: 20px; }
+.creator-dashboard .sf-campaign-card__heading .sf-heading { font-size: 0.875rem; line-height: 1.5; }
+.creator-dashboard .sf-campaign-card__budget { font-size: 0.875rem; }
+.creator-dashboard .sf-platform-badge { font-size: 0.625rem; padding: 2px 6px; background: transparent; border: 0; }
+.creator-dashboard .sf-platform-badge svg { width: 12px; height: 12px; }
+.creator-campaign-brief { margin-top: 8px; }
+.creator-campaign-brief summary { cursor: pointer; color: rgb(var(--sf-primary-hover)); font-size: 0.75rem; }
+.creator-campaign-brief p { margin-top: 12px; white-space: pre-wrap; }
+.creator-campaign-assets { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.creator-campaign-assets img, .creator-campaign-assets video { display: block; width: 100px; max-width: 100%; border-radius: var(--sf-radius-sm); }
+.creator-campaign-assets img { height: 100px; object-fit: cover; }
+.creator-campaign-assets a { text-decoration: underline; }
+.creator-list-message { padding: 32px; text-align: center; color: rgb(var(--sf-muted)); }
+.creator-earning-guide { margin-top: 24px; padding: 18px 20px; border: 1px solid rgb(var(--sf-border)); border-radius: var(--sf-radius-card); background: rgb(var(--sf-surface)); }
+.creator-earning-guide summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; color: rgb(var(--sf-muted)); }
+.creator-earning-guide p { max-width: 680px; margin-top: 16px; font-size: 0.875rem; color: rgb(var(--sf-muted)); }
+.creator-earning-guide > div { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 12px; }
+@media (min-width: 640px) {
+  .creator-dashboard .sf-campaign-card__layout { grid-template-columns: 3.5rem minmax(0, 1fr) auto; gap: 16px; }
+  .creator-dashboard .sf-campaign-card__image { width: 3.5rem; height: 3.5rem; }
+  .creator-dashboard .sf-campaign-card__aside { grid-column: auto; flex-direction: column; align-items: flex-end; gap: 4px; }
+}
+@media (max-width: 639px) {
+  .creator-dashboard .sf-wallet-balance-card { min-height: 128px; padding: 22px 18px; }
+  .creator-dashboard .sf-control.sf-button.creator-withdraw { padding-inline: 14px; }
+  .creator-dashboard-stats { gap: 10px; margin-top: 14px; }
+  .creator-dashboard .sf-stat-card { padding: 14px 10px; }
+  .creator-dashboard .sf-stat-card__label { flex-direction: column; align-items: flex-start; font-size: 0.6875rem; }
+  .creator-dashboard .sf-stat-card__value { font-size: 1.5rem; margin-top: 12px; }
+  .creator-dashboard .sf-campaign-card { padding: 16px; }
+  .creator-dashboard .sf-campaign-card__layout { grid-template-columns: 3rem minmax(0, 1fr); gap: 12px; }
+  .creator-dashboard .sf-campaign-card__image { width: 3rem; height: 3rem; }
+  .creator-dashboard .sf-campaign-card__aside { padding-top: 10px; border-top: 1px solid rgb(var(--sf-border)); }
+}

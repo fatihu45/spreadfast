@@ -1,10 +1,14 @@
+import Alert from '../components/ui/Alert';
+import AuthLayout from '../components/ui/AuthLayout';
 /* eslint-disable */
 
-import React, { useState, useContext } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState, useContext, useEffect, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import PolicyModal from '../components/PolicyModal';
-import './Auth.css';
+import { Button, FormField, Input } from '../components/ui';
+import UiIcon from '../components/ui/UiIcon';
+import './Register.css';
 
 export default function Register() {
   const { register } = useContext(AuthContext);
@@ -12,7 +16,7 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState(searchParams.get('role') || 'promoter');
+  const [role, setRole] = useState(searchParams.get('role') === 'company' ? 'company' : 'promoter');
   const [socialMedia, setSocialMedia] = useState({
     tiktok: '',
     instagram: '',
@@ -24,6 +28,10 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [openPolicy, setOpenPolicy] = useState(null);
+  const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const headingRef = useRef(null);
+  useEffect(() => { if (step === 2) headingRef.current?.focus(); }, [step]);
 
 
   const handleSocialMediaChange = (platform, value) => {
@@ -68,148 +76,49 @@ export default function Register() {
     setLoading(false);
   };
 
-  return (
-    <div className="auth-container">
-      <form onSubmit={handleSubmit} className="auth-form">
-        <h2>Register for SpreadFast</h2>
-        <p className="text-center text-gray-600 mb-6">
-          {role === 'company' ? 'Create an account as a Company' : 'Join as a Promoter'}
-        </p>
-        {error && <div className="error">{error}</div>}
-        
-        <input
-          type="text"
-          placeholder="Full Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="promoter">Register as Promoter</option>
-          <option value="company">Register as Company</option>
-        </select>
-
-        {role === 'promoter' && (
-          <div className="social-media-section">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">Social Media Handles (Optional)</h3>
-            
-            <input
-              type="text"
-              placeholder="TikTok Handle (e.g., @username)"
-              value={socialMedia.tiktok}
-              onChange={(e) => handleSocialMediaChange('tiktok', e.target.value)}
-              className="mb-3"
-            />
-            
-            <input
-              type="text"
-              placeholder="Instagram Handle (e.g., @username)"
-              value={socialMedia.instagram}
-              onChange={(e) => handleSocialMediaChange('instagram', e.target.value)}
-              className="mb-3"
-            />
-            
-            <input
-              type="text"
-              placeholder="Twitter Handle (e.g., @username)"
-              value={socialMedia.twitter}
-              onChange={(e) => handleSocialMediaChange('twitter', e.target.value)}
-              className="mb-3"
-            />
-            
-            <input
-              type="text"
-              placeholder="Facebook (URL)"
-              value={socialMedia.facebook}
-              onChange={(e) => handleSocialMediaChange('facebook', e.target.value)}
-              className="mb-3"
-            />
-            
-            <input
-              type="text"
-              placeholder="YouTube Channel (URL)"
-              value={socialMedia.youtube}
-              onChange={(e) => handleSocialMediaChange('youtube', e.target.value)}
-            />
+  const next = async event => {
+    event.preventDefault();
+    if (loading) return;
+    if (step === 1) {
+      if (!event.currentTarget.reportValidity()) return;
+      setError(''); setShowPassword(false); setStep(2); return;
+    }
+    await handleSubmit(event);
+  };
+  return <AuthLayout>
+      <ol className="sf-signup-progress" aria-label="Signup progress"><li aria-current={step === 1 ? 'step' : undefined}><span>1</span> Account</li><li aria-current={step === 2 ? 'step' : undefined}><span>2</span> Your role</li></ol>
+      <h1 ref={headingRef} tabIndex={-1}>{step === 1 ? 'Create your account' : 'What best describes you?'}</h1>
+      <p className="sf-signup-intro">{step === 1 ? 'Join creators and businesses growing with SpreadFast.' : 'Choose how you want to use SpreadFast.'}</p>
+      {error && <Alert tone="error">{error}</Alert>}
+      <form className="sf-signup-form" onSubmit={next}>
+        <fieldset hidden={step !== 1} disabled={step !== 1 || loading}>
+          <FormField label="Full name" required><Input type="text" autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your full name" /></FormField>
+          <FormField label="Email" required><Input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" /></FormField>
+          <div className="sf-signup-password"><FormField label="Password" id="signup-password" required><Input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Create a password" /></FormField>
+            <Button variant="ghost" size="sm" className="sf-signup-password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-controls="signup-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Hide' : 'Show'}</Button>
           </div>
-        )}
-
-        <div className="terms-checkbox">
-            <label>
-              <input
-                type="checkbox"
-                checked={agreedToTerms}
-                onChange={(e) => setAgreedToTerms(e.target.checked)}
-                required
-              />
-              {' '}I agree to the{' '}
-              <span
-                className="policy-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setOpenPolicy('terms');
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') setOpenPolicy('terms');
-                }}
-              >
-                Terms & Conditions
-              </span>
-              {' '}and{' '}
-              <span
-                className="policy-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setOpenPolicy('privacy');
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') setOpenPolicy('privacy');
-                }}
-              >
-                Privacy Policy
-              </span>
-              .
-            </label>
+        </fieldset>
+        {step === 2 && <fieldset disabled={loading} className="sf-signup-role-fields">
+          <legend className="sr-only">Choose your role</legend>
+          <div className="sf-signup-roles">{[
+            { value: 'promoter', title: 'Promote campaigns', description: 'Create content and earn with growing brands.', icon: 'campaign' },
+            { value: 'company', title: 'Advertise my business', description: 'Reach more people with authentic creator content.', icon: 'home' }
+          ].map(option => <label key={option.value} className={'sf-signup-role' + (role === option.value ? ' is-selected' : '')}>
+            <span className="sf-signup-role-icon"><UiIcon name={option.icon} /></span><span className="sf-signup-role-copy"><strong>{option.title}</strong><span>{option.description}</span></span>
+            <input type="radio" name="account-role" value={option.value} checked={role === option.value} onChange={() => setRole(option.value)} />
+          </label>)}</div>
+          {role === 'promoter' && <details className="sf-signup-social"><summary>Add social profiles <span>(optional)</span></summary><div>
+            {Object.entries({ tiktok: 'TikTok handle', instagram: 'Instagram handle', twitter: 'X (Twitter) handle', facebook: 'Facebook URL', youtube: 'YouTube channel URL' }).map(([platform, label]) => <FormField label={label} key={platform}><Input type="text" value={socialMedia[platform]} onChange={event => handleSocialMediaChange(platform, event.target.value)} /></FormField>)}
+          </div></details>}
+          <div className="sf-signup-consent"><input id="signup-consent" type="checkbox" checked={agreedToTerms} onChange={event => setAgreedToTerms(event.target.checked)} required />
+            <div><label htmlFor="signup-consent">I agree to the </label><button type="button" onClick={() => setOpenPolicy('terms')}>Terms &amp; Conditions</button> and <button type="button" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>.</div>
           </div>
-        
-        <PolicyModal 
-          isOpen={openPolicy === 'terms'} 
-          policyType="terms" 
-          onClose={() => setOpenPolicy(null)} 
-        />
-        <PolicyModal 
-          isOpen={openPolicy === 'privacy'} 
-          policyType="privacy" 
-          onClose={() => setOpenPolicy(null)} 
-        />
-        
-        <button type="submit" disabled={loading}>
-          {loading ? 'Registering...' : 'Register'}
-        </button>
-        
-        <p>Already have an account? <a href="/login">Login here</a></p>
+        </fieldset>}
+        <Button type="submit" fullWidth disabled={loading}>{loading ? 'Creating account...' : step === 1 ? 'Continue' : 'Create account'}</Button>
+        {step === 2 && <Button variant="ghost" fullWidth disabled={loading} onClick={() => { setStep(1); setError(''); }}>Back to account details</Button>}
       </form>
-    </div>
-  );
+      <p className="sf-signup-login">Already have an account? <Link to="/login">Log in</Link></p>
+    <PolicyModal isOpen={openPolicy === 'terms'} policyType="terms" onClose={() => setOpenPolicy(null)} />
+    <PolicyModal isOpen={openPolicy === 'privacy'} policyType="privacy" onClose={() => setOpenPolicy(null)} />
+  </AuthLayout>;
 }

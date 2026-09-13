@@ -1,3 +1,4 @@
+import UiIcon from './ui/UiIcon';
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -5,32 +6,32 @@ export default function GetStartedBanner() {
   const steps = [
     {
       number: 1,
-      icon: '🔍',
+      icon: <><UiIcon name="search" /></>,
       title: 'Browse Campaigns',
       description: 'Find a campaign that matches your social media platforms'
     },
     {
       number: 2,
-      icon: '📲',
+      icon: <><UiIcon name="phone" /></>,
       title: 'Subscribe & Post',
       description: 'Join the campaign, create your content using the brand brief and assets provided'
     },
     {
       number: 3,
-      icon: '💰',
+      icon: <><UiIcon name="wallet" /></>,
       title: 'Submit Proof & Get Paid',
       description: 'Submit a screenshot or link of your post. Get paid once the business approves it'
     }
   ];
 
   return (
-    <div className="bg-green-50 border-2 border-green-200 rounded-xl p-8 mb-12 shadow-sm">
+    <div className="bg-primary-soft border-2 border-line rounded-card p-8 mb-12 shadow-sm">
       {/* Header */}
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-green-800 mb-2">
-          Welcome! Here's how to earn with SpreadFast 🚀
+        <h2 className="text-3xl font-bold text-primary-hover mb-2">
+          Welcome! Here's how to earn with SpreadFast <UiIcon name="trend" />
         </h2>
-        <p className="text-gray-600">
+        <p className="text-muted">
           Get started in 3 simple steps and start earning money today
         </p>
       </div>
@@ -41,19 +42,19 @@ export default function GetStartedBanner() {
           <div key={step.number} className="flex flex-col items-center text-center">
             {/* Step Number Circle */}
             <div className="relative mb-4">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center border-2 border-green-300 mb-3">
+              <div className="w-16 h-16 bg-primary-soft rounded-full flex items-center justify-center border-2 border-line mb-3">
                 <span className="text-3xl">{step.icon}</span>
               </div>
-              <div className="absolute -top-2 -right-2 bg-green-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+              <div className="absolute -top-2 -right-2 bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
                 {step.number}
               </div>
             </div>
 
             {/* Step Content */}
-            <h3 className="text-lg font-bold text-gray-800 mb-2">
+            <h3 className="text-lg font-bold text-ink mb-2">
               Step {step.number} — {step.title}
             </h3>
-            <p className="text-gray-600 text-sm leading-relaxed">
+            <p className="text-muted text-sm leading-relaxed">
               {step.description}
             </p>
 
@@ -78,9 +79,9 @@ export default function GetStartedBanner() {
       <div className="flex justify-center">
         <Link
           to="/available-campaigns"
-          className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition duration-200 transform hover:scale-105 inline-flex items-center gap-2 shadow-md"
+          className="bg-primary hover:bg-primary-hover text-white font-bold py-3 px-8 rounded-card transition duration-200 transform  inline-flex items-center gap-2 shadow-card"
         >
-          Browse Available Campaigns →
+          Browse Available Campaigns <UiIcon name="arrow" />
         </Link>
       </div>
     </div>

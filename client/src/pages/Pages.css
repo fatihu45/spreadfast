@@ -6,10 +6,10 @@
 }
 
 .wallet-balance {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(var(--sf-primary));
   color: white;
   padding: 30px;
-  border-radius: 10px;
+  border-radius: var(--sf-radius-control);
   text-align: center;
   margin-bottom: 30px;
   display: flex;
@@ -22,7 +22,7 @@
 .balance-item {
   background: rgba(255, 255, 255, 0.1);
   padding: 20px 30px;
-  border-radius: 8px;
+  border-radius: var(--sf-radius-sm);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   min-width: 200px;
@@ -47,18 +47,11 @@
   background: rgba(255, 193, 7, 0.1);
 }
 
-.loading {
-  text-align: center;
-  padding: 40px;
-  font-size: 16px;
-  color: #666;
-}
-
 .wallet-section {
   background: white;
   padding: 20px;
-  border-radius: 10px;
-  border: 1px solid #ddd;
+  border-radius: var(--sf-radius-control);
+  border: 1px solid rgb(var(--sf-border));
   margin-bottom: 20px;
 }
 
@@ -66,53 +59,23 @@
 .admin-section {
   background: white;
   padding: 20px;
-  border-radius: 10px;
-  border: 1px solid #ddd;
+  border-radius: var(--sf-radius-control);
+  border: 1px solid rgb(var(--sf-border));
   margin-bottom: 20px;
 }
 
 .submission {
-  background: #f9f9f9;
+  background: rgb(var(--sf-surface-muted));
   padding: 10px;
   margin: 10px 0;
-  border-left: 4px solid #667eea;
-}
-
-button {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 5px;
-  cursor: pointer;
-  margin-top: 10px;
-}
-
-button:hover {
-  background: #5568d3;
-}
-
-.error {
-  background: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 5px;
-  margin-bottom: 15px;
-}
-
-.success {
-  background: #efe;
-  color: #3c3;
-  padding: 12px;
-  border-radius: 5px;
-  margin-bottom: 15px;
+  border-left: 4px solid rgb(var(--sf-primary));
 }
 
 /* Bank Details Styling */
 .bank-details-display {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-  border: 2px solid #667eea;
-  border-radius: 8px;
+  background: rgb(var(--sf-primary-soft));
+  border: 2px solid rgb(var(--sf-primary));
+  border-radius: var(--sf-radius-sm);
   padding: 20px;
   margin: 15px 0;
 }
@@ -120,29 +83,29 @@ button:hover {
 .bank-details-display p {
   margin: 10px 0;
   font-size: 15px;
-  color: #333;
+  color: rgb(var(--sf-ink));
 }
 
 .bank-details-display strong {
-  color: #667eea;
+  color: rgb(var(--sf-primary));
   font-weight: 600;
 }
 
 .no-bank-details {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  border: 2px dashed #764ba2;
-  border-radius: 8px;
+  background: rgb(var(--sf-primary-soft));
+  border: 2px dashed rgb(var(--sf-primary));
+  border-radius: var(--sf-radius-sm);
   padding: 20px;
   text-align: center;
-  color: #764ba2;
+  color: rgb(var(--sf-primary));
   font-style: italic;
   margin: 15px 0;
 }
 
 .bank-details-form {
-  background: #f8f9ff;
-  border: 1px solid #e0e4ff;
-  border-radius: 8px;
+  background: rgb(var(--sf-surface-muted));
+  border: 1px solid rgb(var(--sf-border));
+  border-radius: var(--sf-radius-sm);
   padding: 20px;
   margin-top: 15px;
 }
@@ -154,7 +117,7 @@ button:hover {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333;
+  color: rgb(var(--sf-ink));
   font-weight: 600;
   font-size: 14px;
 }
@@ -162,7 +125,7 @@ button:hover {
 .form-group input {
   width: 100%;
   padding: 12px;
-  border: 1px solid #d0d5ff;
+  border: 1px solid rgb(var(--sf-border));
   border-radius: 6px;
   font-size: 14px;
   transition: all 0.3s ease;
@@ -171,13 +134,13 @@ button:hover {
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: rgb(var(--sf-primary));
+  box-shadow: var(--sf-shadow-soft);
   background-color: #fff;
 }
 
 .form-group input::placeholder {
-  color: #999;
+  color: rgb(var(--sf-muted));
 }
 
 .form-actions {
@@ -186,64 +149,12 @@ button:hover {
   margin-top: 20px;
 }
 
-.btn-primary,
-.btn-secondary,
-.btn-cancel {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  flex: 1;
-}
-
-.btn-primary:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #6b4393 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.btn-secondary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 10px 20px;
-  margin-top: 10px;
-}
-
-.btn-secondary:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #6b4393 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.btn-cancel {
-  background: #e0e0e0;
-  color: #333;
-  flex: 1;
-}
-
-.btn-cancel:hover {
-  background: #d0d0d0;
-}
-
 /* Withdrawal Form Styling */
-.wallet-section form {
-  display: flex;
-  gap: 10px;
-  margin-top: 15px;
-}
 
 .wallet-section input[type="number"] {
   flex: 1;
   padding: 12px;
-  border: 1px solid #d0d5ff;
+  border: 1px solid rgb(var(--sf-border));
   border-radius: 6px;
   font-size: 15px;
   transition: all 0.3s ease;
@@ -251,30 +162,8 @@ button:hover {
 
 .wallet-section input[type="number"]:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.wallet-section form button {
-  padding: 12px 30px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  margin-top: 0;
-}
-
-.wallet-section form button:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #6b4393 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.wallet-section form button:active {
-  transform: translateY(0);
+  border-color: rgb(var(--sf-primary));
+  box-shadow: var(--sf-shadow-soft);
 }
 
 /* Withdrawals List Styling */
@@ -286,10 +175,10 @@ button:hover {
 }
 
 .withdrawal-item {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-  border: 1px solid #e0e4ff;
+  background: rgb(var(--sf-primary-soft));
+  border: 1px solid rgb(var(--sf-border));
   border-left: 4px solid #ffc107;
-  border-radius: 8px;
+  border-radius: var(--sf-radius-sm);
   padding: 16px;
   display: flex;
   justify-content: space-between;
@@ -298,8 +187,8 @@ button:hover {
 }
 
 .withdrawal-item:hover {
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
-  transform: translateX(2px);
+  box-shadow: var(--sf-shadow-soft);
+  
 }
 
 .withdrawal-info {
@@ -312,7 +201,7 @@ button:hover {
 .withdrawal-amount {
   font-size: 20px;
   font-weight: 700;
-  color: #667eea;
+  color: rgb(var(--sf-primary));
   min-width: 150px;
 }
 
@@ -326,18 +215,18 @@ button:hover {
 .withdrawal-details p {
   margin: 0;
   font-size: 14px;
-  color: #555;
+  color: rgb(var(--sf-muted));
 }
 
 .withdrawal-details strong {
-  color: #333;
+  color: rgb(var(--sf-ink));
   font-weight: 600;
 }
 
 .status-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 20px;
+  border-radius: var(--sf-radius-card);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;

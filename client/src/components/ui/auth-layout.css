@@ -1,0 +1,24 @@
+.sf-signup { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 48px 20px; background: rgb(var(--sf-canvas)); color: rgb(var(--sf-ink)); }
+.sf-signup-logo { display: inline-block; margin-bottom: 32px; }
+.sf-signup-logo img { width: 174px; height: auto; display: block; }
+.sf-signup-card { width: 100%; max-width: 480px; padding: 36px; background: rgb(var(--sf-surface)); border: 1px solid rgb(var(--sf-border)); border-radius: var(--sf-radius-card); box-shadow: var(--sf-shadow-card); }
+.sf-signup h1 { font-size: clamp(1.4rem, 3vw, 1.75rem); line-height: 1.25; font-weight: 650; letter-spacing: -.035em; margin-bottom: 10px; }
+.sf-signup-intro { color: rgb(var(--sf-muted)); font-size: .8125rem; line-height: 1.8; margin-bottom: 28px; }
+.sf-signup form.sf-signup-form { max-width: none; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.sf-signup-form fieldset { min-width: 0; margin: 0 0 24px; padding: 0; border: 0; display: grid; gap: 20px; }
+.sf-signup-form fieldset[hidden] { display: none; }
+.sf-signup .sf-control { margin-bottom: 0; }
+.sf-signup .sf-label { font-size: .8125rem; }
+.sf-signup-password { position: relative; }
+.sf-signup-password .sf-input { padding-right: 76px; }
+.sf-signup .sf-control.sf-button.sf-signup-password-toggle { position: absolute; right: 5px; bottom: 0; min-height: var(--sf-control-height); font-size: .6875rem; padding: 6px 12px; color: rgb(var(--sf-muted)); }
+.sf-signup-form > .sf-button { font-size: .8125rem; }
+@media (max-width: 479px) { .sf-signup { padding: 28px 16px; } .sf-signup-card { padding: 24px 20px; } }
+
+.sf-signup-login { text-align: center; font-size: .75rem; margin: 22px 0 0; color: rgb(var(--sf-muted)); }
+.sf-signup-login a { color: rgb(var(--sf-primary)); font-weight: 600; }
+.sf-signup a:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 3px; }
+.sf-payment-status .sf-signup-card > p { margin-top: var(--sf-space-4); color: rgb(var(--sf-muted)); font-size: .875rem; }
+
+.sf-signup-logo img { max-width: 100%; }
+.sf-signup-card { min-width: 0; overflow-wrap: anywhere; }

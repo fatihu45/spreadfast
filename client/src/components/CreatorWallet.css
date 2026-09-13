@@ -1,0 +1,35 @@
+.creator-wallet { max-width: var(--sf-content-width); width: 100%; margin-inline: auto; }
+.creator-wallet-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.creator-wallet-main { display: grid; gap: 22px; min-width: 0; }
+.creator-wallet .sf-wallet-balance-card { background: linear-gradient(120deg, rgb(var(--sf-primary)), rgb(var(--sf-primary-hover))); color: white; border-color: transparent; padding: 24px; min-height: 120px; }
+.creator-wallet .sf-wallet-balance-card__value { font-size: clamp(1.5rem, 2.4vw, 2rem); overflow-wrap: anywhere; }
+.creator-wallet .sf-control.sf-button.creator-wallet-withdraw { background: white; color: rgb(var(--sf-primary)); border-color: transparent; border-radius: var(--sf-radius-pill); min-height: var(--sf-control-height); padding: 8px 18px; font-size: .75rem; }
+.creator-wallet .creator-wallet-bank, .creator-wallet .creator-wallet-history, .creator-wallet .creator-wallet-request { padding: 24px; }
+.creator-wallet h2 { font-size: .9375rem; font-weight: 600; margin-bottom: 20px; }
+.creator-wallet-bank-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.creator-wallet-bank-summary > div { min-width: 0; flex: 1; }
+.creator-wallet-bank-summary strong { font-size: .8125rem; overflow-wrap: anywhere; }
+.creator-wallet-bank-summary p, .creator-wallet-bank > p, .creator-wallet-request > p { font-size: .75rem; color: rgb(var(--sf-muted)); line-height: 1.7; overflow-wrap: anywhere; }
+.creator-wallet-bank-summary .sf-button { font-size: .6875rem; padding-inline: 0; color: rgb(var(--sf-primary)); }
+.creator-wallet-bank-icon, .creator-wallet-transaction-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--sf-radius-control); background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-primary)); }
+.creator-wallet-pending { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-inline: 4px; font-size: .75rem; color: rgb(var(--sf-muted)); }
+.creator-wallet form.creator-wallet-form { width: 100%; max-width: none; margin: 20px 0 0; padding: 0; box-shadow: none; border: 0; background: transparent; display: grid; gap: 18px; }
+.creator-wallet-form .sf-input { margin: 0; }
+.creator-wallet-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.creator-wallet-form-actions .sf-button { font-size: .75rem; }
+.creator-wallet-withdrawal-terms { margin-bottom: 18px; }
+.creator-wallet-history-note { color: rgb(var(--sf-muted)); font-size: .6875rem; line-height: 1.7; margin: -6px 0 20px; }
+.creator-wallet-transactions { list-style: none; padding: 0; margin: 0; }
+.creator-wallet-transactions li { display: flex; gap: 12px; align-items: start; padding: 20px 0; border-top: 1px solid rgb(var(--sf-border)); }
+.creator-wallet-transaction-icon.is-withdrawal { background: #fff4eb; color: #a34d16; }
+.creator-wallet-transaction-copy { flex: 1; min-width: 0; }
+.creator-wallet-transaction-copy h3 { font-size: .8125rem; font-weight: 600; margin-bottom: 8px; }
+.creator-wallet-transaction-copy p { font-size: .6875rem; color: rgb(var(--sf-muted)); overflow-wrap: anywhere; margin-bottom: 8px; }
+.creator-wallet-transaction-copy .sf-badge { font-size: .625rem; }
+.creator-wallet-transaction-copy .creator-wallet-transaction-date { margin-top: 8px; margin-bottom: 0; }
+.creator-wallet-transaction-amount { font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; max-width: 42%; overflow-wrap: anywhere; text-align: right; }
+.creator-wallet-history-error { color: rgb(var(--sf-danger)); background: rgb(var(--sf-danger-soft)); }
+.creator-wallet-history-error { padding: 12px; border-radius: var(--sf-radius-sm); font-size: .75rem; margin-bottom: 12px; }
+.creator-wallet-history-loading { color: rgb(var(--sf-muted)); font-size: .8125rem; }
+@media (max-width: 767px) { .creator-wallet-layout { grid-template-columns: minmax(0, 1fr); gap: 22px; } .creator-wallet .creator-wallet-bank, .creator-wallet .creator-wallet-history, .creator-wallet .creator-wallet-request, .creator-wallet .sf-wallet-balance-card { padding: 20px; } }
+@media (max-width: 359px) { .creator-wallet-transactions li { gap: 8px; } .creator-wallet-transaction-icon { width: 28px; height: 28px; } .creator-wallet .sf-wallet-balance-card { flex-wrap: wrap; gap: 16px; } }

@@ -1,0 +1,23 @@
+/* Compatibility for retained legacy components; all values share the sf tokens. */
+.card, .campaign-card { background: rgb(var(--sf-surface)); border: 1px solid rgb(var(--sf-border)); border-radius: var(--sf-radius-card); padding: var(--sf-space-6); box-shadow: var(--sf-shadow-soft); min-width: 0; }
+.campaign-card h3 { color: rgb(var(--sf-ink)); font-size: 1.125rem; font-weight: 600; margin-bottom: var(--sf-space-3); }
+.campaign-card p { color: rgb(var(--sf-muted)); margin-block: var(--sf-space-2); }
+.btn-primary, .btn-secondary, .btn-cancel, .action-button, .submit-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--sf-space-2); min-height: var(--sf-control-height); padding: .625rem 1.25rem; border: 1px solid transparent; border-radius: var(--sf-radius-control); background: rgb(var(--sf-primary)); color: white; font-size: .875rem; line-height: 1.5; font-weight: 600; cursor: pointer; }
+.btn-primary:hover, .action-button:hover, .submit-button:hover { background: rgb(var(--sf-primary-hover)); }
+.btn-secondary, .btn-cancel { background: rgb(var(--sf-surface)); color: rgb(var(--sf-ink)); border-color: rgb(var(--sf-control-border)); }
+.btn-secondary:hover, .btn-cancel:hover { background: rgb(var(--sf-surface-muted)); }
+.btn-primary:disabled, .btn-secondary:disabled, .btn-cancel:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-cancel:focus-visible, .action-button:focus-visible, .submit-button:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 3px; }
+.error, .success { padding: var(--sf-space-4); margin-bottom: var(--sf-space-5); border-radius: var(--sf-radius-control); font-size: .875rem; }
+.error { background: rgb(var(--sf-danger-soft)); color: rgb(var(--sf-danger)); }
+.success { background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-primary-hover)); }
+.loading { padding: var(--sf-space-10); text-align: center; color: rgb(var(--sf-muted)); }
+.dashboard > h1, .wallet-container > h1 { font-size: var(--sf-dashboard-title-size); font-weight: 700; margin-bottom: var(--sf-space-6); }
+.dashboard > h2 { font-size: 1.25rem; font-weight: 600; margin-block: var(--sf-space-6); }
+.dashboard .action-button { margin-top: var(--sf-space-4); }
+.campaigns-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sf-space-6); }
+.wallet-container form { display: grid; width: 100%; min-width: 0; gap: var(--sf-space-4); }
+.wallet-container input { width: 100%; min-width: 0; min-height: var(--sf-control-height); padding: .625rem .875rem; border: 1px solid rgb(var(--sf-control-border)); border-radius: var(--sf-radius-control); background: rgb(var(--sf-surface)); font-size: 1rem; }
+.wallet-container input:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 2px; }
+.wallet-container .form-actions { flex-wrap: wrap; }
+@media(max-width: 639px) { .wallet-container .withdrawal-info { flex-direction: column; align-items: stretch; min-width: 0; } .wallet-container .balance-item { min-width: 0; width: 100%; } }

@@ -14,3 +14,7 @@ export { default as SearchBar } from './SearchBar';
 export { default as PlatformBadge } from './PlatformBadge';
 export { default as WalletBalanceCard } from './WalletBalanceCard';
 export { default as UserAvatar } from './UserAvatar';
+
+export { default as Alert } from './Alert';
+export { default as AuthLayout } from './AuthLayout';
+export { default as FileTypeIcon } from './FileTypeIcon';

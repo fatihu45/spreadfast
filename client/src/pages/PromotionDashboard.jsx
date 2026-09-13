@@ -1,257 +1,147 @@
+import Alert from '../components/ui/Alert';
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { apiCallAuth, apiCall } from '../utils/api';
-import GetStartedBanner from '../components/GetStartedBanner';
-import HowYouEarnCard from '../components/HowYouEarnCard';
-import './Pages.css';
+import { Button, Card, PageHeader, WalletBalanceCard, StatCard, CampaignCard, EmptyState } from '../components/ui';
+import UiIcon from '../components/ui/UiIcon';
+import './PromotionDashboard.css';
+
+const RECENT_LIMIT = 3; // Display limit only; all totals come from API records.
+const money = value => {
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '' || !Number.isFinite(Number(value))) return null;
+  return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value));
+};
+const timestamp = value => Date.parse(value) || 0;
+const isImage = asset => asset?.fileType?.startsWith('image/') || asset?.file_type === 'image';
+const assetUrl = asset => asset?.fileUrl || asset?.cloudinary_url;
+
+function MetricIcon({ approved = false }) {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {approved ? <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></> : <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 3h6v4H9zM9 12h6M9 16h4" /></>}
+  </svg>;
+}
+
+function CampaignBrief({ campaign, assets }) {
+  if (!campaign.description && !campaign.caption && !campaign.keyMessage && !assets.length) return null;
+  return <details className="creator-campaign-brief">
+    <summary>Campaign brief &amp; assets</summary>
+    {(campaign.description || campaign.caption) && <p>{campaign.description || campaign.caption}</p>}
+    {campaign.keyMessage && <p><strong>Key message</strong><br />{campaign.keyMessage}</p>}
+    {assets.length > 0 && <div className="creator-campaign-assets">{assets.map((asset, index) => {
+      const url = assetUrl(asset);
+      return <div key={asset.id || url || index}>
+        {isImage(asset) ? <a href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={asset.fileName || asset.file_name || 'Campaign asset'} loading="lazy" /></a>
+          : asset.fileType?.startsWith('video/') || asset.file_type === 'video' ? <video src={url} controls preload="none" />
+          : <a href={url} target="_blank" rel="noopener noreferrer">{asset.fileName || asset.file_name || 'Open campaign asset'}</a>}
+      </div>;
+    })}</div>}
+  </details>;
+}
 
 export default function PromotionDashboard() {
-  const { user, token, logout } = useContext(AuthContext);
+  const { user, token } = useContext(AuthContext);
   const navigate = useNavigate();
-  const [activeCampaigns, setActiveCampaigns] = useState([]);
-  const [wallet, setWallet] = useState(null);
+  const [data, setData] = useState({ wallet: null, campaigns: null, submissions: null });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [userSubmissions, setUserSubmissions] = useState([]);
-  const [showGetStartedBanner, setShowGetStartedBanner] = useState(false);
+  const [errors, setErrors] = useState([]);
+  const [refresh, setRefresh] = useState(0);
+  const [showAll, setShowAll] = useState(false);
 
-  // Load campaigns and wallet
   useEffect(() => {
-    if (user?.role !== 'promoter') {
-      navigate('/');
-      return;
-    }
-    fetchPromotionData();
-  }, [user, navigate, token]);
-
-  // Hide banner when user joins first campaign
-  useEffect(() => {
-    if (userSubmissions && userSubmissions.length > 0) {
-      setShowGetStartedBanner(true);
-      // Permanently hide the banner for this user
-      localStorage.setItem(`sf_banner_hidden_${user?.id}`, 'true');
-    }
-  }, [userSubmissions, user?.id]);
-
-  const fetchPromotionData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch wallet balance
-      const walletData = await apiCallAuth('/api/wallet', token);
-      if (walletData.success) {
-        setWallet(walletData.wallet);
-      }
-
-      // Fetch available campaigns
-      const campaignsData = await apiCall('/api/campaigns');
-      if (campaignsData.success) {
-        // Filter campaigns that the promoter is subscribed to
-        // In a real app, you'd get promoter subscriptions from backend
-        setActiveCampaigns(campaignsData.campaigns);
-      }
-
-      // Fetch user submissions to check if they've joined any campaigns
-      const submissionsData = await apiCallAuth('/api/submissions/my-submissions', token);
-      if (submissionsData.success) {
-        setUserSubmissions(submissionsData.submissions || []);
-      }
-
-      // Determine if we should show the onboarding banner
-      // Show if: no active campaigns AND no earnings AND never joined a campaign before
-      const hasNeverJoinedCampaign = submissionsData.success && 
-                                     (submissionsData.submissions?.length === 0 || !submissionsData.submissions);
-      const hasZeroEarnings = walletData.success && (walletData.wallet?.balance === 0 || !walletData.wallet?.balance);
-      const hasNoActiveCampaigns = campaignsData.success && campaignsData.campaigns?.length === 0;
-
-      // Check localStorage flag (allows permanent hiding after first join)
-      const hasHiddenBanner = localStorage.getItem(`sf_banner_hidden_${user?.id}`);
-
-      if (hasNeverJoinedCampaign && hasZeroEarnings && hasNoActiveCampaigns && !hasHiddenBanner) {
-        setShowGetStartedBanner(true);
-      }
-    } catch (error) {
-      console.error('Fetch error:', error);
-      setError('Failed to load dashboard data');
-    } finally {
+    if (user?.role !== 'promoter') { navigate('/'); return; }
+    let current = true;
+    setLoading(true);
+    setErrors([]);
+    setData({ wallet: null, campaigns: null, submissions: null });
+    async function load() {
+      const results = await Promise.allSettled([
+        apiCallAuth('/api/wallet', token),
+        apiCall('/api/campaigns'),
+        apiCallAuth('/api/submissions/my-submissions', token),
+      ]);
+      if (!current) return;
+      const responses = results.map(result => result.status === 'fulfilled' && result.value?.success ? result.value : null);
+      const wallet = money(responses[0]?.wallet?.balance) !== null ? responses[0].wallet : null;
+      const campaigns = Array.isArray(responses[1]?.campaigns) ? responses[1].campaigns : null;
+      const submissions = Array.isArray(responses[2]?.submissions) ? responses[2].submissions : null;
+      setData({ wallet, campaigns, submissions });
+      setErrors([!wallet && 'available earnings', !campaigns && 'campaigns', !submissions && 'submissions'].filter(Boolean));
       setLoading(false);
     }
-  };
+    load();
+    return () => { current = false; };
+  }, [user?.id, user?.role, token, navigate, refresh]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
+  const userId = user?.id == null ? null : String(user.id);
+  const submissionsByCampaign = new Map();
+  (data.submissions || []).forEach(submission => {
+    const key = String(submission.campaignId);
+    submissionsByCampaign.set(key, [...(submissionsByCampaign.get(key) || []), submission]);
+  });
+  // /api/campaigns is public: select this creator's memberships/history, never the entire catalog.
+  const myCampaigns = data.campaigns && data.submissions && userId !== null ? data.campaigns.filter(campaign =>
+    campaign.subscribedPromoters?.some(promoter => String(promoter.promoterId) === userId) || submissionsByCampaign.has(String(campaign.id))
+  ).map(campaign => {
+    const ownSubmissions = submissionsByCampaign.get(String(campaign.id)) || [];
+    const subscription = campaign.subscribedPromoters?.find(promoter => String(promoter.promoterId) === userId);
+    const activity = Math.max(timestamp(subscription?.subscribedAt), ...ownSubmissions.map(submission => timestamp(submission.createdAt)), timestamp(campaign.createdAt));
+    return { campaign, ownSubmissions, activity };
+  }).sort((a, b) => b.activity - a.activity) : null;
+  const recentCampaigns = showAll ? myCampaigns : myCampaigns?.slice(0, RECENT_LIMIT);
+  const approved = data.submissions?.filter(submission => submission.status === 'approved').length;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = user?.name?.trim().split(/\s+/)[0];
+  const unavailable = 'Unavailable';
 
-  if (loading) return <div className="dashboard">Loading...</div>;
+  return <section className="creator-dashboard" aria-label="Creator dashboard" aria-busy={loading}>
+    <PageHeader title={<>{greeting}{firstName ? ', ' + firstName : ''} <span className="creator-greeting-wave" role="img" aria-label="Hello"><UiIcon name="sun" /></span></>}
+      description="Here's what's happening with your campaigns." />
 
-  return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation Header */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-8">
-            <span className="text-2xl font-bold text-green-700 cursor-default">
-              SpreadFast
-            </span>
-            <div className="hidden md:flex gap-6">
-              <Link to="/promoter-dashboard" className="text-green-700 hover:text-green-800 font-semibold">
-                Dashboard
-              </Link>
-              <Link to="/available-campaigns" className="text-gray-700 hover:text-green-700 font-semibold">
-                Find Campaigns
-              </Link>
-              <Link to="/wallet" className="text-gray-700 hover:text-green-700 font-semibold">
-                Wallet
-              </Link>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-700 font-medium">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600 transition"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
+    {errors.length > 0 && <Alert tone="error">
+      <p>We couldn't load your {errors.join(', ')}. Please try again.</p>
+      <Button variant="secondary" size="sm" onClick={() => setRefresh(value => value + 1)}>Try again</Button>
+    </Alert>}
 
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        {/* Welcome Section */}
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Welcome, {user?.name}!</h1>
-          <p className="text-gray-600">Manage your campaigns and track your earnings</p>
-        </div>
+    <WalletBalanceCard label="Available earnings" balance={money(data.wallet?.balance) ?? unavailable} loading={loading}
+      action={<Link to="/wallet" className="sf-control sf-button sf-button--secondary creator-withdraw">Withdraw</Link>} />
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Get Started Onboarding Banner */}
-        {showGetStartedBanner && (
-          <GetStartedBanner />
-        )}
-
-        {/* Earnings Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-8 shadow-lg">
-            <p className="text-green-100 font-semibold mb-2">Total Earnings</p>
-            <h2 className="text-4xl font-bold">₦{wallet?.balance ? parseFloat(wallet.balance).toLocaleString() : '0'}</h2>
-            <p className="text-green-100 text-sm mt-2">Available for withdrawal</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-8 shadow-lg">
-            <p className="text-blue-100 font-semibold mb-2">Active Campaigns</p>
-            <h2 className="text-4xl font-bold">{activeCampaigns.length}</h2>
-            <p className="text-blue-100 text-sm mt-2">Campaigns you subscribed to</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-8 shadow-lg">
-            <p className="text-purple-100 font-semibold mb-2">Submissions</p>
-            <h2 className="text-4xl font-bold">
-              {activeCampaigns.reduce((sum, c) => sum + (c.submissions?.length || 0), 0)}
-            </h2>
-            <p className="text-purple-100 text-sm mt-2">Proofs submitted</p>
-          </div>
-        </div>
-
-        {/* How You Earn Section */}
-        <HowYouEarnCard />
-
-        {/* Quick Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
-          <Link
-            to="/available-campaigns"
-            className="bg-green-600 text-white py-4 px-6 rounded-lg font-semibold hover:bg-green-700 transition text-center"
-          >
-            Browse Available Campaigns
-          </Link>
-          <Link
-            to="/wallet"
-            className="bg-blue-600 text-white py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 transition text-center"
-          >
-            Manage Wallet & Withdrawals
-          </Link>
-        </div>
-
-        {/* Active Campaigns Section */}
-        {activeCampaigns.length > 0 ? (
-          <div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-8">Your Active Campaigns</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activeCampaigns.map(campaign => (
-                <div key={campaign.id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-6 border-l-4 border-green-500">
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">{campaign.title || campaign.name}</h3>
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                    {campaign.description || campaign.caption}
-                  </p>
-                  {campaign.keyMessage && (
-                    <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mb-4 text-sm">
-                      <p className="font-semibold text-green-800 mb-2">📢 Key Message from Brand</p>
-                      <p className="text-gray-700 line-clamp-3">{campaign.keyMessage}</p>
-                    </div>
-                  )}
-                  {campaign.brandAssets && campaign.brandAssets.length > 0 && (
-                    <div className="mb-4">
-                      <p className="font-semibold text-gray-800 mb-2 text-sm">Brand Assets — Use these in your content</p>
-                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        {campaign.brandAssets.map((asset, idx) => (
-                          <div key={idx} className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group">
-                            {asset.fileType.startsWith('image/') ? (
-                              <img src={asset.fileUrl} alt={`asset-${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition" />
-                            ) : asset.fileType === 'video/mp4' ? (
-                              <video src={asset.fileUrl} className="w-full h-full object-cover group-hover:scale-110 transition" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-red-100 group-hover:bg-red-200 transition">
-                                <span className="text-xs font-bold text-red-700">PDF</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-2 text-sm mb-4">
-                    <p className="text-gray-700">
-                      <strong>Budget:</strong> ₦{campaign.budget ? parseFloat(campaign.budget).toLocaleString() : 'N/A'}
-                    </p>
-                    <p className="text-gray-700">
-                      <strong>Status:</strong> <span className="px-2 py-1 rounded text-white text-xs font-semibold bg-green-500">
-                        {campaign.status || 'Active'}
-                      </span>
-                    </p>
-                    <p className="text-gray-700">
-                      <strong>Submissions:</strong> {campaign.submissions?.length || 0}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => navigate(`/submit-proof?campaignId=${campaign.id}`)}
-                          className="w-full py-2 rounded-lg font-semibold transition bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Submit Proof
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-16 bg-gray-50 rounded-lg">
-            <p className="text-xl text-gray-600 mb-6">No active campaigns yet</p>
-            <Link
-              to="/available-campaigns"
-              className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition inline-block"
-            >
-              Browse Campaigns
-            </Link>
-          </div>
-        )}
-      </div>
+    <div className="creator-dashboard-stats">
+      <StatCard label="Campaigns" value={myCampaigns?.length ?? unavailable} loading={loading} icon={<UiIcon name="campaign" />} />
+      <StatCard label="Submissions" value={data.submissions?.length ?? unavailable} loading={loading} icon={<MetricIcon />} />
+      <StatCard label="Approved" value={approved ?? unavailable} loading={loading} icon={<MetricIcon approved />} />
     </div>
-  );
+
+    <section className="creator-recent" aria-labelledby="creator-recent-title">
+      <div className="creator-section-heading">
+        <h2 id="creator-recent-title">{showAll ? 'Your campaigns' : 'Recent campaigns'}</h2>
+        {myCampaigns?.length > RECENT_LIMIT
+          ? <Button variant="ghost" size="sm" onClick={() => setShowAll(value => !value)} aria-expanded={showAll} aria-controls="creator-campaign-list">{showAll ? 'Show recent' : 'View all'}</Button>
+          : <Link to="/available-campaigns" className="creator-text-link">Browse campaigns</Link>}
+      </div>
+      <div id="creator-campaign-list" className="creator-campaign-list">
+        {loading ? <Card className="creator-list-message" role="status">Loading your campaigns...</Card>
+          : !myCampaigns ? <Card><EmptyState title="Your campaigns couldn't be loaded" description="Try again to see your latest campaign activity." as="h3" action={<Button variant="secondary" onClick={() => setRefresh(value => value + 1)}>Try again</Button>} /></Card>
+          : myCampaigns.length === 0 ? <Card><EmptyState title="Your next opportunity starts here" description="Join a campaign, create authentic content, and submit your post for review." as="h3" action={<Link to="/available-campaigns" className="sf-control sf-button sf-button--primary">Browse available campaigns</Link>} /></Card>
+          : recentCampaigns.map(({ campaign, ownSubmissions }) => {
+            const assets = (campaign.brandAssets || []).filter(asset => assetUrl(asset));
+            const thumbnail = assets.find(isImage);
+            const to = '/submit-proof?campaignId=' + encodeURIComponent(campaign.id);
+            return <CampaignCard key={campaign.id} title={campaign.title || campaign.name || 'Untitled campaign'} status={campaign.status || 'unknown'}
+              imageSrc={assetUrl(thumbnail)} platforms={Array.isArray(campaign.socialMediaPlatforms) ? [...new Set(campaign.socialMediaPlatforms)] : []}
+              budget={money(campaign.budget) ?? unavailable} budgetLabel="Campaign budget" to={to}
+              metadata={<><p>{ownSubmissions.length} {ownSubmissions.length === 1 ? 'submission' : 'submissions'}</p><CampaignBrief campaign={campaign} assets={assets} /></>}
+              actions={<Link to={to} className="creator-text-link">Submit proof <span aria-hidden="true"><UiIcon name="arrow" /></span></Link>} />;
+          })}
+      </div>
+    </section>
+
+    <details className="creator-earning-guide">
+      <summary>How earning works</summary>
+      <p>Join a campaign that fits your style. Use the campaign brief and brand assets to create your content, then submit your post for review.</p>
+      <p>Check your submissions for approval updates. Your available earnings appear in your wallet, where you can manage your bank details and request a withdrawal.</p>
+      <div><Link to="/submit-proof" className="creator-text-link">View your submissions</Link><Link to="/wallet" className="creator-text-link">Manage wallet &amp; withdrawals</Link></div>
+    </details>
+  </section>;
 }

@@ -1,16 +1,20 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { apiCall, apiCallAuth } from '../utils/api';
 import './CompanyDashboard.css';
+import CompanyOverview from '../components/CompanyOverview';
+import BusinessCreateCampaign, { buildCampaignBrief, emptyCampaignBrief } from '../components/BusinessCreateCampaign';
 
 export default function CompanyDashboard() {
-  const { user, token, logout } = useContext(AuthContext);
+  const { user, token } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Campaign Creation State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [campaignBrief, setCampaignBrief] = useState(emptyCampaignBrief);
   const [keyMessage, setKeyMessage] = useState('');
   const [budget, setBudget] = useState('');
   const [brandAssetFiles, setBrandAssetFiles] = useState([]); // Array of File objects
@@ -33,10 +37,13 @@ export default function CompanyDashboard() {
   const [campaignSubmissions, setCampaignSubmissions] = useState({});
   const [statusMessage, setStatusMessage] = useState('');
   const [campaignAssets, setCampaignAssets] = useState({});
+  const [campaignLoadState, setCampaignLoadState] = useState('loading');
+  const [submissionLoadStates, setSubmissionLoadStates] = useState({});
 
 
   // Polling ref — so we can stop it when done
   const pollingRef = useRef(null);
+  const assetPreviewsRef = useRef([]);
 
   const calculatePromoterSlots = (budgetAmount) => {
     const amount = parseFloat(budgetAmount) || 0;
@@ -114,7 +121,10 @@ export default function CompanyDashboard() {
       URL.revokeObjectURL(brandAssetPreviews[index].preview);
     }
     
-    setBrandAssetFiles(prev => prev.filter((_, i) => i !== index));
+    const validIndex = brandAssetPreviews.slice(0, index).filter(item => !item.error).length;
+    if (!brandAssetPreviews[index]?.error) {
+      setBrandAssetFiles(prev => prev.filter((_, i) => i !== validIndex));
+    }
     setBrandAssetPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -130,15 +140,13 @@ export default function CompanyDashboard() {
   }, []);
 
   useEffect(() => {
-    // Cleanup object URLs when component unmounts
-    return () => {
-      brandAssetPreviews.forEach(item => {
-        if (item.preview) {
-          URL.revokeObjectURL(item.preview);
-        }
-      });
-    };
+    const retained = new Set(brandAssetPreviews.map(item => item.preview));
+    assetPreviewsRef.current.forEach(item => { if (item.preview && !retained.has(item.preview)) URL.revokeObjectURL(item.preview); });
+    assetPreviewsRef.current = brandAssetPreviews;
   }, [brandAssetPreviews]);
+  useEffect(() => () => {
+    assetPreviewsRef.current.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
+  }, []);
 
   useEffect(() => {
     if (user?.role !== 'company') {
@@ -151,16 +159,19 @@ export default function CompanyDashboard() {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
+      setCampaignLoadState('loading');
       const data = await apiCall('/api/campaigns');
       if (data.success) {
         const companyCampaigns = data.campaigns.filter(c => c.companyId === user?.id);
         setCampaigns(companyCampaigns);
+        setCampaignLoadState('success');
         companyCampaigns.forEach(campaign => {
           fetchCampaignSubmissions(campaign.id);
           fetchCampaignAssets(campaign.id);
         });
-      }
+      } else { setCampaignLoadState('error'); }
     } catch (error) {
+      setCampaignLoadState('error');
       console.error('Fetch error:', error);
     } finally {
       setLoading(false);
@@ -168,6 +179,7 @@ export default function CompanyDashboard() {
   };
 
   const fetchCampaignSubmissions = async (campaignId) => {
+    setSubmissionLoadStates(prev => ({ ...prev, [campaignId]: 'loading' }));
     try {
       const data = await apiCallAuth(
         `/api/campaigns/${campaignId}/submissions`,
@@ -178,8 +190,10 @@ export default function CompanyDashboard() {
           ...prev,
           [campaignId]: data.submissions || []
         }));
-      }
+        setSubmissionLoadStates(prev => ({ ...prev, [campaignId]: 'success' }));
+      } else { setSubmissionLoadStates(prev => ({ ...prev, [campaignId]: 'error' })); }
     } catch (error) {
+      setSubmissionLoadStates(prev => ({ ...prev, [campaignId]: 'error' }));
       console.error('Error fetching submissions:', error);
     }
   };
@@ -233,7 +247,7 @@ export default function CompanyDashboard() {
     let attempts = 0;
     const maxAttempts = 60; // 5 minutes max
 
-    setStatusMessage('⏳ Waiting for payment confirmation from your bank...');
+    setStatusMessage('Waiting for payment confirmation from your bank...');
 
     pollingRef.current = setInterval(async () => {
       attempts++;
@@ -254,7 +268,7 @@ export default function CompanyDashboard() {
           stopPolling();
           setPaymentProcessing(false);
           setStatusMessage('');
-          setSuccessMessage('🎉 Payment confirmed! Your campaign is now live to promoters.');
+          setSuccessMessage("Payment confirmed! Your campaign is now live to promoters.");
           
           // Upload brand assets if any
           if (brandAssetFiles.length > 0 && data.campaign.id) {
@@ -265,6 +279,7 @@ export default function CompanyDashboard() {
 
           setTitle('');
           setDescription('');
+          setCampaignBrief(emptyCampaignBrief);
           setKeyMessage('');
           setBudget('');
           setBrandAssetFiles([]);
@@ -285,7 +300,7 @@ export default function CompanyDashboard() {
           );
         } else {
           setStatusMessage(
-            `⏳ Waiting for bank confirmation... (${attempts * 5}s elapsed). ` +
+            `Waiting for bank confirmation... (${attempts * 5}s elapsed). ` +
             `Please complete your transfer if you have not already.`
           );
         }
@@ -326,7 +341,7 @@ export default function CompanyDashboard() {
 
     // Capture all values before popup opens
     const campaignTitle = title;
-    const campaignDescription = description;
+    const campaignDescription = buildCampaignBrief(description, campaignBrief);
       const campaignKeyMessage = keyMessage;
       const campaignBudget = parseFloat(budget);
       const campaignPlatforms = selectedPlatforms;
@@ -452,9 +467,10 @@ export default function CompanyDashboard() {
 
       setPaymentProcessing(false);
       setStatusMessage('');
-      setSuccessMessage('🎉 Campaign created successfully! It is now live to promoters.');
+      setSuccessMessage("Campaign created successfully! It is now live to promoters.");
       setTitle('');
       setDescription('');
+          setCampaignBrief(emptyCampaignBrief);
       setKeyMessage('');
       setBudget('');
       setBrandAssetFiles([]);
@@ -476,426 +492,23 @@ export default function CompanyDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation Header */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-8">
-            <span className="text-2xl font-bold text-green-700 cursor-default">
-              SpreadFast
-            </span>
-            <div className="hidden md:flex gap-6">
-              <Link to="/company" className="text-green-700 hover:text-green-800 font-semibold">
-                Campaigns
-              </Link>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-700 font-medium">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600 transition"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Campaign Management</h1>
-          <p className="text-gray-600">Create campaigns and manage promoter subscriptions</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Campaign Creation Form */}
-          <div className="lg:col-span-1">
-            <form onSubmit={handlePaymentAndCreateCampaign} className="bg-white rounded-lg shadow-lg p-6 sticky top-24">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">Create Campaign</h2>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">
-                  {error}
-                </div>
-              )}
-
-              {successMessage && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6 text-sm">
-                  {successMessage}
-                </div>
-              )}
-
-              {statusMessage && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6 text-sm">
-                  {statusMessage}
-                </div>
-              )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Business Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., spreadfast"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
-                <textarea
-                  placeholder="Campaign details"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-                ></textarea>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">What should promoters communicate? *</label>
-                <textarea
-                  placeholder="e.g., We offer free delivery citywide, use promo code FAST20, we are Nigeria's #1 logistics app"
-                  value={keyMessage}
-                  onChange={(e) => {
-                    if (e.target.value.length <= 500) {
-                      setKeyMessage(e.target.value);
-                    }
-                  }}
-                  rows="3"
-                  maxLength="500"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-                  required
-                ></textarea>
-                <div className="flex justify-between items-center mt-2">
-                  <p className="text-xs text-gray-500">Max 500 characters. This is the key message promoters will share.</p>
-                  <p className={`text-xs font-semibold ${keyMessage.length >= 450 ? 'text-red-600' : 'text-gray-500'}`}>
-                    {keyMessage.length}/500
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Upload Brand Assets (Logo, Photos, Videos)</label>
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">💡 <strong>Campaigns with assets get 3x more promoter sign-ups</strong></p>
-                </div>
-                <input
-                  type="file"
-                  multiple
-                  accept=".jpg,.jpeg,.png,.mp4,.pdf"
-                  onChange={handleBrandAssetFiles}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
-                />
-                <p className="text-xs text-gray-500 mt-2">JPG, PNG, MP4, PDF • Max 20MB each • Max 10 files</p>
-
-                {/* File Preview Grid */}
-                {brandAssetPreviews.length > 0 && (
-                  <div className="mt-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      {brandAssetPreviews.map((item, idx) => (
-                        <div key={idx} className="relative">
-                          {item.error ? (
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
-                              <p className="text-xs text-red-600 font-semibold">{item.file.name.substring(0, 15)}...</p>
-                              <p className="text-xs text-red-500 mt-1">{item.error}</p>
-                            </div>
-                          ) : (
-                            <div className="bg-gray-100 rounded-lg overflow-hidden">
-                              {item.file.type.startsWith('image/') ? (
-                                <img src={item.preview} alt="preview" className="w-full h-20 object-cover" />
-                              ) : item.file.type === 'video/mp4' ? (
-                                <video src={item.preview} className="w-full h-20 object-cover" />
-                              ) : (
-                                <div className="w-full h-20 flex items-center justify-center bg-gray-200">
-                                  <span className="text-xs font-bold text-gray-600">PDF</span>
-                                </div>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => removeBrandAsset(idx)}
-                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                              >
-                                ✕
-                              </button>
-                              <p className="text-xs text-gray-600 p-1 truncate">{item.file.name.substring(0, 12)}...</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">{brandAssetFiles.length}/10 files selected</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Budget (NGN) *</label>
-                <div className="flex items-center">
-                  <span className="text-gray-700 font-semibold mr-2">₦</span>
-                  <input
-                    type="number"
-                    placeholder="e.g., 50000"
-                    value={budget}
-                    onChange={(e) => setBudget(e.target.value)}
-                    step="10000"
-                    min="10000"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Minimum ₦10,000. You'll be charged this amount via Paystack.</p>
-                {budget && (
-                  <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-800">
-                      <strong>Promoter Slots Available:</strong> {calculatePromoterSlots(budget)} slots
-                    </p>
-                    <p className="text-xs text-green-700 mt-1">
-                      ₦5,000 = 1 slot (₦10,000 = 2 slots, ₦20,000 = 4 slots)
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mb-8">
-                <label className="block text-sm font-bold text-gray-700 mb-3">Required Social Media Platforms *</label>
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <div className="mb-3">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={Object.values(socialMediaPlatforms).every(v => v === true)}
-                        onChange={handleSelectAllSocialMedia}
-                        className="w-4 h-4 text-green-700 rounded focus:ring-green-500"
-                      />
-                      <span className="ml-2 text-sm font-semibold text-gray-700">Select All Platforms</span>
-                    </label>
-                  </div>
-                  <div className="border-t border-gray-300 pt-3 space-y-2">
-                    {Object.entries({
-                      tiktok: 'TikTok',
-                      instagram: 'Instagram',
-                      twitter: 'Twitter',
-                      facebook: 'Facebook',
-                      youtube: 'YouTube'
-                    }).map(([key, label]) => (
-                      <label key={key} className="flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={socialMediaPlatforms[key]}
-                          onChange={() => handleSocialMediaChange(key)}
-                          className="w-4 h-4 text-green-700 rounded focus:ring-green-500"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">{label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>⚠️ Fee Notice:</strong> A 7.5% campaign creation fee is charged on all payments. This fee covers platform operations.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={paymentProcessing}
-                className={`w-full py-3 px-6 rounded-lg font-bold text-white transition ${
-                  paymentProcessing
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-green-700 hover:bg-green-800'
-                }`}
-              >
-                {paymentProcessing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block animate-spin">⌛</span>
-                    Processing Payment...
-                  </span>
-                ) : (
-                  'Pay & Create Campaign'
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Sidebar Info */}
-          <div>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-bold text-green-800 mb-4">How It Works</h3>
-              <ol className="space-y-3 text-sm text-gray-700">
-                <li><strong>1.</strong> Create your campaign with a title and budget</li>
-                <li><strong>2.</strong> Pay securely via Paystack (bank transfer or card)</li>
-                <li><strong>3.</strong> Your campaign goes live automatically after payment</li>
-                <li><strong>4.</strong> Promoters submit proofs of promotion</li>
-                <li><strong>5.</strong> Review and approve submissions</li>
-              </ol>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="text-lg font-bold text-blue-800 mb-4">Payment Info</h3>
-              <p className="text-sm text-gray-700 mb-3">
-                We use <strong>Paystack</strong> for secure payments. Bank transfer and card are both supported.
-              </p>
-              <p className="text-xs text-gray-600">
-                For bank transfers, your campaign goes live once your bank confirms the payment (usually 1–2 minutes).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Your Campaigns Section */}
-        {campaigns.length > 0 && (
-          <div className="mt-16">
-            <h2 className="text-3xl font-bold text-gray-800 mb-8">Your Campaigns</h2>
-            <div className="space-y-6">
-              {campaigns.map(campaign => (
-                <div
-                  key={campaign?.id}
-                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-6 border-l-4 border-green-500"
-                >
-                  <div
-                    onClick={() => setExpandedCampaignId(expandedCampaignId === campaign?.id ? null : campaign?.id)}
-                    className="cursor-pointer flex justify-between items-start"
-                  >
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">{campaign?.title || 'Untitled Campaign'}</h3>
-                      <p className="text-gray-600 text-sm mb-4">{campaign?.description || 'No description'}</p>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div className="bg-gray-50 p-3 rounded">
-                          <p className="text-xs text-gray-600">Budget</p>
-                          <p className="font-bold text-green-600">₦{parseFloat(campaign?.budget || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded">
-                          <p className="text-xs text-gray-600">Paid</p>
-                          <p className="font-bold text-gray-800">₦{parseFloat(campaign?.amountPaid || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded">
-                          <p className="text-xs text-gray-600">Status</p>
-                          <p className={`font-bold text-sm ${campaign?.status === 'active' ? 'text-green-600' : 'text-gray-600'}`}>
-                            {campaign?.status || 'Active'}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded">
-                          <p className="text-xs text-gray-600">Submissions</p>
-                          <p className="font-bold text-gray-800">{campaign?.submissions?.length || 0}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ml-4 text-2xl">
-                      {expandedCampaignId === campaign?.id ? '▼' : '▶'}
-                    </div>
-                  </div>
-
-                  {expandedCampaignId === campaign?.id && (
-                    <div className="mt-6 border-t border-gray-200 pt-6">
-                      {campaign?.keyMessage && (
-                        <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                          <p className="text-sm font-bold text-green-800 mb-2">📢 Key Message from Brand</p>
-                          <p className="text-gray-700 text-sm">{campaign?.keyMessage}</p>
-                        </div>
-                      )}
-                      {campaignAssets[campaign.id]?.length > 0 && (
-                        <div className="mb-6">
-                              <p className="text-lg font-bold text-gray-800 mb-4">
-                                 Brand Assets ({campaignAssets[campaign.id].length})
-                              </p>
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {campaignAssets[campaign.id].map((asset, idx) => (
-                                  <div key={idx} className="bg-gray-100 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition">
-                                    {asset.file_type === 'image' ? (
-                                          <img src={asset.url} alt={asset.file_name} className="w-full h-24 object-cover" />
-                                    ) : asset.file_type === 'video' ? (
-                                          <video src={asset.url} className="w-full h-24 object-cover" />
-                                    ) : (
-                                      <div className="w-full h-24 flex items-center justify-center bg-gray-200">
-                                            <span className="text-xs font-bold text-gray-600">PDF</span>
-                                          </div>
-                                        )}
-                                        <p className="text-xs text-gray-600 p-2 truncate">{asset.file_name}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                      
-
-                      <div className="mb-6">
-                        <h4 className="text-lg font-bold text-gray-800 mb-4">
-                          Subscribed Promoters ({campaign?.subscribedPromoters?.length || 0})
-                        </h4>
-
-                        {campaign?.subscribedPromoters && campaign?.subscribedPromoters?.length > 0 ? (
-                          <div className="space-y-3">
-                            {campaign?.subscribedPromoters?.map((promoter, idx) => (
-                              <div key={idx} className="bg-green-50 border border-green-200 rounded p-4 flex justify-between items-center">
-                                <div>
-                                  <p className="font-semibold text-gray-800">{promoter?.promoterName}</p>
-                                  <p className="text-xs text-gray-600">
-                                    Subscribed: {new Date(promoter?.subscribedAt).toLocaleDateString()}
-                                  </p>
-                                </div>
-                                <span className="px-3 py-1 bg-green-200 text-green-800 rounded-full text-sm font-semibold">
-                                  Active
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-gray-600 text-sm">No promoters subscribed yet</p>
-                        )}
-                      </div>
-
-                      {campaign?.submissions && campaign?.submissions?.length > 0 && (
-                        <div>
-                          <h4 className="text-lg font-bold text-gray-800 mb-4">
-                            Proof Submissions ({campaign?.submissions?.length})
-                          </h4>
-                          <div className="space-y-3">
-                            {campaign?.submissions?.map((submission) => (
-                              <div key={submission?.id} className="bg-blue-50 border border-blue-200 rounded p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <p className="font-semibold text-gray-800">{submission?.promoName}</p>
-                                    <p className="text-xs text-gray-600">{submission?.proofDescription}</p>
-                                  </div>
-                                  <span className={`px-3 py-1 rounded-full text-sm font-semibold text-white ${
-                                    submission?.status === 'approved' ? 'bg-green-500' :
-                                    submission?.status === 'rejected' ? 'bg-red-500' :
-                                    'bg-yellow-500'
-                                  }`}>
-                                    {submission?.status?.toUpperCase() || 'PENDING'}
-                                  </span>
-                                </div>
-                                {submission?.status === 'approved' && submission?.approvalAmount > 0 && (
-                                  <p className="text-sm text-green-600 font-semibold">Approved: ₦{submission?.approvalAmount}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+  const creationOpen = location.hash === '#create-campaign' || paymentProcessing;
+  return <section className="company-overview-page">
+    <div hidden={creationOpen}>
+      <CompanyOverview user={user} campaigns={campaigns} loadState={campaignLoadState}
+        campaignSubmissions={campaignSubmissions} submissionLoadStates={submissionLoadStates} campaignAssets={campaignAssets}
+        expandedCampaignId={expandedCampaignId} onToggleCampaign={id => setExpandedCampaignId(expandedCampaignId === id ? null : id)}
+        calculatePromoterSlots={calculatePromoterSlots} onRetry={fetchCampaigns} />
     </div>
-  );
-};
+    <section className="company-create-section" hidden={!creationOpen} aria-label="Create campaign">
+      <Link to="/company" className="company-create-back">&larr; Back to overview</Link>
+      <BusinessCreateCampaign values={{ title, description, keyMessage, budget, socialMediaPlatforms }}
+        onChange={(field, value) => ({ title: setTitle, description: setDescription, keyMessage: setKeyMessage, budget: setBudget })[field](value)}
+        brief={campaignBrief} onBriefChange={(field, value) => setCampaignBrief(prev => ({ ...prev, [field]: value }))}
+        onPlatformChange={handleSocialMediaChange} onSelectAllPlatforms={handleSelectAllSocialMedia}
+        assets={brandAssetPreviews} assetCount={brandAssetFiles.length} onAssetChange={handleBrandAssetFiles} onRemoveAsset={removeBrandAsset}
+        creatorCount={calculatePromoterSlots(budget)} onPayment={handlePaymentAndCreateCampaign}
+        paymentProcessing={paymentProcessing} error={error} success={successMessage} status={statusMessage} />
+    </section>
+  </section>;
+}

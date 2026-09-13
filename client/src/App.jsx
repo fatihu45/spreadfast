@@ -14,7 +14,9 @@ import PaymentCallback from './pages/PaymentCallback';
 import PromotionDashboard from './pages/PromotionDashboard';
 import AvailableCampaigns from './pages/AvailableCampaigns';
 import SubmitProof from './pages/SubmitProof';
+import DashboardShell from './components/DashboardShell';
 import './App.css';
+import './styles/legacy-ui.css';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = React.useContext(AuthContext);
@@ -60,7 +62,7 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <DashboardShell><Dashboard /></DashboardShell>
               </ProtectedRoute>
             }
           />
@@ -69,7 +71,7 @@ function App() {
             path="/company"
             element={
               <ProtectedRoute>
-                <CompanyDashboard />
+                <DashboardShell><CompanyDashboard /></DashboardShell>
               </ProtectedRoute>
             }
           />
@@ -78,7 +80,7 @@ function App() {
             path="/wallet"
             element={
               <ProtectedRoute>
-                <Wallet />
+                <DashboardShell><Wallet /></DashboardShell>
               </ProtectedRoute>
             }
           />
@@ -87,7 +89,7 @@ function App() {
             path="/promoter-dashboard"
             element={
               <ProtectedRoute>
-                <PromotionDashboard />
+                <DashboardShell><PromotionDashboard /></DashboardShell>
               </ProtectedRoute>
             }
           />
@@ -96,7 +98,7 @@ function App() {
             path="/available-campaigns"
             element={
               <ProtectedRoute>
-                <AvailableCampaigns />
+                <DashboardShell><AvailableCampaigns /></DashboardShell>
               </ProtectedRoute>
             }
           />
@@ -105,7 +107,7 @@ function App() {
             path="/submit-proof"
             element={
               <ProtectedRoute>
-                <SubmitProof />
+                <DashboardShell><SubmitProof /></DashboardShell>
               </ProtectedRoute>
             }
           />

@@ -29,6 +29,13 @@
     ],
     "status": "active",
     "paystackReference": "x6pmmd5kp4",
-    "createdAt": "2026-05-28T08:45:23.541Z"
+    "createdAt": "2026-05-28T08:45:23.541Z",
+    "subscribedPromoters": [
+      {
+        "promoterId": "b4fa7175-5a44-4966-befb-8749567b5c86",
+        "promoterName": "broski",
+        "subscribedAt": "2026-09-12T20:51:08.578Z"
+      }
+    ]
   }
 ]
