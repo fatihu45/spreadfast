@@ -105,16 +105,17 @@ test('payment failures stay visible after navigating back to overview',async()=>
  await act(async()=>finish({success:false,message:'Payment service unavailable'}));
  const alert=host.querySelector('[role="alert"]');expect(alert.textContent).toContain('Payment service unavailable');expect(alert.closest('[hidden]')).toBeNull();
 });
-test('V1 callback completes payment, failed assets stay retryable without another payment',async()=>{
+test.each(['total','partial'])('V1 callback completes payment, %s asset failures stay retryable without another payment',async failure=>{
  let popup;const originalFetch=global.fetch;window.PaystackPop={setup:jest.fn(options=>{popup=options;return{openIframe:jest.fn()};})};
  apiCallAuth.mockImplementation(async endpoint=>endpoint==='/api/payments/initiate'?{success:true,reference:'paid-ref',publicKey:'test-key'}:endpoint==='/api/campaigns'?{success:true,campaign:{id:'paid-campaign'}}:{success:true,assets:[],submissions:[]});
- global.fetch=jest.fn().mockResolvedValueOnce({ok:false,json:async()=>({success:false,message:'Upload unavailable'})}).mockResolvedValueOnce({ok:true,json:async()=>({success:true})});
- try{await render('/company#create-campaign');await act(async()=>Simulate.change(host.querySelector('input[type="file"]'),{target:{files:[new File(['brief'],'brief.pdf',{type:'application/pdf'})]}}));await enterCheckout();await act(async()=>Simulate.submit(host.querySelector('#create-campaign')));
+ global.fetch=jest.fn().mockResolvedValueOnce(failure === 'partial' ? {ok:true,json:async()=>({success:true,errors:[{file:'brief.pdf',fileIndex:0}]})} : {ok:false,json:async()=>({success:false,message:'Upload unavailable'})}).mockResolvedValueOnce({ok:true,json:async()=>({success:true})});
+ try{await render('/company#create-campaign');await act(async()=>Simulate.change(host.querySelector('input[type="file"]'),{target:{files:[new File(['brief'],'brief.pdf',{type:'application/pdf'}), ...(failure === 'partial' ? [new File(['ok'],'uploaded.pdf',{type:'application/pdf'})] : [])]}}));await enterCheckout();await act(async()=>Simulate.submit(host.querySelector('#create-campaign')));
  expect(typeof popup.callback).toBe('function');expect(popup.onSuccess).toBeUndefined();expect(popup.amount).toBe(2000000);
  await act(async()=>{popup.callback({reference:'paid-ref'});});
- expect(host.textContent).toContain('assets were not uploaded');expect(host.textContent).toContain('brief.pdf');expect(field('Budget (NGN)').value).toBe('');
+ expect(host.textContent).toContain('some assets could not be uploaded');expect(host.textContent).toContain('brief.pdf');expect(field('Budget (NGN)').value).toBe('');
  await click([...host.querySelectorAll('button')].find(b=>b.textContent==='Retry asset upload'));
  expect(host.textContent).toContain('Campaign assets uploaded successfully');expect(apiCallAuth.mock.calls.filter(c=>c[0]==='/api/payments/initiate')).toHaveLength(1);
+ expect([...global.fetch.mock.calls[1][1].body.getAll('files')].map(f=>f.name)).toEqual(['brief.pdf']);
  expect(global.fetch).toHaveBeenCalledTimes(2);expect(global.fetch.mock.calls.every(c=>c[0].endsWith('/api/campaigns/paid-campaign/assets/upload'))).toBe(true);
  }finally{global.fetch=originalFetch;delete window.PaystackPop;}
 });

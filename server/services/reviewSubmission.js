@@ -13,15 +13,24 @@ async function reviewSubmission(DB, submissionId, status, requestedAmount) {
       if (status !== 'approved') fail('A paid submission cannot be reopened.', 409);
       return submission;
     }
-    const update = {status, reviewedAt: new Date().toISOString()};
-    if (status === 'approved') {
-      const amount = Number(requestedAmount);
-      if (!Number.isFinite(amount) || amount <= 0) fail('A positive approval amount is required.');
-      const user = await DB.User.findOne({id: submission.userId});
-      if (!user) fail('Promoter not found', 404);
-      update.approvalAmount = amount;
-      await DB.User.updateOne({id: user.id}, {walletBalance: (user.walletBalance || 0) + amount});
+    const user = await DB.User.findOne({id: submission.userId});
+    if (!user) fail('Promoter not found', 404);
+    const receipt = (user.legacyCredits || []).find(c => c.submissionId === submissionId);
+    if (status !== 'approved') {
+      if (receipt) fail('A paid submission cannot be reopened.', 409);
+      await DB.Submission.updateOne({id: submissionId, status: submission.status}, {status, reviewedAt: new Date().toISOString()});
+      return;
     }
+    const amount = receipt ? receipt.amount : Number(requestedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) fail('A positive approval amount is required.');
+    await DB.User.updateOne({id: user.id, 'legacyCredits.submissionId': {$ne: submissionId}}, {
+      $inc: {walletBalance: amount},
+      $push: {legacyCredits: {submissionId, amount, creditedAt: new Date().toISOString()}}
+    });
+    const creditedUser = await DB.User.findOne({id: user.id});
+    const credit = (creditedUser.legacyCredits || []).find(c => c.submissionId === submissionId);
+    if (!credit) fail('Approval could not be credited. Please retry.', 409);
+    const update = {status: 'approved', approvalAmount: credit.amount, reviewedAt: credit.creditedAt};
     await DB.Submission.updateOne({id: submissionId}, update);
     return {...submission, ...update};
   }

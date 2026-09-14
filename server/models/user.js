@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['promoter', 'company', 'admin'], default: 'promoter' },
   status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
+  tokenVersion: { type: Number, default: 0 },
+  legacyCredits: { type: [{ submissionId: String, amount: Number, creditedAt: String }], default: [] },
   walletBalance: { type: Number, default: 0 },
   campaignCredits: { type: [{ campaignId: String, submissionId: String, amount: Number, creditedAt: String }], default: [] },
   bankDetails: { type: Object, default: null },

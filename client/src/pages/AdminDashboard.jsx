@@ -1,3 +1,4 @@
+import SubmissionEvidence from '../components/SubmissionEvidence';
 import { creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
 import React, { useState, useEffect, useContext } from 'react';
@@ -246,7 +247,7 @@ export default function AdminDashboard() {
           <div className="sf-admin-record-heading"><div><h2 className="sf-heading">{submission.userName || 'Unknown Promoter'}</h2><p className="sf-small sf-muted">{submission.campaignName || submission.campaignId}</p></div><Status value={submission.status} /></div>
           <p className="sf-admin-description sf-small">{submission.proofDescription || 'No proof description provided.'}</p>
           <dl className="sf-admin-details"><Detail label="Platforms"><Platforms values={submission.platforms || []} /></Detail><Detail label="Submitted">{date(submission.createdAt)}</Detail>
-            <Detail label="Proof URL">{submission.proofUrl ? <a className="sf-admin-proof sf-text-link" href={submission.proofUrl} target="_blank" rel="noopener noreferrer">{submission.proofUrl}</a> : 'Not provided'}</Detail>
+            <Detail label="Proof URL"><SubmissionEvidence submission={submission} /></Detail>
             {submission.approvalAmount > 0 && <Detail label="Approved amount">{money(submission.approvalAmount)}</Detail>}
           </dl>
           {submission.status === 'pending' && <div className="sf-admin-actions"><Button onClick={() => setApprovalForm({ submissionId: submission.id, approvalAmount: creatorEarning(campaigns.find(c => c.id === submission.campaignId) || submission) ?? 5000, visible: true })}>Approve</Button><Button variant="ghost" className="sf-admin-destructive" onClick={() => handleSubmissionReject(submission.id)}>Reject</Button></div>}

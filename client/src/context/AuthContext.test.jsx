@@ -10,3 +10,8 @@ async function mount(){await act(async()=>root.render(<AuthProvider><Probe/></Au
 test('late validation cannot restore the logged-out user',async()=>{let finish;localStorage.setItem('token','old');global.fetch.mockImplementation(()=>new Promise(resolve=>finish=resolve));await mount();await act(async()=>context.logout());await act(async()=>finish({ok:true,status:200,json:async()=>({success:true,user:{name:'Old user'}})}));expect(context.user).toBeNull();expect(context.token).toBeNull();expect(jest.getTimerCount()).toBe(0);});
 test('logout cancels scheduled validation retries',async()=>{localStorage.setItem('token','old');global.fetch.mockRejectedValue(Error('offline'));await mount();expect(global.fetch).toHaveBeenCalledTimes(1);await act(async()=>context.logout());await act(async()=>jest.advanceTimersByTime(600000));expect(global.fetch).toHaveBeenCalledTimes(1);expect(context.user).toBeNull();});
 test.each(['login','register'])('%s keeps backend rejection details',async action=>{global.fetch.mockResolvedValue({ok:false,status:400,json:async()=>({message:'Specific account error'})});await mount();let result;await act(async()=>{result=action==='login'?await context.login('email','password'):await context.register('Name','email','password','promoter');});expect(result).toEqual({success:false,message:'Specific account error'});});
+
+test.each([401,403])('invalid or suspended account response %s clears stored authentication without retry',async status=>{
+ localStorage.setItem('token','old');global.fetch.mockResolvedValue({ok:false,status,json:async()=>({success:false})});await mount();
+ expect(context.token).toBeNull();expect(context.user).toBeNull();expect(localStorage.getItem('token')).toBeNull();expect(jest.getTimerCount()).toBe(0);
+});

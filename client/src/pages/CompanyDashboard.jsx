@@ -1,3 +1,4 @@
+import { failedUploadFiles } from '../utils/failedUploadFiles';
 import { Alert, Button } from '../components/ui';
 import { pollCampaign } from '../utils/pollCampaign';
 import { newCreatorCount, isValidCampaignBudget } from '../utils/campaignPricing';
@@ -235,7 +236,7 @@ export default function CompanyDashboard() {
       const data = await res.json();
       if (!res.ok) {
         console.error('Asset upload error:', data.message);
-        return { success: false, message: data.message };
+        return { ...data, success: false, message: data.message };
       }
 
       return data;
@@ -249,9 +250,10 @@ export default function CompanyDashboard() {
     setStatusMessage('');
     if (brandAssetFiles.length) {
       const uploaded = await uploadBrandAssets(campaign.id, brandAssetFiles, authToken);
-      if (!uploaded.success) {
-        setAssetRetry({ campaignId: campaign.id, files: brandAssetFiles, authToken });
-        setError('Your campaign is live, but its assets were not uploaded. ' + (uploaded.message || 'Please retry the upload below.'));
+      const failedFiles = failedUploadFiles(brandAssetFiles, uploaded);
+      if (failedFiles.length) {
+        setAssetRetry({ campaignId: campaign.id, files: failedFiles, authToken });
+        setError('Your campaign is live, but some assets could not be uploaded. ' + (uploaded.message || 'Please retry the upload below.'));
       } else {
         setBrandAssetFiles([]); setBrandAssetPreviews([]); setAssetRetry(null);
       }
@@ -267,10 +269,14 @@ export default function CompanyDashboard() {
     setRetryingAssets(true);
     try {
       const result = await uploadBrandAssets(assetRetry.campaignId, assetRetry.files, assetRetry.authToken);
-      if (result.success) {
+      const failedFiles = failedUploadFiles(assetRetry.files, result);
+      if (!failedFiles.length) {
         setAssetRetry(null); setBrandAssetFiles([]); setBrandAssetPreviews([]); setError('');
         setSuccessMessage('Campaign assets uploaded successfully.'); fetchCampaigns();
-      } else setError('Campaign assets could not be uploaded. ' + (result.message || 'Please retry.'));
+      } else {
+        setAssetRetry({...assetRetry, files: failedFiles});
+        setError('Some campaign assets could not be uploaded. ' + (result.message || 'Please retry.'));
+      }
     } finally { setRetryingAssets(false); }
   };
 

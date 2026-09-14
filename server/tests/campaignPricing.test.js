@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const pricing = require('../services/campaignPricing');
 const { reviewSubmission } = require('../services/reviewSubmission');
+const {requestWithdrawal, reviewWithdrawal} = require('../services/wallet');
 const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 // Run the real route and JSON adapter code with in-memory storage. Never start the
 // server, load .env, connect to MongoDB, contact Paystack, or write application data.
@@ -12,7 +13,7 @@ function fixture() {
   const files = {'users.json': [{id: 'company', email: 'company@example.test'}, {id:'creator', walletBalance: 1200}],
     'campaigns.json': [], 'transactions.json': [], 'submissions.json': []};
   let nextId = 0;
-  const context = { ...pricing, reviewSubmission, console: {log(){},warn(){},error(){}},
+  const context = { ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal, console: {log(){},warn(){},error(){}},
     Date, Buffer, process: {env: {}}, uuidv4: () => 'id-' + (++nextId),
     readJSON: name => structuredClone(files[name] || []), writeJSON: (name, data) => {files[name] = structuredClone(data);},
     isMongoConnected: () => false, authenticateToken(){},
@@ -29,7 +30,7 @@ function fixture() {
   const persistStart = source.indexOf('async function persistPaidCampaign');
   vm.runInContext(source.slice(persistStart, source.indexOf('// ==================== MONGODB CONNECTION', persistStart)), context);
   const routes = {};
-  context.app = Object.fromEntries(['post','get','patch'].map(method => [method, (route, ...handlers) => {routes[method + ' ' + route] = handlers.at(-1);} ]));
+  context.app = Object.fromEntries(['post','get','patch','delete'].map(method => [method, (route, ...handlers) => {routes[method + ' ' + route] = handlers.at(-1);} ]));
   async function call(method, route, body = {}, userId = 'company', params = {}) {
     const key = method + ' ' + route;
     if (!routes[key]) {
@@ -40,7 +41,7 @@ function fixture() {
     }
     const result = {status: 200};
     const res = {status(code){result.status=code; return this;}, json(body){result.body=body;return this;}, send(body){result.body=body;return this;}, sendStatus(code){result.status=code;return this;}};
-    const req = {body, params, user: {id: userId, email:'admin@example.test'}, headers: {}};
+    const req = {body, params, user: {id: userId, email:'admin@example.test', role: files['users.json'].find(u => u.id === userId)?.role || (userId === 'company' ? 'company' : 'promoter')}, headers: {}};
     if (route.endsWith('/webhook')) {
       req.rawBody = Buffer.from(JSON.stringify(body));
       req.headers['x-paystack-signature'] = context.crypto.createHmac('sha512', 'test-only').update(req.rawBody).digest('hex');
@@ -48,6 +49,17 @@ function fixture() {
     await routes[key](req,res);
     return result;
   }
+  // Simulate transactional commit/rollback without connecting to application databases.
+  let queue = Promise.resolve();
+  context.DB.withTransaction = work => {
+    const result = queue.then(async () => {
+      const before = structuredClone(files);
+      try { return await work(context.DB); }
+      catch (error) { for (const key of Object.keys(files)) delete files[key]; Object.assign(files, before); throw error; }
+    });
+    queue = result.catch(() => {});
+    return result;
+  };
   return {context, files, call};
 }
 function funded(f) {
@@ -91,6 +103,7 @@ test('unpaid, mismatched and foreign payments cannot create campaigns', async ()
   const f=fixture();funded(f);
   assert.equal((await f.call('post','/api/campaigns',{title:'Unpaid',budget:20000})).status,400);
   assert.equal((await f.call('post','/api/campaigns',{title:'Tampered',budget:40000,reference:'ref'})).status,400);
+  f.files['users.json'].push({id:'other', role:'company'});
   assert.equal((await f.call('post','/api/campaigns',{title:'Foreign',budget:20000,reference:'ref'},'other')).status,404);
   for (const charge of [{amount:1000000},{currency:'USD'},{status:'failed'}]) {
     f.context.charge={reference:'ref',status:'success',currency:'NGN',amount:2000000,...charge};
@@ -176,13 +189,14 @@ test('mounted admin routes use recorded revenue and enforce net approval', async
     if(name==='../middleware/auth') return {authenticateToken(){}};
     if(name==='../services/campaignPricing') return pricing;
     if(name==='../services/reviewSubmission') return {reviewSubmission};
+    if(name==='../services/wallet') return {reviewWithdrawal};
     throw Error('Unexpected dependency '+name);
   }};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../routes/admin.js'),'utf8'),context);
   const result={}; const res={status(code){result.status=code;return this;},json(body){result.body=body;}};
-  await routes['get /all-stats']({},res); assert.equal(result.body.stats.totalCampaignFees,5000);
-  await routes['patch /submissions/:submissionId']({params:{submissionId:'s1'},body:{status:'approved',approvalAmount:20000}},res); assert.equal(result.status,400);
-  await routes['patch /submissions/:submissionId']({params:{submissionId:'s1'},body:{status:'approved',approvalAmount:15000}},res);
+  await routes['get /all-stats']({app:{locals:{db:f.context.DB}}},res); assert.equal(result.body.stats.totalCampaignFees,5000);
+  await routes['patch /submissions/:submissionId']({app:{locals:{db:f.context.DB}},params:{submissionId:'s1'},body:{status:'approved',approvalAmount:20000}},res); assert.equal(result.status,400);
+  await routes['patch /submissions/:submissionId']({app:{locals:{db:f.context.DB}},params:{submissionId:'s1'},body:{status:'approved',approvalAmount:15000}},res);
   assert.equal(result.body.success,true); assert.equal(f.files['users.json'][1].walletBalance,16200);
 });
 
@@ -199,4 +213,123 @@ test('a payment for a deleted campaign cannot fund another set of creator slots'
   f.files['transactions.json'][0].campaignCreated=true;
   const result=await f.call('post','/api/campaigns',{title:'Reuse',budget:20000,reference:'ref'});
   assert.equal(result.status,410);assert.equal(f.files['campaigns.json'].length,0);
+});
+
+test('concurrent withdrawals cannot reserve more than the wallet balance', async () => {
+  const f=fixture();Object.assign(f.files['users.json'][1], {walletBalance:15000,bankDetails:{bankName:'Test',accountNumber:'1234567890'}});
+  const results=await Promise.all(['/api/wallet/withdraw','/api/withdrawals'].map(route=>f.call('post',route,{amount:10000},'creator')));
+  assert.equal(results.filter(r=>r.body.success).length,1);
+  assert.equal(f.files['users.json'][1].walletBalance,5000);
+  assert.equal(f.files['withdrawals.json'].reduce((n,w)=>n+w.amount,0),10000);
+});
+test('withdrawal persistence failure rolls back its balance debit',async()=>{
+  const f=fixture();Object.assign(f.files['users.json'][1],{walletBalance:15000,bankDetails:{bankCode:'001',accountNumber:'1234567890'}});
+  f.context.DB.Withdrawal.create=async()=>{throw Error('Write failed');};
+  assert.equal((await f.call('post','/api/wallet/withdraw',{amount:1000},'creator')).status,500);
+  assert.equal(f.files['users.json'][1].walletBalance,15000);
+});
+test('repeated rejection refunds once, terminal withdrawals cannot reopen',async()=>{
+  const f=fixture();f.files['withdrawals.json']=[{id:'w',promoterId:'creator',amount:1000,status:'pending'}];
+  await Promise.all([reviewWithdrawal(f.context.DB,'w','rejected'),reviewWithdrawal(f.context.DB,'w','rejected')]);
+  assert.equal(f.files['users.json'][1].walletBalance,2200);
+  for(const status of ['pending','completed']) await assert.rejects(reviewWithdrawal(f.context.DB,'w',status), /cannot be reopened/);
+});
+test('failed refund state write rolls back credit and can be retried once',async()=>{
+  const f=fixture();f.files['withdrawals.json']=[{id:'w',userId:'creator',amount:1000,status:'pending'}];
+  const update=f.context.DB.Withdrawal.updateOne;f.context.DB.Withdrawal.updateOne=async()=>{throw Error('Write failed');};
+  await assert.rejects(reviewWithdrawal(f.context.DB,'w','rejected'),/Write failed/);
+  assert.equal(f.files['users.json'][1].walletBalance,1200);
+  f.context.DB.Withdrawal.updateOne=update;await reviewWithdrawal(f.context.DB,'w','rejected');
+  assert.equal(f.files['users.json'][1].walletBalance,2200);
+});
+test('withdrawal endpoints enforce numeric minimum and share pending history',async()=>{
+  const f=fixture();Object.assign(f.files['users.json'][1],{walletBalance:15000,bankDetails:{bankName:'Test',accountNumber:'1234567890'}});
+  for(const amount of [1,999,NaN,Infinity,'1000',1000.1]) assert.equal((await f.call('post','/api/wallet/withdraw',{amount},'creator')).status,400);
+  f.files['withdrawals.json']=[{id:'legacy',promoterId:'creator',amount:1000,status:'pending'},{id:'other',userId:'other',amount:9000,status:'pending'}];
+  assert.equal((await f.call('get','/api/wallet/withdrawals/pending',{},'creator')).body.pendingAmount,1000);
+});
+test('legacy approval retries after a write failure do not credit twice or reprice',async()=>{
+  const f=reviewFixture();delete f.files['campaigns.json'][0].pricing;
+  const update=f.context.DB.Submission.updateOne;f.context.DB.Submission.updateOne=async()=>{throw Error('Write failed');};
+  await assert.rejects(reviewSubmission(f.context.DB,'s1','approved',7250.5),/Write failed/);
+  f.context.DB.Submission.updateOne=update;
+  await Promise.all([reviewSubmission(f.context.DB,'s1','approved',5000),reviewSubmission(f.context.DB,'s1','approved',5000)]);
+  assert.equal(f.files['users.json'][1].walletBalance,8450.5);
+  assert.equal(f.files['submissions.json'][0].approvalAmount,7250.5);
+});
+test('assets cannot be downloaded or deleted through another campaign',async()=>{
+  const f=fixture();f.files['campaigns.json']=[{id:'own',companyId:'company'}];
+  f.files['campaign_assets.json']=[{_id:'victim',campaign_id:'other',is_active:true}];
+  let called=false;f.context.cloudinary={url:()=>{called=true;},uploader:{destroy:async()=>{called=true;}}};
+  for(const [method,route] of [['get','/api/campaigns/:campaignId/assets/:assetId/download'],['delete','/api/campaigns/:campaignId/assets/:assetId']]) {
+    assert.equal((await f.call(method,route,{},'company',{campaignId:'own',assetId:'victim'})).status,404);
+  }
+  assert.equal(called,false);assert.equal(f.files['campaign_assets.json'][0].is_active,true);
+});
+test('only the campaign owner or admin can retrieve campaign submissions',async()=>{
+  const f=fixture();f.files['campaigns.json']=[{id:'c',companyId:'company'}];f.files['submissions.json']=[{id:'s',campaignId:'c'}];
+  assert.equal((await f.call('get','/api/campaigns/:campaignId/submissions',{},'creator',{campaignId:'c'})).status,403);
+  assert.equal((await f.call('get','/api/campaigns/:campaignId/submissions',{},'company',{campaignId:'c'})).body.submissions.length,1);
+});
+test('webhook persistence failures request retry instead of acknowledging success',async()=>{
+  const f=fixture();funded(f);const create=f.context.DB.Campaign.create;
+  f.context.DB.Campaign.create=async()=>{throw Error('Database unavailable');};
+  assert.equal((await f.call('post','/api/payments/webhook',{event:'charge.success',data:f.context.charge})).status,503);
+  assert.equal(f.files['campaigns.json'].length,0);
+  f.context.DB.Campaign.create=create;
+  assert.equal((await f.call('post','/api/payments/webhook',{event:'charge.success',data:f.context.charge})).status,200);
+  assert.equal(f.files['campaigns.json'].length,1);
+});
+test('registration saves social profiles, rejects privileged roles and reserved admin email',async()=>{
+  const f=fixture();f.context.bcrypt={hash:async()=> 'test-hash'};f.context.jwt={sign:()=> 'test-token'};f.context.sendWelcomeEmail=async()=>{};
+  const body={name:'Test',email:'new@example.test',password:'test-password',role:'promoter',socialMedia:{tiktok:'@creator'}};
+  assert.equal((await f.call('post','/api/auth/register',{...body,role:'admin'})).status,400);
+  f.context.process.env.ADMIN_EMAIL='admin@example.test';
+  assert.equal((await f.call('post','/api/auth/register',{...body,email:'ADMIN@example.test'})).status,400);
+  assert.equal((await f.call('post','/api/auth/register',body)).body.success,true);
+  assert.equal(f.files['users.json'].at(-1).socialMedia.tiktok,'@creator');
+});
+test('banned accounts cannot log in and creator accounts cannot purchase campaigns',async()=>{
+  const f=fixture();f.files['users.json'][1].status='banned';f.files['users.json'][1].email='creator@example.test';
+  f.context.bcrypt={compare:async()=>true};f.context.jwt={sign:()=> 'test-token'};
+  assert.equal((await f.call('post','/api/auth/login',{email:'creator@example.test',password:'test'})).status,403);
+  assert.equal((await f.call('post','/api/payments/initiate',{amount:20000},'creator')).status,403);
+  assert.equal((await f.call('post','/api/campaigns/:campaignId/subscribe',{},'company',{campaignId:'c'})).status,403);
+});
+test('production database proxy never falls back to JSON when disconnected',()=>{
+  const start=source.indexOf('const DB = new Proxy'); const end=source.indexOf('app.locals.db = DB;',start);
+  const context={process:{env:{NODE_ENV:'production'}},isMongoConnected:()=>false};
+  vm.runInNewContext(source.slice(start,end)+'\nthis.database=DB;',context);
+  assert.throws(()=>context.database.User,/Database temporarily unavailable/);
+});
+test('corrupt JSON is rejected rather than silently treated as empty data',()=>{
+  const start=source.indexOf('const readJSON =');const end=source.indexOf('const writeJSON =',start);
+  const context={path:{join:(a,b)=>b},DATA_DIR:'test',fs:{existsSync:()=>true,readFileSync:()=>'{broken'}};
+  vm.runInNewContext(source.slice(start,end)+'\nthis.read=readJSON;',context);
+  assert.throws(()=>context.read('submissions.json'),/Local data is invalid/);
+});
+
+test('legacy paid webhook retries recover the same campaign without changing its terms',async()=>{
+ const f=fixture();funded(f);delete f.files['transactions.json'][0].pricing;
+ const update=f.context.DB.PaystackTransaction.updateOne;f.context.DB.PaystackTransaction.updateOne=async()=>{throw Error('Write failed');};
+ assert.equal((await f.call('post','/api/payments/webhook',{event:'charge.success',data:f.context.charge})).status,503);
+ const id=f.files['campaigns.json'][0].id;
+ f.context.DB.PaystackTransaction.updateOne=update;
+ assert.equal((await f.call('post','/api/payments/webhook',{event:'charge.success',data:f.context.charge})).status,200);
+ assert.equal(f.files['campaigns.json'].length,1);assert.equal(f.files['transactions.json'][0].campaignId,id);
+ assert.equal(f.files['campaigns.json'][0].pricing,undefined);
+});
+
+test('password reset increments the session version without changing wallet balances',async()=>{
+ const f=fixture();const user=f.files['users.json'][1];user.tokenVersion=2;user.resetPasswordTokenHash=f.context.crypto.createHash('sha256').update('reset-test').digest('hex');user.resetPasswordExpires=new Date(Date.now()+60000).toISOString();
+ f.context.bcrypt={hash:async()=> 'replacement-test-hash'};
+ assert.equal((await f.call('post','/api/auth/reset-password',{token:'reset-test',newPassword:'replacement-password'})).body.success,true);
+ assert.equal(f.files['users.json'][1].tokenVersion,3);assert.equal(f.files['users.json'][1].walletBalance,1200);
+});
+
+test('recovery reuses a historical campaign ID and its saved presentation and terms',async()=>{
+ const f=fixture();funded(f);delete f.files['transactions.json'][0].pricing;
+ f.files['campaigns.json']=[{id:'historical-id',companyId:'company',title:'Historical campaign',budget:'20000',paystackReference:'ref'}];
+ const response=await f.call('post','/api/campaigns',{title:'Do not overwrite',budget:20000,reference:'ref'});
+ assert.equal(response.body.success,true);assert.equal(response.body.campaign.id,'historical-id');assert.equal(response.body.campaign.title,'Historical campaign');assert.equal(f.files['campaigns.json'].length,1);
 });

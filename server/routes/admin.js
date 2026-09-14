@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
 const { feeStats } = require('../services/campaignPricing');
 const { reviewSubmission } = require('../services/reviewSubmission');
+const { reviewWithdrawal } = require('../services/wallet');
+const database = req => req.app.locals.db;
 
 const { authenticateToken } = require('../middleware/auth');
 
@@ -18,10 +19,10 @@ const auth = [authenticateToken, adminOnly];
 // ==================== STATS ====================
 router.get('/all-stats', auth, async (req, res) => {
   try {
-    const User = mongoose.model('User');
-    const Campaign = mongoose.model('Campaign');
-    const Submission = mongoose.model('Submission');
-    const Withdrawal = mongoose.model('Withdrawal');
+    const User = database(req).User;
+    const Campaign = database(req).Campaign;
+    const Submission = database(req).Submission;
+    const Withdrawal = database(req).Withdrawal;
 
     const users = await User.find({});
     const campaigns = await Campaign.find({});
@@ -49,7 +50,7 @@ router.get('/all-stats', auth, async (req, res) => {
         pendingWithdrawalAmount: withdrawals
           .filter(w => w.status === 'pending')
           .reduce((sum, w) => sum + w.amount, 0),
-        ...feeStats(campaigns, await mongoose.model('PaystackTransaction').find({}))
+        ...feeStats(campaigns, await database(req).PaystackTransaction.find({}))
       }
     });
   } catch (err) {
@@ -61,7 +62,7 @@ router.get('/all-stats', auth, async (req, res) => {
 // ==================== CAMPAIGNS ====================
 router.get('/campaigns', auth, async (req, res) => {
   try {
-    const Campaign = mongoose.model('Campaign');
+    const Campaign = database(req).Campaign;
     const campaigns = await Campaign.find({});
     res.json({ success: true, campaigns });
   } catch (err) {
@@ -72,7 +73,7 @@ router.get('/campaigns', auth, async (req, res) => {
 
 router.patch('/campaigns/:campaignId', auth, async (req, res) => {
   try {
-    const Campaign = mongoose.model('Campaign');
+    const Campaign = database(req).Campaign;
     const { status } = req.body;
 
     if (!status || !['active', 'paused', 'closed'].includes(status)) {
@@ -96,7 +97,7 @@ router.patch('/campaigns/:campaignId', auth, async (req, res) => {
 
 router.delete('/campaigns/:campaignId', auth, async (req, res) => {
   try {
-    const Campaign = mongoose.model('Campaign');
+    const Campaign = database(req).Campaign;
     const campaign = await Campaign.findOne({ id: req.params.campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
@@ -111,8 +112,8 @@ router.delete('/campaigns/:campaignId', auth, async (req, res) => {
 // ==================== SUBMISSIONS ====================
 router.get('/submissions', auth, async (req, res) => {
   try {
-    const Submission = mongoose.model('Submission');
-    const Campaign = mongoose.model('Campaign');
+    const Submission = database(req).Submission;
+    const Campaign = database(req).Campaign;
 
     const submissions = await Submission.find({});
     const campaigns = await Campaign.find({});
@@ -134,8 +135,8 @@ router.get('/submissions', auth, async (req, res) => {
 
 router.patch('/submissions/:submissionId', auth, async (req, res) => {
   try {
-    const Submission = mongoose.model('Submission');
-    const User = mongoose.model('User');
+    const Submission = database(req).Submission;
+    const User = database(req).User;
 
     const { status, approvalAmount } = req.body;
 
@@ -143,7 +144,7 @@ router.patch('/submissions/:submissionId', auth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid status required' });
     }
 
-    await reviewSubmission({Submission, User, Campaign: mongoose.model('Campaign')}, req.params.submissionId, status, approvalAmount);
+    await reviewSubmission({Submission, User, Campaign: database(req).Campaign}, req.params.submissionId, status, approvalAmount);
     res.json({ success: true, message: `Submission ${status}` });
   } catch (err) {
     console.error('Admin submission patch error:', err);
@@ -154,7 +155,7 @@ router.patch('/submissions/:submissionId', auth, async (req, res) => {
 // ==================== WITHDRAWALS ====================
 router.get('/withdrawals', auth, async (req, res) => {
   try {
-    const Withdrawal = mongoose.model('Withdrawal');
+    const Withdrawal = database(req).Withdrawal;
     const withdrawals = await Withdrawal.find({});
     res.json({ success: true, withdrawals });
   } catch (err) {
@@ -165,47 +166,15 @@ router.get('/withdrawals', auth, async (req, res) => {
 
 router.patch('/withdrawals/:withdrawalId', auth, async (req, res) => {
   try {
-    const Withdrawal = mongoose.model('Withdrawal');
-    const User = mongoose.model('User');
-
-    const { status } = req.body;
-
-    if (!status || !['completed', 'pending', 'rejected'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Valid status required' });
-    }
-
-    const withdrawal = await Withdrawal.findOne({ id: req.params.withdrawalId });
-    if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
-
-    const oldStatus = withdrawal.status;
-    await Withdrawal.updateOne(
-      { id: req.params.withdrawalId },
-      { status, reviewedAt: new Date().toISOString() }
-    );
-
-    // Refund wallet if rejected
-    if (status === 'rejected' && oldStatus === 'pending') {
-      const userId = withdrawal.userId || withdrawal.promoterId;
-      const user = await User.findOne({ id: userId });
-      if (user) {
-        await User.updateOne(
-          { id: userId },
-          { walletBalance: (user.walletBalance || 0) + withdrawal.amount }
-        );
-      }
-    }
-
-    res.json({ success: true, message: `Withdrawal marked ${status}` });
-  } catch (err) {
-    console.error('Admin withdrawal patch error:', err);
-    res.status(500).json({ success: false, message: err.message });
-  }
+    const withdrawal = await reviewWithdrawal(database(req), req.params.withdrawalId, req.body.status);
+    res.json({success: true, message: 'Withdrawal reviewed', withdrawal});
+  } catch (error) { res.status(error.statusCode || 500).json({success: false, message: error.message}); }
 });
 
 // ==================== USERS ====================
 router.get('/users', auth, async (req, res) => {
   try {
-    const User = mongoose.model('User');
+    const User = database(req).User;
     const users = await User.find({}, { password: 0 });
     res.json({ success: true, users });
   } catch (err) {

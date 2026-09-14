@@ -93,3 +93,17 @@ test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('Exit Admin in %s logs 
   const input=host.querySelector('input[type="number"]'); expect(input.value).toBe('15000'); expect(input.readOnly).toBe(true);
   await click('Confirm Approval'); mutation('/api/admin/submissions/s1', 'PATCH', {status:'approved', approvalAmount:15000});
  });
+
+test('admin review displays real multi-platform links and screenshot evidence', async () => {
+  apiCallAuth.mockImplementation(async endpoint => endpoint.endsWith('/submissions') ? {success:true,submissions:[{...submissions[0],proofUrl:JSON.stringify({tiktok:'https://www.tiktok.com/@creator/video/123',instagram:'https://www.instagram.com/p/123/'}),screenshot:'https://example.test/proof.png'}]} : {success:true,stats,campaigns,withdrawals});
+  await render(); await tab('Submissions');
+  expect(host.querySelector('a[href="https://www.tiktok.com/@creator/video/123"]')).not.toBeNull();
+  expect(host.querySelector('a[href="https://www.instagram.com/p/123/"]')).not.toBeNull();
+  expect(host.querySelector('img[alt="Submitted proof screenshot"]').src).toBe('https://example.test/proof.png');
+});
+test('admin evidence does not render unsafe links', async () => {
+  apiCallAuth.mockImplementation(async endpoint => endpoint.endsWith('/submissions') ? {success:true,submissions:[{...submissions[0],proofUrl:JSON.stringify({tiktok:'javascript:alert(1)'}),screenshot:'data:text/html,bad'}]} : {success:true,stats,campaigns,withdrawals});
+  await render(); await tab('Submissions');
+  expect(host.querySelector('.sf-admin-proof')).toBeNull();
+  expect(host.querySelector('img[alt="Submitted proof screenshot"]')).toBeNull();
+});

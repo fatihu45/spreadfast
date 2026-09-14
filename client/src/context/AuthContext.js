@@ -52,7 +52,7 @@ export function AuthProvider({ children }) {
         headers: { Authorization: 'Bearer ' + token }, credentials: 'include', signal: controller.signal
       });
       if (generation !== validation.current.generation) return;
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         clearAllTokens(); setToken(null); setUser(null); setLoading(false); return;
       }
       const data = await readResponse(response);
