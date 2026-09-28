@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const pricing = require('../services/campaignPricing');
+const quickAdPayments = require('../services/quickAdPayments');
 const { reviewSubmission } = require('../services/reviewSubmission');
 const {requestWithdrawal, reviewWithdrawal} = require('../services/wallet');
 const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
@@ -13,7 +14,9 @@ function fixture() {
   const files = {'users.json': [{id: 'company', email: 'company@example.test'}, {id:'creator', walletBalance: 1200}],
     'campaigns.json': [], 'transactions.json': [], 'submissions.json': []};
   let nextId = 0;
-  const context = { ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal, console: {log(){},warn(){},error(){}},
+  const context = { ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
+    QUICK_AD_PAYMENT_PURPOSE: quickAdPayments.PURPOSE, assertCampaignPayment: quickAdPayments.assertCampaignPayment,
+    console: {log(){},warn(){},error(){}},
     Date, Buffer, process: {env: {}}, uuidv4: () => 'id-' + (++nextId),
     readJSON: name => structuredClone(files[name] || []), writeJSON: (name, data) => {files[name] = structuredClone(data);},
     isMongoConnected: () => false, authenticateToken(){},
@@ -23,6 +26,7 @@ function fixture() {
     axios: {post: async (url, body) => {context.initialized = body; return {data:{status:true, data:{reference:'ref', authorization_url:'https://example.test/pay'}}};},
       get: async () => ({data: {status:true, data: context.charge}})}
   };
+  context.verifyQuickAdPayment = (db, reference, userId, config) => quickAdPayments.verifyQuickAdPayment(db, reference, userId, config, context.axios);
   vm.createContext(context);
   const localStart = source.indexOf('const localDB =');
   const localEnd = source.indexOf('// ==================== DB PROXY');
@@ -190,6 +194,7 @@ test('mounted admin routes use recorded revenue and enforce net approval', async
     if(name==='../services/campaignPricing') return pricing;
     if(name==='../services/reviewSubmission') return {reviewSubmission};
     if(name==='../services/wallet') return {reviewWithdrawal};
+    if(name==='../services/quickAdAnalytics') return require('../services/quickAdAnalytics');
     throw Error('Unexpected dependency '+name);
   }};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../routes/admin.js'),'utf8'),context);
@@ -282,12 +287,15 @@ test('webhook persistence failures request retry instead of acknowledging succes
 });
 test('registration saves social profiles, rejects privileged roles and reserved admin email',async()=>{
   const f=fixture();f.context.bcrypt={hash:async()=> 'test-hash'};f.context.jwt={sign:()=> 'test-token'};f.context.sendWelcomeEmail=async()=>{};
-  const body={name:'Test',email:'new@example.test',password:'test-password',role:'promoter',socialMedia:{tiktok:'@creator'}};
+  const body={name:'Test',email:'new@example.test',password:'test-password',role:'promoter',socialMedia:{tiktok:'@creator'},
+    quickAdCredits: 999, quickAdsGenerated: 999, quickAdFreePreviewUsed: true, quickAdTotalCreditsPurchased: 999, quickAdTotalCreditsUsed: 999};
   assert.equal((await f.call('post','/api/auth/register',{...body,role:'admin'})).status,400);
   f.context.process.env.ADMIN_EMAIL='admin@example.test';
   assert.equal((await f.call('post','/api/auth/register',{...body,email:'ADMIN@example.test'})).status,400);
   assert.equal((await f.call('post','/api/auth/register',body)).body.success,true);
   assert.equal(f.files['users.json'].at(-1).socialMedia.tiktok,'@creator');
+  for (const field of ['quickAdCredits', 'quickAdsGenerated', 'quickAdTotalCreditsPurchased', 'quickAdTotalCreditsUsed']) assert.equal(f.files['users.json'].at(-1)[field], 0);
+  assert.equal(f.files['users.json'].at(-1).quickAdFreePreviewUsed, false);
 });
 test('banned accounts cannot log in and creator accounts cannot purchase campaigns',async()=>{
   const f=fixture();f.files['users.json'][1].status='banned';f.files['users.json'][1].email='creator@example.test';
@@ -332,4 +340,13 @@ test('recovery reuses a historical campaign ID and its saved presentation and te
  f.files['campaigns.json']=[{id:'historical-id',companyId:'company',title:'Historical campaign',budget:'20000',paystackReference:'ref'}];
  const response=await f.call('post','/api/campaigns',{title:'Do not overwrite',budget:20000,reference:'ref'});
  assert.equal(response.body.success,true);assert.equal(response.body.campaign.id,'historical-id');assert.equal(response.body.campaign.title,'Historical campaign');assert.equal(f.files['campaigns.json'].length,1);
+});
+
+test('Quick Ads purchase references cannot be routed into campaign creation or generic settlement', async () => {
+ const f=fixture();funded(f);f.files['transactions.json'][0].purpose='quick_ad_credits';
+ assert.equal((await f.call('post','/api/campaigns',{title:'Wrong purchase',budget:20000,reference:'ref'})).status,400);
+ assert.equal((await f.call('post','/api/payments/verify',{reference:'ref'})).status,400);
+ assert.equal((await f.call('get','/api/payments/campaign-status/:reference',{},'company',{reference:'ref'})).body.success,false);
+ assert.equal(f.files['campaigns.json'].length,0);
+ assert.equal(f.files['transactions.json'][0].status,'pending');
 });

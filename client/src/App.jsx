@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -8,6 +8,8 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import CompanyDashboard from './pages/CompanyDashboard';
+import QuickAd from './pages/QuickAd';
+import QuickAdCredits from './pages/QuickAdCredits';
 import AdminDashboard from './pages/AdminDashboard';
 import Wallet from './pages/Wallet';
 import PaymentCallback from './pages/PaymentCallback';
@@ -24,6 +26,13 @@ function ProtectedRoute({ children }) {
   if (loading) return <div>Loading...</div>;
   if (!user) return <Navigate to="/login" />;
   return children;
+}
+
+function QuickAdRedirect() {
+  const { user } = React.useContext(AuthContext);
+  const { search, hash } = useLocation();
+  const destination = user?.role === 'company' ? '/company/quick-ads' : '/promoter/quick-ads';
+  return <Navigate to={`${destination}${search}${hash}`} replace />;
 }
 
 function AdminRoute({ children }) {
@@ -84,6 +93,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {['/company/quick-ads', '/promoter/quick-ads'].map(path => <Route key={path} path={path} element={
+            <ProtectedRoute>
+              <DashboardShell><QuickAd /></DashboardShell>
+            </ProtectedRoute>
+          } />)}
+          {['/quick-ad', '/quickads'].map(path => <Route key={path} path={path} element={
+            <ProtectedRoute><QuickAdRedirect /></ProtectedRoute>
+          } />)}
+          <Route path="/quickads/credits" element={<ProtectedRoute><DashboardShell><QuickAdCredits /></DashboardShell></ProtectedRoute>} />
           
           <Route
             path="/promoter-dashboard"

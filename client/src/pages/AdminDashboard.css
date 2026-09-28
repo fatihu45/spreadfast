@@ -1,4 +1,12 @@
 /* Admin layout only; surfaces and controls use the shared SpreadFast system. */
+.sf-admin-quick-analytics, .sf-admin-quick-analytics > .sf-card { min-width: 0; }
+.sf-admin-quick-note { margin-block: var(--sf-space-3); line-height: 1.6; }
+.sf-admin-quick-table { max-width: 100%; overflow-x: auto; border: 1px solid rgb(var(--sf-border)); border-radius: var(--sf-radius-control); }
+.sf-admin-quick-table:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 3px; }
+.sf-admin-quick-table table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: .8125rem; text-align: left; }
+.sf-admin-quick-table th, .sf-admin-quick-table td { padding: var(--sf-space-3); vertical-align: top; border-bottom: 1px solid rgb(var(--sf-border)); overflow-wrap: anywhere; min-width: 100px; max-width: 240px; }
+.sf-admin-quick-table th { background: rgb(var(--sf-surface-muted)); font-weight: 600; }
+.sf-admin-quick-table tr:last-child td { border-bottom: 0; }
 .sf-admin-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-space-4); }
 .sf-admin-revenue { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-space-6); flex-wrap: wrap; }
 .sf-admin-revenue .sf-title { margin-top: var(--sf-space-2); }

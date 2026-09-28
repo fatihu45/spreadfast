@@ -66,6 +66,64 @@
 .sf-landing .landing-social--youtube { color: #ed2929; }
 .sf-landing .landing-visual-note { position: absolute; bottom: 0; left: 21%; display: flex; align-items: center; gap: 6px; font-size: 10px; color: rgb(var(--sf-muted)); }
 .sf-landing .landing-visual-note > span { height: 5px; width: 5px; background: #2eab75; border-radius: 50%; }
+/* Quick Ads entry block: scoped to the new landing section. */
+.sf-landing .landing-quick-ads { padding-block: 12px 32px; background: linear-gradient(#f5fbf8, #fff); }
+.sf-landing .landing-quick-ads-card { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center; gap: 40px; padding: clamp(24px, 4vw, 52px); border: 1px solid #e1eee6; border-radius: var(--sf-radius-panel); background: linear-gradient(120deg, #fff 40%, #f3fbf6); box-shadow: var(--sf-shadow-soft); }
+.sf-landing .landing-quick-ads-copy { min-width: 0; }
+.sf-landing .landing-quick-ads-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 22px; color: rgb(var(--sf-primary-hover)); font-size: .8125rem; font-weight: 600; }
+.sf-landing .landing-quick-ads-eyebrow > span { background: rgb(var(--sf-primary)); color: #fff; border-radius: var(--sf-radius-pill); padding: 4px 12px; font-size: .6875rem; }
+.sf-landing .landing-quick-ads-copy h2 { max-width: 440px; font-size: clamp(1.8rem, 3.2vw, 2.65rem); line-height: 1.15; letter-spacing: -.045em; }
+.sf-landing .landing-quick-ads-description { max-width: 420px; margin: 18px 0 26px; color: rgb(var(--sf-muted)); font-size: .9375rem; line-height: 1.8; }
+.sf-landing .landing-quick-ads-copy .sf-button { min-height: 48px; padding: 12px 24px; border-radius: var(--sf-radius-pill); }
+.sf-landing .landing-quick-ads-support { margin-top: 16px; color: rgb(var(--sf-muted)); font-size: .75rem; line-height: 1.8; }
+.sf-landing .landing-quick-ads-visual { min-width: 0; width: 100%; max-width: 430px; justify-self: center; margin: 0; }
+.sf-landing .landing-quick-ads-flow { display: grid; grid-template-columns: minmax(0, .85fr) 40px minmax(0, 1.25fr); align-items: center; gap: 12px; padding: 10px 0; background: radial-gradient(ellipse at 60% 55%, #dbf5e5, transparent 70%); }
+.sf-landing .landing-quick-ads-label { display: block; text-align: center; margin-bottom: 14px; font-size: .75rem; font-weight: 500; color: rgb(var(--sf-muted)); }
+.sf-landing .landing-quick-ads-photo { padding: 7px; background: #fff; border: 1px solid #e2ece6; border-radius: 16px; box-shadow: 0 5px 16px rgb(15 36 53 / .05); transform: rotate(-6deg); }
+.sf-landing .landing-quick-ads-photo > div { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: 10px; background: #ece5dc; }
+/* Dedicated food imagery for the before/after example. */
+.sf-landing .landing-quick-ads-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sf-landing .landing-quick-ads-source-note { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; font-size: .625rem; color: rgb(var(--sf-muted)); }
+.sf-landing .landing-quick-ads-source-note svg { width: 14px; height: 14px; }
+.sf-landing .landing-quick-ads-arrow { display: grid; place-items: center; color: rgb(var(--sf-primary)); }
+.sf-landing .landing-quick-ads-arrow svg { width: 36px; height: 36px; stroke-width: 1.3; }
+.sf-landing .landing-quick-ads-phone { position: relative; aspect-ratio: 9 / 16; border: 4px solid #20352c; border-radius: 25px; overflow: hidden; background: #e8eee8; box-shadow: 0 0 0 1px #bdcfc3, 0 10px 24px rgb(15 36 53 / .09); }
+.sf-landing .landing-quick-ads-phone > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; animation: landing-quick-ads-food-reveal 5s ease-out both; }
+.sf-landing .landing-quick-ads-phone-brand { position: absolute; top: 13px; left: 12px; font-size: .5625rem; font-weight: 600; color: #fff; padding: 3px 7px; background: rgb(15 36 25 / .65); border-radius: var(--sf-radius-pill); }
+.sf-landing .landing-quick-ads-caption { position: absolute; inset: auto 0 0; padding: 45px 14px 53px; color: #fff; background: linear-gradient(transparent, rgb(12 33 23 / .9) 55%); }
+.sf-landing .landing-quick-ads-caption > span { display: block; font-size: .45rem; letter-spacing: .09em; margin-bottom: 7px; }
+.sf-landing .landing-quick-ads-caption strong { display: block; font-size: clamp(.9375rem, 1.6vw, 1.3rem); letter-spacing: -.03em; line-height: 1.15; }
+.sf-landing .landing-quick-ads-caption strong + span { margin: 8px 0 0; font-size: .5625rem; letter-spacing: 0; line-height: 1.5; }
+.sf-landing .landing-quick-ads-timeline { position: absolute; inset: auto 12px 13px; color: #fff; }
+.sf-landing .landing-quick-ads-timeline > span { display: block; height: 2px; border-radius: 2px; background: rgb(255 255 255 / .45); }
+.sf-landing .landing-quick-ads-timeline > span::before { content: ''; display: block; width: 24%; height: 100%; background: #fff; }
+.sf-landing .landing-quick-ads-timeline > div { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: .5rem; }
+.sf-landing .landing-quick-ads-timeline svg { width: 13px; height: 13px; }
+.sf-landing .landing-quick-ads-visual figcaption { text-align: center; margin-top: 10px; color: rgb(var(--sf-muted)); font-size: .625rem; }
+@keyframes landing-quick-ads-food-reveal { from { transform: scale(1.035); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .sf-landing .landing-quick-ads-phone > img { animation: none; } }
+@media (max-width: 767px) {
+  .sf-landing .landing-quick-ads { padding-block: 0 16px; }
+  .sf-landing .landing-quick-ads-card { grid-template-columns: minmax(0, 1fr); gap: 28px; padding: 28px 22px; }
+  .sf-landing .landing-quick-ads-copy { text-align: center; }
+  .sf-landing .landing-quick-ads-eyebrow { justify-content: center; }
+  .sf-landing .landing-quick-ads-copy h2, .sf-landing .landing-quick-ads-description { margin-inline: auto; }
+  .sf-landing .landing-quick-ads-visual { max-width: 360px; }
+  .sf-landing .landing-quick-ads-flow { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 16px; }
+  .sf-landing .landing-quick-ads-source { width: min(140px, 100%); }
+  .sf-landing .landing-quick-ads-output { width: min(210px, 100%); }
+  .sf-landing .landing-quick-ads-arrow { transform: rotate(90deg); }
+  .sf-landing .landing-quick-ads-caption strong { font-size: 1.125rem; }
+}
+@media (max-width: 379px) {
+  .sf-landing .landing-quick-ads-card { padding: 24px 16px; }
+  .sf-landing .landing-quick-ads-flow { gap: 12px; }
+  .sf-landing .landing-quick-ads-arrow svg { width: 24px; height: 24px; }
+  .sf-landing .landing-quick-ads-phone { border-width: 3px; border-radius: 18px; }
+  .sf-landing .landing-quick-ads-caption { padding-inline: 9px; }
+  .sf-landing .landing-quick-ads-caption strong { font-size: .9375rem; }
+  .sf-landing .landing-quick-ads-copy .sf-button { width: 100%; }
+}
 .sf-landing .landing-how { padding-block: 68px 80px; }
 .sf-landing .landing-section-heading { text-align: center; margin-bottom: 40px; }
 .sf-landing .landing-section-heading .landing-eyebrow { justify-content: center; margin-bottom: 12px; }

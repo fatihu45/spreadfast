@@ -107,3 +107,72 @@ test('admin evidence does not render unsafe links', async () => {
   expect(host.querySelector('.sf-admin-proof')).toBeNull();
   expect(host.querySelector('img[alt="Submitted proof screenshot"]')).toBeNull();
 });
+
+const quickAnalytics = {
+  success: true, estimatesAvailable: true, transactionLimit: 50,
+  analytics: { totalRevenue: 6700, totalCreditsSold: 4, totalCreditsUsed: 1, creditsRemaining: 3, totalQuickAdsGenerated: 3,
+    estimatedGenerationCost: 450, estimatedGrossProfit: 6250, estimatedGrossMargin: 93.3 },
+  transactions: [{ reference: 'qa_purchase', businessName: 'Food Business', email: 'food@example.test', planName: 'Starter', amountPaid: 5000, creditsPurchased: 3, status: 'completed', paymentDate: '2026-09-28T12:00:00Z' }],
+  usage: [{ userId: 'business', businessName: 'Food Business', availableCredits: 1000, totalQuickAdsGenerated: 3, estimatedGenerationsPurchased: 4, lastGenerationAt: '2026-09-28T13:00:00Z', createdAt: '2026-01-01' }]
+};
+function analyticsResponse(response) {
+  const normal = apiCallAuth.getMockImplementation();
+  apiCallAuth.mockImplementation((url, ...args) => url === '/api/admin/quick-ads/analytics' ? (typeof response === 'function' ? response() : Promise.resolve(response)) : normal(url, ...args));
+}
+test('Quick Ads analytics loads on demand and displays backend totals, transactions and usage in the existing shell', async () => {
+  analyticsResponse(quickAnalytics); await render();
+  expect(apiCallAuth.mock.calls.some(([url]) => url.includes('/quick-ads/'))).toBe(false);
+  await tab('Quick Ads Revenue');
+  expect(apiCallAuth).toHaveBeenCalledWith('/api/admin/quick-ads/analytics', 'admin-token');
+  expect(host.querySelector('h1').textContent).toBe('Quick Ads Revenue');
+  expect([...host.querySelectorAll('.sf-stat-card__value')].map(n => n.textContent)).toEqual(['₦6,700', '4', '1', '3', '3', '₦450', '₦6,250', '93.3%']);
+  expect(host.querySelectorAll('table')).toHaveLength(2);
+  expect(host.textContent).toContain('qa_purchase'); expect(host.textContent).toContain('food@example.test');
+  expect(host.textContent).toContain('1,000');
+  expect(host.querySelectorAll('.sf-admin-quick-table[tabindex="0"]')).toHaveLength(2);
+  for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Quick Ads Revenue');
+  await click('Refresh analytics');
+  expect(apiCallAuth.mock.calls.filter(([url]) => url.includes('/quick-ads/analytics'))).toHaveLength(2);
+});
+test('Quick Ads reports promoter buyer and usage account types', async () => {
+  analyticsResponse({ ...quickAnalytics,
+    transactions: quickAnalytics.transactions.map(row => ({ ...row, buyerRole: 'promoter' })),
+    usage: quickAnalytics.usage.map(row => ({ ...row, accountType: 'promoter' })) });
+  await render(); await tab('Quick Ads Revenue');
+  expect([...host.querySelectorAll('td')].filter(cell => cell.textContent === 'Promoter')).toHaveLength(2);
+});
+
+test('Quick Ads loading and empty states do not replace existing admin navigation', async () => {
+  let finish; analyticsResponse(() => new Promise(resolve => { finish = resolve; }));
+  await render(); await tab('Quick Ads Revenue');
+  expect(host.textContent).toContain('Loading Quick Ads analytics...');
+  expect(host.querySelectorAll('.sf-stat-card[aria-busy="true"]')).toHaveLength(8);
+  await act(async () => finish({ ...quickAnalytics, transactions: [], usage: [] }));
+  expect(host.textContent).toContain('No Quick Ads purchases yet');
+  expect(host.textContent).toContain('No Quick Ads usage yet');
+  await tab('Campaigns'); expect(host.textContent).toContain('Active campaign');
+});
+test('Quick Ads request failures stay local, can retry, and preserve campaign controls', async () => {
+  let fail = true; analyticsResponse(() => fail ? Promise.reject(new Error('private backend details')) : Promise.resolve(quickAnalytics));
+  await render(); await tab('Quick Ads Revenue');
+  expect(host.textContent).toContain('Other admin sections are still available');
+  expect(host.textContent).not.toContain('private backend details');
+  fail = false; await click('Retry analytics'); expect(host.textContent).toContain('93.3%');
+  await tab('Campaigns'); await click('Pause'); mutation('/api/admin/campaigns/c1', 'PATCH', { status: 'paused' });
+});
+test('missing estimates stay explicitly unavailable and negative remaining credits are surfaced', async () => {
+  analyticsResponse({ ...quickAnalytics, estimatesAvailable: false,
+    analytics: { ...quickAnalytics.analytics, creditsRemaining: -1, estimatedGenerationCost: null, estimatedGrossProfit: null, estimatedGrossMargin: null } });
+  await render(); await tab('Quick Ads Revenue');
+  expect([...host.querySelectorAll('.sf-stat-card__value')].filter(n => n.textContent === 'Not configured')).toHaveLength(3);
+  expect(host.textContent).toContain('Recorded paid usage exceeds verified credit purchases');
+  expect(host.textContent).toContain('Set QUICK_AD_GENERATION_COST_USD and USD_NGN_RATE on the backend');
+});
+
+test('incomplete analytics responses show an error instead of misleading financial numbers', async () => {
+  analyticsResponse({ success: true, analytics: {}, transactions: [], usage: [] });
+  await render(); await tab('Quick Ads Revenue');
+  expect(host.textContent).toContain('Quick Ads analytics could not be loaded');
+  expect(host.querySelectorAll('.sf-stat-card')).toHaveLength(0);
+  expect(host.textContent).not.toContain('NaN');
+});

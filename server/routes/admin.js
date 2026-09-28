@@ -3,6 +3,7 @@ const router = express.Router();
 const { feeStats } = require('../services/campaignPricing');
 const { reviewSubmission } = require('../services/reviewSubmission');
 const { reviewWithdrawal } = require('../services/wallet');
+const { getQuickAdAnalytics } = require('../services/quickAdAnalytics');
 const database = req => req.app.locals.db;
 
 const { authenticateToken } = require('../middleware/auth');
@@ -15,6 +16,15 @@ const adminOnly = (req, res, next) => {
 };
 
 const auth = [authenticateToken, adminOnly];
+
+router.get('/quick-ads/analytics', auth, async (req, res) => {
+  try {
+    res.set('Cache-Control', 'private, no-store').json(await getQuickAdAnalytics(database(req)));
+  } catch {
+    console.error('[Quick Ads analytics] Could not read financial analytics');
+    res.status(503).json({ success: false, message: 'Quick Ads analytics could not be loaded. Please try again.' });
+  }
+});
 
 // ==================== STATS ====================
 router.get('/all-stats', auth, async (req, res) => {

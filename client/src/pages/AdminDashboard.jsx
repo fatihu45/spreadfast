@@ -1,4 +1,5 @@
 import SubmissionEvidence from '../components/SubmissionEvidence';
+import AdminQuickAdsAnalytics from '../components/AdminQuickAdsAnalytics';
 import { creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
 import React, { useState, useEffect, useContext } from 'react';
@@ -184,6 +185,7 @@ export default function AdminDashboard() {
   const navigation = [
     ['overview', 'Overview', 'home'], ['campaigns', 'Campaigns', 'campaign'],
     ['submissions', 'Submissions', 'globe'], ['withdrawals', 'Withdrawals', 'wallet'],
+    ['quick-ads', 'Quick Ads Revenue', 'video'],
   ].map(([id, label, icon]) => ({ id, label, icon: <UiIcon name={icon} />, active: activeTab === id, onClick: () => setActiveTab(id) }));
   const footerItems = [
     { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
@@ -194,6 +196,7 @@ export default function AdminDashboard() {
     campaigns: ['Campaigns', 'Manage campaigns across the platform.'],
     submissions: ['Submissions', 'Review creator content and approve campaign earnings.'],
     withdrawals: ['Withdrawals', 'Review requests and keep payment statuses up to date.'],
+    'quick-ads': ['Quick Ads Revenue', 'Track credit purchases, usage and estimated generation costs.'],
   };
   return <AppShell className="sf-dashboard-shell sf-admin" navigation={navigation}
     brand={<Link to="/" className="sf-dashboard-logo" aria-label="SpreadFast home"><img src="/spreadfast-logo.png" width="2172" height="724" alt="SpreadFast" /></Link>}
@@ -205,7 +208,7 @@ export default function AdminDashboard() {
     <PageHeader title={<>{titles[activeTab][0]}{activeTab === 'overview' && <UiIcon name="sun" />}</>} description={titles[activeTab][1]} />
     {error && <Alert tone="error">{error}</Alert>}
     {success && <Alert tone="success">{success}</Alert>}
-    {loading ? <Card className="sf-admin-loading" role="status" aria-busy="true"><UiIcon name="campaign" /><p>Loading admin dashboard...</p></Card> : <>
+    {activeTab === 'quick-ads' ? <AdminQuickAdsAnalytics /> : loading ? <Card className="sf-admin-loading" role="status" aria-busy="true"><UiIcon name="campaign" /><p>Loading admin dashboard...</p></Card> : <>
       {activeTab === 'overview' && <div className="sf-stack">
         {stats ? <>
           <div className="sf-admin-stats">

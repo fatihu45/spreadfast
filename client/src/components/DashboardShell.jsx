@@ -24,6 +24,8 @@ export default function DashboardShell({ children }) {
     item('campaigns', 'Campaigns', '/available-campaigns', 'campaign', ['/available-campaigns', '/submit-proof'].includes(location.pathname)),
   ];
   if (!isBusiness) navigation.push(item('wallet', 'Wallet', '/wallet', 'wallet'));
+  navigation.push(item('quick-ads', 'Quick Ads', isBusiness ? '/company/quick-ads' : '/promoter/quick-ads', 'video',
+    ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads', '/quickads/credits'].includes(location.pathname.replace(/\/+$/, ''))));
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
     { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },

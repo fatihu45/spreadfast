@@ -15,10 +15,12 @@ const cloudinary = require('cloudinary').v2;
 
 // ==================== IMPORT MODELS ====================
 const User = require('./models/user');
+const QuickAdGeneration = require('./models/QuickAdGeneration');
 const { quoteCampaign, hasCurrentPricing, creatorSlots, feeStats, verifyCharge } = require('./services/campaignPricing');
 const { reviewSubmission } = require('./services/reviewSubmission');
 const { requestWithdrawal, reviewWithdrawal } = require('./services/wallet');
 const { mongoTransaction } = require('./services/databaseTransaction');
+const { PURPOSE: QUICK_AD_PAYMENT_PURPOSE, assertCampaignPayment, verifyQuickAdPayment } = require('./services/quickAdPayments');
 
 const app = express();
 
@@ -41,9 +43,10 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'Range'],
+  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges']
 }));
-app.use(express.json({ verify: (req, res, buffer) => { if (req.originalUrl === '/api/payments/webhook') req.rawBody = buffer; } }));
+app.use(express.json({ verify: (req, res, buffer) => { if (req.originalUrl.split('?')[0] === '/api/payments/webhook') req.rawBody = buffer; } }));
 
 // Reject requests during production outages; never acknowledge financial writes locally.
 app.use('/api', (req, res, next) => {
@@ -361,7 +364,7 @@ const DB = new Proxy({}, {
   get(_, model) {
     if (isMongoConnected()) {
       // Use real Mongoose models
-      const models = { User, Campaign, Submission, Withdrawal, PaystackTransaction, CampaignAsset, CampaignSubscription };
+      const models = { User, Campaign, Submission, Withdrawal, PaystackTransaction, CampaignAsset, CampaignSubscription, QuickAdGeneration };
       if (model === 'withTransaction') return mongoTransaction(mongoose, models);
       return models[model];
     }
@@ -496,7 +499,12 @@ const paystackTransactionSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   email: { type: String, required: true },
   amount: { type: Number, required: true },
-  campaignName: { type: String, required: true },
+  campaignName: { type: String, required: function () { return this.purpose !== 'quick_ad_credits'; } },
+  purpose: { type: String, enum: ['campaign', 'quick_ad_credits'], default: 'campaign' },
+  buyerRole: { type: String, enum: ['company', 'promoter'] },
+  planId: String,
+  credits: { type: Number, min: 1, validate: Number.isSafeInteger },
+  creditsApplied: { type: Boolean, default: false },
   pricing: { type: Object, default: undefined },
   description: { type: String, default: '' },
   keyMessage: { type: String, default: '' },
@@ -724,12 +732,16 @@ const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NO
 // ==================== PAYSTACK WEBHOOK ====================
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const secret = paystackConfig.secretKey;
+  if (!secret) return res.sendStatus(503);
+  const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : null);
+  const signature = req.headers['x-paystack-signature'];
+  if (!rawBody || typeof signature !== 'string' || !/^[a-f0-9]{128}$/i.test(signature)) return res.sendStatus(401);
   const hash = crypto
     .createHmac('sha512', secret)
-    .update(req.rawBody || req.body)
-    .digest('hex');
+    .update(rawBody)
+    .digest();
 
-  if (hash !== req.headers['x-paystack-signature']) {
+  if (!crypto.timingSafeEqual(hash, Buffer.from(signature, 'hex'))) {
     console.log('Webhook signature mismatch - ignoring');
     return res.status(401).send('Invalid signature');
   }
@@ -749,6 +761,11 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
 
     try {
       const transaction = await DB.PaystackTransaction.findOne({ reference });
+
+      if (transaction?.purpose === QUICK_AD_PAYMENT_PURPOSE) {
+        await verifyQuickAdPayment(DB, reference, undefined, paystackConfig);
+        return res.sendStatus(200);
+      }
 
       if (transaction && !transaction.campaignCreated) {
         verifyCharge(transaction, event.data);
@@ -796,7 +813,10 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
         console.log('No transaction found for reference:', reference);
       }
     } catch (err) {
-      console.error('Webhook campaign creation error:', err);
+      console.error('Payment webhook processing failed', {
+        status: Number.isInteger(err.response?.status) ? err.response.status : undefined,
+        code: err.quickAdSafe ? err.code : 'UPSTREAM_OR_DATABASE_ERROR'
+      });
       return res.sendStatus(503);
     }
   }
@@ -837,6 +857,10 @@ app.get('/api/health', (req, res) => {
 
 // ==================== AUTH MIDDLEWARE ====================
 const { authenticateToken } = require('./middleware/auth');
+const quickAdsRoute = require('./routes/quickAds');
+app.use('/api/quick-ads', quickAdsRoute);
+const { createQuickAdPaymentsRouter } = require('./routes/quickAdPayments');
+app.use('/api/quick-ads', createQuickAdPaymentsRouter({ paystackConfig }));
 
 // ==================== AUTH ROUTES ====================
 app.post('/api/auth/register', async (req, res) => {
@@ -866,6 +890,11 @@ app.post('/api/auth/register', async (req, res) => {
       role: role || 'promoter',
       socialMedia: Object.fromEntries(['tiktok','instagram','twitter','facebook','youtube'].map(key => [key, typeof socialMedia?.[key] === 'string' ? socialMedia[key].trim().slice(0, 500) : ''])),
       walletBalance: 0,
+      quickAdCredits: 0,
+      quickAdsGenerated: 0,
+      quickAdFreePreviewUsed: false,
+      quickAdTotalCreditsPurchased: 0,
+      quickAdTotalCreditsUsed: 0,
       bankDetails: null,
       createdAt: new Date().toISOString()
     };
@@ -1091,6 +1120,7 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
     if (response.data.status && response.data.data.status === 'success') {
       const transaction = response.data.data;
       const stored = await DB.PaystackTransaction.findOne({ reference, userId: req.user.id });
+      assertCampaignPayment(stored);
       verifyCharge(stored, transaction);
       await DB.PaystackTransaction.updateOne(
         { reference },
@@ -1113,6 +1143,8 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
 app.get('/api/payments/status/:reference', authenticateToken, async (req, res) => {
   try {
     const { reference } = req.params;
+    const ownedTransaction = await DB.PaystackTransaction.findOne({ reference, userId: req.user.id });
+    if (!ownedTransaction) return res.status(404).json({ success: false, message: 'Transaction not found' });
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       { headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }, timeout: 10000 }
@@ -1134,6 +1166,8 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
   try {
     const { reference } = req.params;
     const transaction = await DB.PaystackTransaction.findOne({ reference, userId: req.user.id });
+
+    assertCampaignPayment(transaction);
 
     if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
@@ -1214,6 +1248,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
 
     if (!reference) return res.status(400).json({success: false, message: 'A verified campaign payment is required.'});
     const transaction = await DB.PaystackTransaction.findOne({reference, userId: req.user.id});
+    assertCampaignPayment(transaction);
     if (!transaction) return res.status(404).json({success: false, message: 'Transaction not found'});
     if (Number(budget) !== Number(transaction.amount)) return res.status(400).json({success: false, message: 'Budget must match the paid amount.'});
     if (transaction.campaignCreated) {

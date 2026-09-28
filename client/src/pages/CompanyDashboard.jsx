@@ -10,6 +10,21 @@ import './CompanyDashboard.css';
 import CompanyOverview from '../components/CompanyOverview';
 import BusinessCreateCampaign, { buildCampaignBrief, emptyCampaignBrief } from '../components/BusinessCreateCampaign';
 
+function quickAdContentRequirements(quickAd) {
+  const validUrl = value => {
+    if (typeof value !== 'string') return '';
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && !url.username && !url.password ? url.href : '';
+    } catch { return ''; }
+  };
+  const videoUrl = validUrl(quickAd?.videoUrl);
+  if (!videoUrl) return '';
+  const imageUrl = validUrl(quickAd?.imageUrl);
+  return ['Use this SpreadFast Quick Ad for the campaign.', `Video: ${videoUrl}`,
+    imageUrl && `Original product photo: ${imageUrl}`].filter(Boolean).join('\n');
+}
+
 export default function CompanyDashboard() {
   const { user, token } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -18,7 +33,10 @@ export default function CompanyDashboard() {
   // Campaign Creation State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [campaignBrief, setCampaignBrief] = useState(emptyCampaignBrief);
+  const [campaignBrief, setCampaignBrief] = useState(() => ({
+    ...emptyCampaignBrief,
+    contentRequirements: location.hash === '#create-campaign' ? quickAdContentRequirements(location.state?.quickAd) : '',
+  }));
   const [keyMessage, setKeyMessage] = useState('');
   const [budget, setBudget] = useState('');
   const [brandAssetFiles, setBrandAssetFiles] = useState([]); // Array of File objects

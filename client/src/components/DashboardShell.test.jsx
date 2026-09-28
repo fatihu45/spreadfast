@@ -27,7 +27,7 @@ test('creator navigation preserves existing routes and proof query parameters', 
   render('promoter', '/submit-proof?campaignId=42');
   expect(host.querySelector('output').textContent).toBe('/submit-proof?campaignId=42');
   for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) {
-    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/promoter-dashboard', '/available-campaigns', '/wallet']);
+    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/promoter-dashboard', '/available-campaigns', '/wallet', '/promoter/quick-ads']);
     expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Campaigns');
     expect(nav.querySelector('button').textContent).toBe('Profile');
   }
@@ -37,7 +37,7 @@ test('business sections navigate within company route with one active item', () 
   render('company', '/company');
   expect(host.querySelector('a[href="/wallet"]')).toBeNull();
   const nav = host.querySelector('.sf-sidebar nav');
-  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Overview', 'Campaigns', 'Create Campaign']);
+  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Overview', 'Campaigns', 'Create Campaign', 'Quick Ads']);
   act(() => [...nav.querySelectorAll('a')].find(a => a.textContent === 'Create Campaign').click());
   expect(host.querySelector('output').textContent).toBe('/company#create-campaign');
   expect(nav.querySelectorAll('[aria-current="page"]').length).toBe(1);

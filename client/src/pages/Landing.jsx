@@ -118,6 +118,7 @@ export default function LandingPage() {
               </p>
               <div className="landing-hero-actions">
                 <Button size="lg" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true"><UiIcon name="external" /></span></Button>
+                <Link to="/quick-ad" className="sf-control sf-button sf-button--secondary"><UiIcon name="video" /> Create a Quick Ad</Link>
                 <Button size="lg" variant="secondary" onClick={handleJoinAsPromoter}>Earn with SpreadFast</Button>
               </div>
               <div className="landing-trust" aria-label="Why SpreadFast">
@@ -127,6 +128,40 @@ export default function LandingPage() {
               </div>
             </div>
             <LandingHeroVisual />
+          </Container>
+        </section>
+
+        <section className="landing-quick-ads" aria-labelledby="landing-quick-ads-title">
+          <Container>
+            <div className="landing-quick-ads-card">
+              <div className="landing-quick-ads-copy">
+                <p className="landing-quick-ads-eyebrow"><span>New</span> SpreadFast Quick Ads</p>
+                <h2 id="landing-quick-ads-title">Turn one photo into an ad.</h2>
+                <p className="landing-quick-ads-description">Upload your product photo and create a short AI-powered video ad in seconds.</p>
+                <Link to="/quick-ad" className="sf-control sf-button sf-button--primary">Create a Quick Ad <UiIcon name="arrow" /></Link>
+                <p className="landing-quick-ads-support">No editing. No prompts. No design experience needed.</p>
+              </div>
+              <figure className="landing-quick-ads-visual" aria-label="Before and after: a simple jollof rice, chicken, and plantain takeaway photo becomes a polished five-second food advert preview.">
+                <div className="landing-quick-ads-flow" aria-hidden="true">
+                  <div className="landing-quick-ads-source">
+                    <span className="landing-quick-ads-label">Your photo</span>
+                    <div className="landing-quick-ads-photo"><div><img src="/quick-ads-food-photo.png" alt="" width="1254" height="1254" loading="lazy" decoding="async" /></div></div>
+                    <span className="landing-quick-ads-source-note"><UiIcon name="image" /> One product.</span>
+                  </div>
+                  <span className="landing-quick-ads-arrow"><UiIcon name="arrow" /></span>
+                  <div className="landing-quick-ads-output">
+                    <span className="landing-quick-ads-label">Your next ad</span>
+                    <div className="landing-quick-ads-phone">
+                      <img src="/quick-ads-food-ad.png" alt="" width="941" height="1672" loading="lazy" decoding="async" />
+                      <span className="landing-quick-ads-phone-brand">SpreadFast</span>
+                      <div className="landing-quick-ads-caption"><strong>Craving something good?</strong><span>Made fresh. Delivered fast.</span></div>
+                      <div className="landing-quick-ads-timeline"><span /><div><UiIcon name="video" /><span>0:00 / 0:05</span></div></div>
+                    </div>
+                  </div>
+                </div>
+                <figcaption>Illustrative preview</figcaption>
+              </figure>
+            </div>
           </Container>
         </section>
 

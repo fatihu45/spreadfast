@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/company/quick-ads", "destination": "/index.html" },
+    { "source": "/promoter/quick-ads", "destination": "/index.html" },
+    { "source": "/quickads", "destination": "/index.html" },
+    { "source": "/quick-ad", "destination": "/index.html" },
+    { "source": "/quickads/credits", "destination": "/index.html" }
+  ]
+}
