@@ -15,6 +15,7 @@ function fixture() {
     'campaigns.json': [], 'transactions.json': [], 'submissions.json': []};
   let nextId = 0;
   const context = { ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
+    passwordChanged: require('../services/emailNotifications').passwordChanged,
     QUICK_AD_PAYMENT_PURPOSE: quickAdPayments.PURPOSE, assertCampaignPayment: quickAdPayments.assertCampaignPayment,
     console: {log(){},warn(){},error(){}},
     Date, Buffer, process: {env: {}}, uuidv4: () => 'id-' + (++nextId),
@@ -54,6 +55,11 @@ function fixture() {
     return result;
   }
   // Simulate transactional commit/rollback without connecting to application databases.
+  files['email_notifications.json'] = [];
+  context.DB.EmailNotification = {
+    findOne: async query => structuredClone(files['email_notifications.json'].find(row => row.id === query.id) || null),
+    create: async doc => { files['email_notifications.json'].push(structuredClone(doc)); return doc; }
+  };
   let queue = Promise.resolve();
   context.DB.withTransaction = work => {
     const result = queue.then(async () => {

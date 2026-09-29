@@ -25,6 +25,8 @@ const userSchema = new mongoose.Schema({
   quickAdFreePreviewUsed: { type: Boolean, default: false, required: true },
   quickAdTotalCreditsPurchased: quickAdCounter(),
   quickAdTotalCreditsUsed: quickAdCounter(),
+  quickAdsLowCreditNotified: { type: Boolean, default: false },
+  quickAdsZeroCreditNotified: { type: Boolean, default: false },
   quickAdGenerationLock: { type: String, default: null },
   quickAdGenerationLockExpiresAt: { type: Date, default: null },
   legacyCredits: { type: [{ submissionId: String, amount: Number, creditedAt: String }], default: [] },

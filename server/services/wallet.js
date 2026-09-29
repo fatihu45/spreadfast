@@ -1,5 +1,7 @@
 const fail = (message, statusCode = 400) => { throw Object.assign(new Error(message), {statusCode}); };
 
+const { enqueueEmail } = require('./emailNotifications');
+
 // All balance changes and withdrawal state changes commit together.
 async function requestWithdrawal(DB, userId, amount, bankDetails, id) {
   if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 1000) {
@@ -16,6 +18,9 @@ async function requestWithdrawal(DB, userId, amount, bankDetails, id) {
       email: user.email, amount, bankDetails: details, status: 'pending', createdAt, timestamp: createdAt};
     await tx.User.updateOne({id: userId}, {$inc: {walletBalance: -amount}});
     await tx.Withdrawal.create(withdrawal);
+    const mail = { amount, reference: id, date: createdAt, balance: user.walletBalance - amount };
+    await enqueueEmail(tx, 'withdrawal_requested', id, user, mail);
+    await enqueueEmail(tx, 'admin_withdrawal_requested', id, user, mail);
     return {withdrawal, newBalance: user.walletBalance - amount};
   });
 }
@@ -36,7 +41,12 @@ async function reviewWithdrawal(DB, id, requestedStatus) {
       if (!Number.isFinite(withdrawal.amount) || withdrawal.amount <= 0) fail('Invalid stored withdrawal amount', 409);
       await tx.User.updateOne({id: userId}, {$inc: {walletBalance: withdrawal.amount}});
     }
-    await tx.Withdrawal.updateOne({id}, {status, reviewedAt: new Date().toISOString()});
+    const reviewedAt = new Date().toISOString();
+    await tx.Withdrawal.updateOne({id}, {status, reviewedAt});
+    if (status === 'completed') {
+      const user = await tx.User.findOne({ id: withdrawal.userId || withdrawal.promoterId });
+      if (user) await enqueueEmail(tx, 'withdrawal_paid', id, user, { amount: withdrawal.amount, reference: id, date: reviewedAt });
+    }
     return {...withdrawal, status};
   });
 }

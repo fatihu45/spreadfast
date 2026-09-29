@@ -1,7 +1,7 @@
 // Deterministic transactional fixture: serialize transactions and roll back all writes on failure.
 // Production uses MongoDB sessions, never this in-memory implementation.
 function quickAdsDb(users = []) {
-  let state = { User: structuredClone(users), QuickAdGeneration: [], PaystackTransaction: [] };
+  let state = { User: structuredClone(users), QuickAdGeneration: [], PaystackTransaction: [], Withdrawal: [], EmailNotification: [] };
   let tail = Promise.resolve();
   const matches = (row, query) => Object.entries(query).every(([key, value]) => row[key] === value);
   const models = Object.fromEntries(Object.keys(state).map(name => [name, {

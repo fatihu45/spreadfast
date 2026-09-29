@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const { canUseQuickAds } = require('./quickAdAccess');
+const { enqueueEmail } = require('./emailNotifications');
 
 function fail(code, message, statusCode = 409) {
   throw Object.assign(new Error(message), { code, statusCode, quickAdSafe: true });
@@ -82,6 +83,14 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, now = Date.no
     }, $inc: { quickAdsGenerated: 1, ...(!free ? { quickAdCredits: -1, quickAdTotalCreditsUsed: 1 } : {}) } });
     const completed = { status: 'completed', imageUrl, media, creditUsed: !free, downloadable: !free, completedAt: new Date(now) };
     await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: completed });
+    if (!free) {
+      const balance = account.quickAdCredits - 1;
+      const field = balance === 1 ? 'quickAdsLowCreditNotified' : balance === 0 ? 'quickAdsZeroCreditNotified' : null;
+      if (field && !user[field]) {
+        await tx.User.updateOne({ id: userId }, { $set: { [field]: true } });
+        await enqueueEmail(tx, balance === 1 ? 'quick_low' : 'quick_zero', id, user, { balance });
+      }
+    }
     return { ...plain(generation), ...completed };
   });
 }

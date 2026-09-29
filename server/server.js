@@ -16,6 +16,9 @@ const cloudinary = require('cloudinary').v2;
 // ==================== IMPORT MODELS ====================
 const User = require('./models/user');
 const QuickAdGeneration = require('./models/QuickAdGeneration');
+const EmailNotification = require('./models/EmailNotification');
+const { createEmailSender } = require('./services/emailService');
+const { startEmailWorker, passwordChanged } = require('./services/emailNotifications');
 const { quoteCampaign, hasCurrentPricing, creatorSlots, feeStats, verifyCharge } = require('./services/campaignPricing');
 const { reviewSubmission } = require('./services/reviewSubmission');
 const { requestWithdrawal, reviewWithdrawal } = require('./services/wallet');
@@ -364,7 +367,7 @@ const DB = new Proxy({}, {
   get(_, model) {
     if (isMongoConnected()) {
       // Use real Mongoose models
-      const models = { User, Campaign, Submission, Withdrawal, PaystackTransaction, CampaignAsset, CampaignSubscription, QuickAdGeneration };
+      const models = { User, Campaign, Submission, Withdrawal, PaystackTransaction, CampaignAsset, CampaignSubscription, QuickAdGeneration, EmailNotification };
       if (model === 'withTransaction') return mongoTransaction(mongoose, models);
       return models[model];
     }
@@ -520,25 +523,8 @@ const PaystackTransaction = mongoose.model('PaystackTransaction', paystackTransa
 const ActivityLog = require('./models/ActivityLog');
 
 // ==================== EMAIL HELPER ====================
-const sendEmail = async (to, subject, html) => {
-  try {
-    if (!resend) {
-      console.warn('⚠️  Email service not available (RESEND_API_KEY not configured)');
-      return { id: 'mock-' + Date.now(), success: false };
-    }
-    const result = await resend.emails.send({
-      from: 'SpreadFast <noreply@tryspreadfast.com>',
-      to: to,
-      subject: subject,
-      html: html
-    });
-    console.log('Email sent successfully to:', to, '| ID:', result.id);
-    return result;
-  } catch (error) {
-    console.error('Email send error:', error.message);
-    throw error;
-  }
-};
+const sendEmail = createEmailSender({ resend });
+startEmailWorker(DB, sendEmail, isMongoConnected);
 
 // ==================== EMAIL FUNCTIONS ====================
 const sendWelcomeEmail = async (name, email, role) => {
@@ -1037,6 +1023,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
       { password: hashedPassword, resetPasswordTokenHash: null, resetPasswordExpires: null, $inc: {tokenVersion: 1} }
     );
 
+    await passwordChanged(DB, user);
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
     console.error('Reset password error:', error);
