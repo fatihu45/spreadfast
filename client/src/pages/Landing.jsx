@@ -259,12 +259,12 @@ export default function LandingPage() {
             <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>Get more customers. grow your business.</p></div>
             <div><h2>For Companies</h2><ul>
               <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
-              <li><a href="#">View Promoters</a></li>
+              <li><a href="#creators">Meet our creators</a></li>
               <li><a href="#pricing">Pricing</a></li>
             </ul></div>
             <div><h2>For Promoters</h2><ul>
               <li><button type="button" onClick={handleJoinAsPromoter}>Find Campaigns</button></li>
-              <li><a href="#">How to Earn</a></li>
+              <li><a href="#creators">How to Earn</a></li>
               <li><a href="#faq">FAQ</a></li>
             </ul></div>
             <div><h2>Connect</h2><ul>

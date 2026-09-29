@@ -61,7 +61,7 @@ test.each([
 test('keeps header destinations, existing support links and working section anchors', () => {
   render();
   const links = [...host.querySelectorAll('a')].map(node => node.getAttribute('href'));
-  ['/login', '/register', '#pricing', '#faq', '#', 'https://wa.me/+2349071023617',
+  ['/login', '/register', '#pricing', '#faq', 'https://wa.me/+2349071023617',
     'https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t'].forEach(href => expect(links).toContain(href));
   links.filter(href => href.startsWith('#') && href !== '#').forEach(href => {
     expect(document.getElementById(href.slice(1))).not.toBeNull();

@@ -1,20 +1,8 @@
-/* eslint-disable */
 
-import axios from 'axios';
+
 import { readResponse } from './readResponse';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-// ── ADMIN API ──────────────────────────────────────────────────
-export const getAdminStats       = () => API.get('/admin/stats/extended');
-export const getActivityFeed     = (page = 1) => API.get(`/admin/activity-feed?limit=15&page=${page}`);
-export const getAdminUsers       = (params) => API.get(`/admin/users?${new URLSearchParams(params)}`);
-export const updateUserStatus    = (id, status) => API.patch(`/admin/users/${id}/status`, { status });
-export const deleteUser          = (id) => API.delete(`/admin/users/${id}`);
-export const getFinanceSummary   = () => API.get('/admin/finance');
-export const getTransactions     = (params) => API.get(`/admin/transactions?${new URLSearchParams(params)}`);
-export const getAdminSettings    = () => API.get('/admin/settings');
-export const updateAdminSettings = (data) => API.patch('/admin/settings', data);
 
 /**
  * Make an API request with proper error handling
@@ -101,75 +89,11 @@ export async function apiCallAuth(endpoint, token, method = 'GET', data = null) 
   });
 }
 
-// Campaign API calls
+// Compatibility helpers for older entry pages; use the same API/error handling.
 export const getCampaigns = async () => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/campaigns`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching campaigns:', error);
-    return [];
-  }
+  const data = await apiCall('/api/campaigns');
+  return data.success ? data.campaigns : [];
 };
-
-export const createCampaign = async (campaignData) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/campaigns`, campaignData);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating campaign:', error);
-    throw error;
-  }
-};
-
-// User API calls
-export const registerUser = async (userData) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/users`, userData);
-    return response.data;
-  } catch (error) {
-    console.error('Error registering user:', error);
-    throw error;
-  }
-};
-
-export const getUsers = async () => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/users`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    return [];
-  }
-};
-
-// Submission API calls
-export const createSubmission = async (submissionData) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/submissions`, submissionData);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating submission:', error);
-    throw error;
-  }
-};
-
-export const getSubmissions = async () => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/submissions`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching submissions:', error);
-    return [];
-  }
-};
-
-export const updateSubmission = async (submissionId, status) => {
-  try {
-    const response = await axios.patch(`${API_BASE_URL}/submissions/${submissionId}`, { status });
-    return response.data;
-  } catch (error) {
-    console.error('Error updating submission:', error);
-    throw error;
-  }
-};
+export const registerUser = userData => apiCall('/api/auth/register', {
+  method: 'POST', body: JSON.stringify(userData)
+});

@@ -1,42 +1,20 @@
 import Alert from '../components/ui/Alert';
 import AuthLayout from '../components/ui/AuthLayout';
 import React, { useState, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, FormField, Input } from '../components/ui';
 import './Login.css';
 
 export default function Login() {
   const { login } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  const checkTokenAndRedirect = (target) => {
-    let attempts = 0;
-    const maxAttempts = 10;
-    const checkInterval = 100; // 100ms
-
-    const intervalId = setInterval(() => {
-      attempts++;
-      
-      // Check if token exists in localStorage or sessionStorage
-      const tokenInStorage = localStorage.getItem('token') || sessionStorage.getItem('token');
-      
-      if (tokenInStorage) {
-        // Token found in storage - redirect immediately
-        clearInterval(intervalId);
-        window.location.href = target;
-      } else if (attempts >= maxAttempts) {
-        // Max attempts reached - redirect anyway (with token in context)
-        clearInterval(intervalId);
-        console.warn('Token not found in storage after 10 attempts, redirecting anyway');
-        window.location.href = target;
-      }
-    }, checkInterval);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,9 +36,11 @@ export default function Login() {
         target = '/company';
       }
       
-      // Check if token is saved to storage before redirecting
-      // This ensures token persists even on iPhone Safari
-      checkTokenAndRedirect(target);
+      const from = location.state?.from;
+      const safeReturn = typeof from === 'string' && from.startsWith('/')
+        && !from.startsWith('//') && !/[\\\r\n]/.test(from)
+        && !/^\/login(?:[/?#]|$)/.test(from);
+      navigate(safeReturn ? from : target, { replace: true });
     } else {
       setError(result.message);
     }

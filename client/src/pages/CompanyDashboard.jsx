@@ -182,7 +182,7 @@ export default function CompanyDashboard() {
     try {
       setLoading(true);
       setCampaignLoadState('loading');
-      const data = await apiCall('/api/campaigns');
+      const data = await apiCall('/api/campaigns', { headers: { Authorization: `Bearer ${token}` } });
       if (data.success) {
         const companyCampaigns = data.campaigns.filter(c => c.companyId === user?.id);
         setCampaigns(companyCampaigns);

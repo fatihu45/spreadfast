@@ -1,72 +1,11 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useContext } from 'react';
+import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { apiCall } from '../utils/api';
-import './Pages.css';
 
 export default function Dashboard() {
-  const { user, loading: authLoading } = useContext(AuthContext);
-  const navigate = useNavigate();
-  const [campaigns, setCampaigns] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch campaigns data only (ProtectedRoute already handles auth)
-  useEffect(() => {
-    if (user) {
-      // Fetch campaigns here
-    }
-  }, [user]);
-
-  return (
-    <div className="dashboard">
-      <h1>Welcome to SpreadFast</h1>
-      <p>User: {user?.name} ({user?.role})</p>
-
-      {user?.role === 'company' && (
-        <button 
-          onClick={() => navigate('/company')}
-          className="action-button"
-        >
-          Create Campaign
-        </button>
-      )}
-
-      {user?.role === 'promoter' && (
-        <button 
-          onClick={() => navigate('/promoter-dashboard')}
-          className="action-button"
-        >
-          My Promotions
-        </button>
-      )}
-
-      <h2>Available Campaigns</h2>
-      <div className="campaigns-grid">
-        {loading ? (
-          <p>Loading campaigns...</p>
-        ) : !campaigns || campaigns.length === 0 ? (
-          <p>No campaigns available yet.</p>
-        ) : (
-          (campaigns || []).map(campaign => (
-            <div key={campaign?.id} className="campaign-card">
-              <h3>{campaign?.title || campaign?.name}</h3>
-              <p>{campaign?.description || campaign?.caption}</p>
-              <p><strong>Budget:</strong> ₦{campaign?.budget || 0}</p>
-              <p><strong>Status:</strong> {campaign?.status || 'Active'}</p>
-              <p><strong>Promoters:</strong> {(campaign?.subscribedPromoters || []).length}</p>
-              
-              {user?.role === 'promoter' && (
-                <button 
-                  onClick={() => navigate(`/submit-proof?campaignId=${campaign?.id}`)}
-                  className="submit-button"
-                >
-                  Submit Proof
-                </button>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
+  const { user } = useContext(AuthContext);
+  const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
+  const target = user?.email === adminEmail ? '/admin-portal'
+    : user?.role === 'company' ? '/company' : '/promoter-dashboard';
+  return <Navigate to={target} replace />;
 }

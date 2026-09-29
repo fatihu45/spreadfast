@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -22,9 +22,10 @@ import './styles/legacy-ui.css';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = React.useContext(AuthContext);
+  const location = useLocation();
 
   if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" state={{ from: location.pathname + location.search + location.hash }} replace />;
   return children;
 }
 
@@ -37,9 +38,10 @@ function QuickAdRedirect() {
 
 function AdminRoute({ children }) {
   const { user, loading } = React.useContext(AuthContext);
+  const location = useLocation();
 
   if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" state={{ from: location.pathname + location.search + location.hash }} replace />;
   
   // Check if user is admin (compare with env variable)
   const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
@@ -140,6 +142,8 @@ function App() {
               </AdminRoute>
             }
           />
+          <Route path="/campaigns" element={<Navigate to="/available-campaigns" replace />} />
+          <Route path="*" element={<main className="sf-page"><h1>Page not found</h1><p>This page may have moved.</p><Link to="/">Return to SpreadFast</Link></main>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

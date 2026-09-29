@@ -58,7 +58,7 @@ export default function PromotionDashboard() {
     async function load() {
       const results = await Promise.allSettled([
         apiCallAuth('/api/wallet', token),
-        apiCall('/api/campaigns'),
+        apiCall('/api/campaigns', { headers: { Authorization: `Bearer ${token}` } }),
         apiCallAuth('/api/submissions/my-submissions', token),
       ]);
       if (!current) return;

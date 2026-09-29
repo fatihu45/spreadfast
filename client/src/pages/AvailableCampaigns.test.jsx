@@ -35,7 +35,7 @@ const filter = label => [...host.querySelectorAll('.marketplace-filters button')
 test('fetches active campaign previews and preserves the existing slot and budget calculations', async () => {
   await render();
   expect(host.querySelectorAll('article').length).toBe(3); expect(card('closed')).toBeUndefined();
-  expect(apiCall).toHaveBeenCalledWith('/api/campaigns');
+  expect(apiCall).toHaveBeenCalledWith('/api/campaigns', { headers: { Authorization: 'Bearer test-token' } });
   expect(apiCall).toHaveBeenCalledWith('/api/campaigns/a/assets/preview');
   expect(apiCall).not.toHaveBeenCalledWith('/api/campaigns/closed/assets/preview');
   expect(card('a').querySelector('.marketplace-budget strong').textContent).toBe(String.fromCharCode(0x20a6) + '15,000');
@@ -129,3 +129,11 @@ test('detail tabs show campaign data and explain earnings without inventing a re
  });
 
 test('campaign API failures show an error and can be retried',async()=>{apiCall.mockResolvedValueOnce({success:false,message:'Service unavailable'});await render();expect(host.querySelector('[role="alert"]').textContent).toContain('Service unavailable');expect(host.textContent).not.toContain('No campaigns found');await click([...host.querySelectorAll('button')].find(b=>b.textContent==='Retry campaigns'));expect(card('a')).toBeDefined();});
+
+test('uses aggregate membership counts when other creators are private', async () => {
+  campaigns[0].subscribedCount = 2;
+  campaigns[0].subscribedPromoters = [];
+  await render();
+  expect(card('a').querySelector('.marketplace-slots').textContent).toBe('1 creator slot left');
+  expect(apiCall).toHaveBeenCalledWith('/api/campaigns', { headers: { Authorization: 'Bearer test-token' } });
+});

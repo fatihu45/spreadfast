@@ -73,7 +73,7 @@ test.each([
   root = createRoot(container);
   render(path, role);
   expect(container.querySelector('#quick-ad-title')).not.toBeNull();
-  expect(deployment.rewrites).toContainEqual({ source: path, destination: '/index.html' });
+  expect(deployment.rewrites).toContainEqual({ source: '/:path*', destination: '/index.html' });
 });
 
 test.each([
@@ -102,5 +102,21 @@ test.each(['company', 'promoter'])('%s credits direct route retains dashboard na
   render('/quickads/credits', role);
   expect(container.querySelector('h1').textContent).toBe('Quick Ads Credits');
   expect(quickLink(navs()[0]).getAttribute('aria-current')).toBe('page');
-  expect(deployment.rewrites).toContainEqual({ source: '/quickads/credits', destination: '/index.html' });
+  expect(deployment.rewrites).toContainEqual({ source: '/:path*', destination: '/index.html' });
+});
+
+test.each([['company', '/company'], ['promoter', '/promoter-dashboard']])('legacy dashboard opens the working %s dashboard', (role, destination) => {
+  render('/dashboard', role);
+  expect(window.location.pathname).toBe(destination);
+  expect(container.textContent).not.toContain('Loading campaigns...');
+});
+test('unknown pages offer a home link', () => {
+  render('/missing-page');
+  expect(container.textContent).toContain('Page not found');
+  expect(container.querySelector('a').getAttribute('href')).toBe('/');
+});
+test('protected callback preserves its reference through the login guard', () => {
+  render('/quickads/credits?reference=paid-test-123', null);
+  expect(window.location.pathname).toBe('/login');
+  expect(window.history.state.usr.from).toBe('/quickads/credits?reference=paid-test-123');
 });

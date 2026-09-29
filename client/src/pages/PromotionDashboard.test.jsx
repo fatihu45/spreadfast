@@ -40,7 +40,7 @@ const value = label => [...host.querySelectorAll('dl')].find(dl => dl.querySelec
 
 test('uses wallet balance and personal memberships/submissions, never global campaign totals', async () => {
   await render();
-  expect(apiCall).toHaveBeenCalledWith('/api/campaigns');
+  expect(apiCall).toHaveBeenCalledWith('/api/campaigns', { headers: { Authorization: 'Bearer test-token' } });
   expect(apiCallAuth).toHaveBeenCalledWith('/api/wallet', 'test-token');
   expect(apiCallAuth).toHaveBeenCalledWith('/api/submissions/my-submissions', 'test-token');
   expect(value('Available earnings')).toBe(String.fromCharCode(0x20a6) + '17,543.25');

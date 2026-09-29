@@ -1,7 +1,7 @@
 import { Alert, AuthLayout, Button } from '../components/ui';
 import React, { useEffect, useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { apiCallAuth } from '../utils/api';
 import { pollCampaign } from '../utils/pollCampaign';
 
@@ -10,6 +10,7 @@ export default function PaymentCallback() {
   const [searchParams] = useSearchParams();
   const reference = searchParams.get('reference');
   const navigate = useNavigate();
+  const location = useLocation();
   const [status, setStatus] = useState('verifying');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -18,7 +19,7 @@ export default function PaymentCallback() {
     setError(''); setStatus('verifying');
     if (!reference) { setError('Payment reference is missing. Contact support if you have already paid.'); setStatus('failed'); return; }
     if (loading) return;
-    if (!token) { setError('Log in to confirm this payment, then return to this page.'); setStatus('failed'); return; }
+    if (!token) { setError('Log in to continue confirming this payment.'); setStatus('failed'); return; }
     const fail = message => { if (active) { setError(message); setStatus('failed'); } };
     async function confirm() {
       try {
@@ -41,7 +42,7 @@ export default function PaymentCallback() {
     {status === 'success' && <><Alert tone="success">Payment Successful!</Alert><p>Your campaign has been created successfully.</p><p>Redirecting to dashboard...</p></>}
     {status === 'failed' && <><Alert tone="error"><strong>Confirmation incomplete</strong><p>{error}</p></Alert>
       {reference && token && <Button onClick={() => setRetry(value => value + 1)}>Retry confirmation</Button>}
-      {!token && <Link to="/login" className="sf-control sf-button sf-button--secondary">Log in</Link>}
+      {!token && <Link to="/login" state={{ from: location.pathname + location.search }} className="sf-control sf-button sf-button--secondary">Log in</Link>}
       <Link to="/company" className="sf-control sf-button sf-button--secondary">Back to Dashboard</Link></>}
   </AuthLayout>;
 }

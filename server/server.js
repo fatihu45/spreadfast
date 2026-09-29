@@ -25,6 +25,8 @@ const { requestWithdrawal, reviewWithdrawal } = require('./services/wallet');
 const { mongoTransaction } = require('./services/databaseTransaction');
 const { PURPOSE: QUICK_AD_PAYMENT_PURPOSE, assertCampaignPayment, verifyQuickAdPayment } = require('./services/quickAdPayments');
 
+const { campaignView } = require('./services/campaignView');
+const { safeError } = require('./services/safeError');
 const app = express();
 
 // ==================== MIDDLEWARE ====================
@@ -692,7 +694,7 @@ const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NO
               </p>
             </div>
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/campaigns"
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/available-campaigns"
                  style="background-color: #15803d; color: white; padding: 15px 30px;
                         border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
                 Subscribe Now & Start Earning →
@@ -816,20 +818,6 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
 app.use('/uploads', express.static(uploadsDir));
 
 // ==================== TEST EMAIL ====================
-app.get('/api/test-email', async (req, res) => {
-  try {
-    await sendEmail(
-      process.env.EMAIL_USER || process.env.ADMIN_EMAIL,
-      'SpreadFast Email Test',
-      '<h1>Email is working! ✅</h1><p>Resend integration is working correctly.</p>'
-    );
-    res.json({ success: true, message: 'Test email sent! Check your inbox.' });
-  } catch (err) {
-    console.error('Email test error:', err);
-    res.json({ success: false, error: err.message });
-  }
-});
-
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
   res.json({
@@ -843,6 +831,8 @@ app.get('/api/health', (req, res) => {
 
 // ==================== AUTH MIDDLEWARE ====================
 const { authenticateToken } = require('./middleware/auth');
+const optionalAuthentication = (req, res, next) => req.headers.authorization
+  ? authenticateToken(req, res, next) : next();
 const quickAdsRoute = require('./routes/quickAds');
 app.use('/api/quick-ads', quickAdsRoute);
 const { createQuickAdPaymentsRouter } = require('./routes/quickAdPayments');
@@ -904,7 +894,7 @@ app.post('/api/auth/register', async (req, res) => {
       user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, walletBalance: 0 }
     });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Register error:', safeError(error));
     res.status(500).json({ success: false, message: 'Registration failed: ' + error.message });
   }
 });
@@ -941,7 +931,7 @@ app.post('/api/auth/login', async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, walletBalance: user.walletBalance }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:', safeError(error));
     res.status(500).json({ success: false, message: 'Login failed' });
   }
 });
@@ -957,7 +947,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, walletBalance: user.walletBalance }
     });
   } catch (error) {
-    console.error('Get user error:', error);
+    console.error('Get user error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to get user' });
   }
 });
@@ -994,7 +984,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     res.json(genericResponse);
   } catch (error) {
-    console.error('Forgot password error:', error);
+    console.error('Forgot password error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to process request' });
   }
 });
@@ -1026,7 +1016,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
     await passwordChanged(DB, user);
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('Reset password error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to reset password' });
   }
 });
@@ -1087,7 +1077,7 @@ app.post('/api/payments/initiate', authenticateToken, async (req, res) => {
 
     res.status(500).json({ success: false, message: 'Failed to initialize payment' });
   } catch (error) {
-    console.error('Payment error:', error);
+    console.error('Payment error:', safeError(error));
     res.status(500).json({ success: false, message: 'Payment initialization failed' });
   }
 });
@@ -1122,7 +1112,7 @@ app.post('/api/payments/verify', authenticateToken, async (req, res) => {
 
     res.status(400).json({ success: false, message: 'Payment verification failed' });
   } catch (error) {
-    console.error('Verification error:', error);
+    console.error('Verification error:', safeError(error));
     res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Verification failed' });
   }
 });
@@ -1143,7 +1133,7 @@ app.get('/api/payments/status/:reference', authenticateToken, async (req, res) =
 
     res.status(400).json({ success: false, message: 'Could not get payment status' });
   } catch (error) {
-    console.error('Status error:', error);
+    console.error('Status error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to get status' });
   }
 });
@@ -1218,7 +1208,7 @@ app.get('/api/payments/campaign-status/:reference', authenticateToken, async (re
 
     res.json({ success: true, campaignCreated: false, message: 'Payment pending confirmation' });
   } catch (error) {
-    console.error('Campaign status error:', error);
+    console.error('Campaign status error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to check campaign status' });
   }
 });
@@ -1297,7 +1287,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Campaign created successfully', campaign });
   } catch (error) {
-    console.error('Campaign creation error:', error);
+    console.error('Campaign creation error:', safeError(error));
     res.status(error.statusCode || 500).json({ success: false, message: 'Failed to create campaign: ' + error.message });
   }
 });
@@ -1344,7 +1334,7 @@ app.post('/api/campaigns/:campaignId/brand-assets', authenticateToken, upload.ar
 
     res.json({ success: true, message: 'Files uploaded successfully', assets: uploadedAssets });
   } catch (error) {
-    console.error('Brand assets upload error:', error);
+    console.error('Brand assets upload error:', safeError(error));
     if (req.files) {
       req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
     }
@@ -1376,25 +1366,25 @@ app.delete('/api/campaigns/:campaignId/brand-assets/:assetIndex', authenticateTo
 
     res.json({ success: true, message: 'Asset deleted successfully' });
   } catch (error) {
-    console.error('Delete asset error:', error);
+    console.error('Delete asset error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to delete asset: ' + error.message });
   }
 });
 
-app.get('/api/campaigns', async (req, res) => {
+app.get('/api/campaigns', optionalAuthentication, async (req, res) => {
   try {
     const campaigns = await DB.Campaign.find({});
-    res.json({ success: true, campaigns });
+    res.json({ success: true, campaigns: campaigns.map(campaign => campaignView(campaign, req.user)) });
   } catch (error) {
-    console.error('Fetch campaigns error:', error);
+    console.error('Fetch campaigns error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
 });
 
-app.get('/api/campaigns/company/:companyId', async (req, res) => {
+app.get('/api/campaigns/company/:companyId', optionalAuthentication, async (req, res) => {
   try {
     const campaigns = await DB.Campaign.find({ companyId: req.params.companyId });
-    res.json({ success: true, campaigns });
+    res.json({ success: true, campaigns: campaigns.map(campaign => campaignView(campaign, req.user)) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch campaigns' });
   }
@@ -1435,7 +1425,7 @@ app.post('/api/campaigns/:campaignId/submit', authenticateToken, async (req, res
     await DB.Submission.create(submission);
     res.json({ success: true, message: 'Submission received', submission });
   } catch (error) {
-    console.error('Submission error:', error);
+    console.error('Submission error:', safeError(error));
     res.status(500).json({ success: false, message: 'Submission failed' });
   }
 });
@@ -1485,7 +1475,7 @@ app.post('/api/campaigns/:campaignId/subscribe', authenticateToken, async (req, 
     }
     res.json({ success: true, message: 'Successfully subscribed to campaign' });
   } catch (error) {
-    console.error('Subscription error:', error);
+    console.error('Subscription error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to subscribe to campaign' });
   }
 });
@@ -1502,11 +1492,11 @@ app.get('/api/campaigns/:campaignId/submissions', authenticateToken, async (req,
   }
 });
 
-app.get('/api/campaigns/:campaignId', async (req, res) => {
+app.get('/api/campaigns/:campaignId', optionalAuthentication, async (req, res) => {
   try {
     const campaign = await DB.Campaign.findOne({ id: req.params.campaignId });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
-    res.json({ success: true, campaign });
+    res.json({ success: true, campaign: campaignView(campaign, req.user) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch campaign' });
   }
@@ -1873,7 +1863,7 @@ app.post('/api/campaigns/:campaignId/assets/upload', authenticateToken, upload.a
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {
-    console.error('Asset upload error:', error);
+    console.error('Asset upload error:', safeError(error));
     if (req.files) {
       req.files.forEach(file => { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); });
     }
@@ -1898,7 +1888,7 @@ app.get('/api/campaigns/:campaignId/assets/preview', async (req, res) => {
 
     res.json({ success: true, assets: preview, total: assets.length });
   } catch (error) {
-    console.error('Asset preview error:', error);
+    console.error('Asset preview error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to fetch asset preview' });
   }
 });
@@ -1949,7 +1939,7 @@ app.get('/api/campaigns/:campaignId/assets', authenticateToken, async (req, res)
       }))
     });
   } catch (error) {
-    console.error('Get assets error:', error);
+    console.error('Get assets error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to fetch assets' });
   }
 });
@@ -2004,7 +1994,7 @@ app.get('/api/campaigns/:campaignId/assets/:assetId/download', authenticateToken
       expires_in: 3600
     });
   } catch (error) {
-    console.error('Download URL error:', error);
+    console.error('Download URL error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to generate download URL' });
   }
 });
@@ -2041,7 +2031,7 @@ app.delete('/api/campaigns/:campaignId/assets/:assetId', authenticateToken, asyn
 
     res.json({ success: true, message: 'Asset deleted successfully' });
   } catch (error) {
-    console.error('Delete asset error:', error);
+    console.error('Delete asset error:', safeError(error));
     res.status(500).json({ success: false, message: 'Failed to delete asset' });
   }
 });

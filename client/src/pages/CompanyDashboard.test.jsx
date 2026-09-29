@@ -29,7 +29,7 @@ const stats = () => [...host.querySelectorAll('.sf-stat-card__value')].map(el =>
 test('overview counts own active campaigns, unique promoters, and fetched submissions', async () => {
   await render(); expect(host.querySelector('h1').textContent).toContain('Actual Business'); expect(stats()).toEqual(['1', '2', '2']);
   expect(host.querySelectorAll('.company-overview-campaign')).toHaveLength(2); expect(host.textContent).not.toContain('Other business campaign');
-  expect(apiCall).toHaveBeenCalledWith('/api/campaigns'); expect(apiCallAuth).toHaveBeenCalledWith('/api/campaigns/a/submissions', 'auth-token'); expect(apiCallAuth).toHaveBeenCalledWith('/api/campaigns/a/assets', 'auth-token');
+  expect(apiCall).toHaveBeenCalledWith('/api/campaigns', { headers: { Authorization: 'Bearer auth-token' } }); expect(apiCallAuth).toHaveBeenCalledWith('/api/campaigns/a/submissions', 'auth-token'); expect(apiCallAuth).toHaveBeenCalledWith('/api/campaigns/a/assets', 'auth-token');
   expect(host.querySelector('.company-overview-campaign-status').textContent).toContain('2/4 promoters assigned'); expect(host.querySelector('.company-overview-campaign-status').textContent).toContain('2 available');
   expect(host.querySelector('.company-overview-campaign-budget').textContent).toContain('20,000');
 });

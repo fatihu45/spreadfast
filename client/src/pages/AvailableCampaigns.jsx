@@ -55,7 +55,7 @@ export default function AvailableCampaigns() {
   // Get remaining slots
   const getRemainingSlots = (campaign) => {
     const totalSlots = creatorSlots(campaign);
-    const subscribedCount = campaign.subscribedPromoters?.length || 0;
+    const subscribedCount = campaign.subscribedCount ?? campaign.subscribedPromoters?.length ?? 0;
     return Math.max(0, totalSlots - subscribedCount);
   };
 
@@ -71,7 +71,7 @@ export default function AvailableCampaigns() {
     try {
       setLoading(true);
       setLoadError('');
-      const data = await apiCall('/api/campaigns');
+      const data = await apiCall('/api/campaigns', { headers: { Authorization: `Bearer ${token}` } });
       if (data.success) {
         // Filter to only active campaigns
         const activeCampaigns = data.campaigns.filter(c => c.status === 'active' || !c.status);
@@ -212,7 +212,7 @@ export default function AvailableCampaigns() {
       {filteredCampaigns.length === 0 ? <Card><EmptyState title={loadError ? 'Campaigns could not be loaded' : 'No campaigns found'} description="Try adjusting your filters or check back later." /></Card>
         : filteredCampaigns.map(campaign => {
           const totalSlots = creatorSlots(campaign);
-          const subscribedCount = campaign.subscribedPromoters?.length || 0;
+          const subscribedCount = campaign.subscribedCount ?? campaign.subscribedPromoters?.length ?? 0;
           const remainingSlots = getRemainingSlots(campaign);
           const assets = campaignAssets[campaign.id] || [];
           const thumbnail = assets.find(asset => asset.file_type === 'image' && asset.url)?.url

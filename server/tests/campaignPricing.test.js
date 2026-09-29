@@ -14,7 +14,7 @@ function fixture() {
   const files = {'users.json': [{id: 'company', email: 'company@example.test'}, {id:'creator', walletBalance: 1200}],
     'campaigns.json': [], 'transactions.json': [], 'submissions.json': []};
   let nextId = 0;
-  const context = { ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
+  const context = { safeError: require('../services/safeError').safeError, ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
     passwordChanged: require('../services/emailNotifications').passwordChanged,
     QUICK_AD_PAYMENT_PURPOSE: quickAdPayments.PURPOSE, assertCampaignPayment: quickAdPayments.assertCampaignPayment,
     console: {log(){},warn(){},error(){}},
