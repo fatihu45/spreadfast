@@ -1,6 +1,6 @@
-# SpreadFast - Crowd-Powered Marketing MVP
+# SpreadFast — AI-Powered Advertising Platform
 
-A full-stack web application connecting businesses with promoters for authentic social media marketing.
+SpreadFast helps businesses create AI-powered video ads and promote their brands through creator campaigns.
 
 ## Project Structure
 

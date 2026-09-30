@@ -50,7 +50,11 @@ export default function LandingPage() {
     },
     {
       q: 'How much does it cost to run a campaign?',
-      a: 'Campaigns cost ₦20,000 per promoter. Choose the number of promoters that fits your campaign.',
+      a: 'Campaigns cost ₦20,000 per creator. Choose the number of creators that fits your campaign.',
+    },
+    {
+      q: 'How much does Quick Ads cost?',
+      a: 'Quick Ads starts at ₦1,700 for one video generation, with larger credit packages available.',
     },
     {
       q: 'How do promoters get paid?',
@@ -110,15 +114,14 @@ export default function LandingPage() {
         <section className="landing-hero" aria-labelledby="landing-title">
           <Container className="landing-hero-grid">
             <div className="landing-hero-copy">
-              <p className="landing-eyebrow"><span aria-hidden="true" />People-powered growth</p>
+              <p className="landing-eyebrow"><span aria-hidden="true" />AI-powered advertising</p>
               <h1 id="landing-title">Get more customers.<br className="landing-title-break" /> Grow your Business.</h1>
               <p className="landing-hero-description">
-                Connect with verified creators who bring your brand to life through authentic advertising.
-                Simple, human, effective.
+                Create AI-powered video ads, launch creator campaigns, and reach more customers — all from one platform.
               </p>
               <div className="landing-hero-actions">
-                <Button size="lg" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true"><UiIcon name="external" /></span></Button>
-                <Link to="/quick-ad" className="sf-control sf-button sf-button--secondary"><UiIcon name="video" /> Create a Quick Ad</Link>
+                <Link to="/quick-ad" className="sf-control sf-button sf-button--primary"><UiIcon name="video" /> Create a Quick Ad</Link>
+                <Button size="lg" variant="secondary" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true"><UiIcon name="external" /></span></Button>
                 <Button size="lg" variant="secondary" onClick={handleJoinAsPromoter}>Earn with SpreadFast</Button>
               </div>
               <div className="landing-trust" aria-label="Why SpreadFast">
@@ -135,7 +138,7 @@ export default function LandingPage() {
           <Container>
             <div className="landing-quick-ads-card">
               <div className="landing-quick-ads-copy">
-                <p className="landing-quick-ads-eyebrow"><span>New</span> SpreadFast Quick Ads</p>
+                <p className="landing-quick-ads-eyebrow"><span>Quick Ads</span> AI-generated short video advertising</p>
                 <h2 id="landing-quick-ads-title">Turn one photo into an ad.</h2>
                 <p className="landing-quick-ads-description">Upload your product photo and create a short AI-powered video ad in seconds.</p>
                 <Link to="/quick-ad" className="sf-control sf-button sf-button--primary">Create a Quick Ad <UiIcon name="arrow" /></Link>
@@ -168,27 +171,27 @@ export default function LandingPage() {
         <section className="landing-how" aria-labelledby="how-title">
           <Container>
             <div className="landing-section-heading">
-              <p className="landing-eyebrow">A little content. A real connection.</p>
+              <p className="landing-eyebrow">Quick Ads + Creator Campaigns</p>
               <h2 id="how-title">How SpreadFast Works</h2>
-              <p>Three simple steps to get your brand seen — or start creating.</p>
+              <p>Create AI-powered ads or launch creator campaigns from one platform.</p>
             </div>
             <ol className="landing-steps">
               <li id="businesses">
                 <span className="landing-step-icon" aria-hidden="true"><MegaphoneIcon color="currentColor" size={28} /></span>
-                <h3>1. Businesses</h3>
-                <p>Create a campaign. Share your brief, choose your budget, and tell your story.</p>
+                <h3>1. Create</h3>
+                <p>Turn your product photo into an AI-powered video ad with Quick Ads.</p>
                 <span className="landing-step-arrow" aria-hidden="true">⟶</span>
               </li>
               <li id="creators">
                 <span className="landing-step-icon" aria-hidden="true"><ShareIcon color="currentColor" size={28} /></span>
-                <h3>2. Creators</h3>
-                <p>Join a campaign, create authentic content, and submit your post for review.</p>
+                <h3>2. Promote</h3>
+                <p>Launch a campaign and work with creators who can put your brand in front of real audiences.</p>
                 <span className="landing-step-arrow" aria-hidden="true">⟶</span>
               </li>
               <li>
                 <span className="landing-step-icon" aria-hidden="true"><PeopleIcon color="currentColor" size={28} /></span>
-                <h3>3. Customers</h3>
-                <p>Discover your brand through real people. Build connections that inspire action.</p>
+                <h3>3. Grow</h3>
+                <p>Reach more customers through AI-created content and authentic creator promotion.</p>
               </li>
             </ol>
           </Container>
@@ -198,22 +201,25 @@ export default function LandingPage() {
           <Container>
             <div className="landing-section-heading">
               <h2 id="pricing-title">A simple way to get started.</h2>
-              <p>For the brands with a story. And the people who bring it to life.</p>
+              <p>Two ways to advertise. Choose what works for your business.</p>
             </div>
             <div className="landing-pricing-grid">
               <article className="landing-price-card">
-                <p className="landing-eyebrow">For Businesses</p>
-                <h3>Put your brand out there.</h3>
-                <p className="landing-price">₦20,000 <span>per promoter</span></p>
-                <ul><li>Work with verified promoters</li><li>Launch campaigns in minutes</li><li>Reach more customers with authentic content</li></ul>
-                <Button onClick={handleCreateCampaign}>Create a Campaign</Button>
+                <p className="landing-eyebrow">Quick Ads</p>
+                <h3>Create video ads with AI.</h3>
+                <p className="landing-price"><span>Starting from</span> ₦1,700</p>
+                <p>Turn one product photo into a short AI-powered video ad.</p>
+                <ul><li>No editing required</li><li>No design experience needed</li><li>Ready for social media</li></ul>
+                <Link to="/quick-ad" className="sf-control sf-button sf-button--primary">Create a Quick Ad</Link>
+                <Link to="/quickads/credits" className="landing-text-link">View Quick Ads pricing</Link>
               </article>
               <article className="landing-price-card">
-                <p className="landing-eyebrow">For Creators</p>
-                <h3>Make content. Make an impact.</h3>
-                <p>Earn a share of every campaign pool.</p>
-                <ul><li>Work with growing brands</li><li>Join campaigns that fit your style</li><li>Turn your content into income</li></ul>
-                <Button variant="secondary" onClick={handleJoinAsPromoter}>Join as Promoter</Button>
+                <p className="landing-eyebrow">Creator Campaigns</p>
+                <h3>Get your brand out there.</h3>
+                <p className="landing-price">₦20,000 <span>per creator</span></p>
+                <p>Promote your brand through creators and their audiences.</p>
+                <ul><li>Work with verified creators</li><li>Launch campaigns in minutes</li><li>Reach customers with authentic content</li></ul>
+                <Button variant="secondary" onClick={handleCreateCampaign}>Create a Campaign</Button>
               </article>
             </div>
           </Container>
@@ -244,7 +250,7 @@ export default function LandingPage() {
 
         <section className="landing-community">
           <Container className="landing-community-inner">
-            <div><h2>Better together.</h2><p>Meet the people creating with SpreadFast.</p></div>
+            <div><h2>Better together.</h2><p>For Creators: Create content, join brand campaigns, and earn with SpreadFast.</p></div>
             <a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
               target="_blank" rel="noopener noreferrer" className="sf-control sf-button sf-button--secondary">
               Join our WhatsApp creator community <span aria-hidden="true"><UiIcon name="external" /></span>
@@ -256,7 +262,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <Container>
           <div className="landing-footer-grid">
-            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>Get more customers. grow your business.</p></div>
+            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>AI-powered advertising for businesses and creators.</p></div>
             <div><h2>For Companies</h2><ul>
               <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
               <li><a href="#creators">Meet our creators</a></li>

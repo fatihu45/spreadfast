@@ -1,0 +1,23 @@
+{
+  "name": "SpreadFast",
+  "short_name": "SpreadFast",
+  "description": "AI-powered advertising for businesses and creators.",
+  "start_url": "/",
+  "display": "browser",
+  "theme_color": "#1B5E20",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -93,7 +93,7 @@ You should see your commit listed.
 1. Go to https://github.com/fatihu45
 2. Click **"New"** (green button)
 3. Repository name: **`spreadfast`**
-4. Description: **"Crowd-powered marketing platform MVP"**
+4. Description: **"AI-powered advertising platform for businesses and creators"**
 5. Public (so others can see)
 6. **Don't** initialize with README (we have one)
 7. Click **"Create repository"**

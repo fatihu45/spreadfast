@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-This is a full-stack MVP for a crowd-powered marketing platform.
+SpreadFast is an AI-powered advertising platform for businesses and creators.
 
 ### Quick Start
 

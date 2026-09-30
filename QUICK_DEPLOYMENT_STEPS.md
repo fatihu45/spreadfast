@@ -63,7 +63,7 @@ git commit -m "Initial: Full-stack SpreadFast MVP - React + Express + TailwindCS
 1. Go to: https://github.com/fatihu45
 2. Click **"New"** (green button)
 3. **Repository name:** `spreadfast`
-4. **Description:** Crowd-powered marketing platform MVP
+4. **Description:** AI-powered advertising platform for businesses and creators
 5. **Visibility:** Public
 6. Click **"Create repository"** (don't initialize)
 
