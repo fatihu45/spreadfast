@@ -12,199 +12,24 @@ const { quickAdAccountOnly } = require('../services/quickAdAccess');
 const MODEL = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const NEGATIVE_PROMPT = 'blur, distortion, warped packaging, incorrect logo, duplicated objects, unreadable branding, low quality';
-const QUICK_AD_BASE_PROMPT = `
-Create a professional 5-second vertical social media product advertisement using the uploaded image as the exact product reference.
-
-The uploaded product must remain the hero subject throughout the video.
-
-Preserve the exact product identity, packaging, colors, shape, proportions, branding, logo and recognizable visual details.
-
-Transform the original image into a professionally designed commercial scene rather than simply animating the original photograph.
-
-Create clear separation between foreground, product and background to produce realistic cinematic depth.
-
-The product itself must have controlled visible movement such as a gentle lift, small rotation, forward motion, floating movement or natural settling depending on the selected advertising style.
-
-Use realistic shadows, highlights and reflections so the product feels physically present inside the new environment.
-
-Keep the product sharp, recognizable and visually dominant.
-
-Do not redesign the product.
-Do not change the packaging.
-Do not change product colors.
-Do not alter or invent logos.
-Do not create unreadable branding.
-Do not duplicate the product.
-Do not deform the product.
-Do not introduce people or hands unless explicitly requested elsewhere.
-Do not generate promotional text inside the AI video.
-`;
+const QUICK_AD_BASE_PROMPT = 'Create a polished 5-second vertical product ad using the uploaded image as reference. Keep the product sharp, dominant, and faithful in identity, shape, proportions, packaging, colors, and logo. Animate it with subtle lift, rotation, or forward movement; animate the background with subtle motion, depth, and parallax. Use smooth camera movement, realistic light, shadows, and reflections. No morphing, duplicate products, people, or added text. End on a stable hero shot.';
 const PROMPTS = Object.freeze({
-  food: `
-STYLE: FOOD BURST
-
-Create an energetic premium food or beverage commercial.
-
-Replace or enhance the original background with a rich appetizing commercial environment that matches the uploaded product.
-
-Animate the product with smooth hero motion:
-- gently lift or float the product
-- slightly rotate it
-- subtly move it toward the camera
-- keep the front branding readable whenever possible
-
-Surround the product with category-relevant environmental motion.
-Depending on the product, this may include ingredients, fruit, vegetables, herbs, seasoning particles, crumbs, ice, droplets, steam, sauce movement, liquid splashes, or food particles.
-These elements should move around and behind the product without hiding it.
-
-Use foreground elements passing closer to the camera and background elements moving more slowly to create strong depth and parallax.
-
-Use warm, rich, appetizing commercial lighting.
-Add realistic reflections and highlights to the packaging.
-Use a smooth cinematic camera push-in.
-
-Motion structure:
-0–1 second: Quickly establish the commercial environment and introduce movement.
-1–3.5 seconds: Show the strongest product motion, ingredient movement, particles and camera movement.
-3.5–5 seconds: Reduce the environmental motion slightly and allow the product to settle into a strong centered hero composition.
-
-The final frame should look suitable for adding a price, business name or call-to-action later.
-Make the result feel like a high-end food advertisement, not an animated photograph.
-`,
-  reveal: `
-STYLE: PRODUCT REVEAL
-
-Create a cinematic premium product reveal advertisement.
-
-Build a new commercial environment around the product using colors and visual styling inspired by the uploaded product.
-
-At the beginning, the product should feel partially hidden, slightly distant, emerging from shadow, light, mist or another tasteful reveal element.
-
-Animate the product smoothly moving forward into the hero position.
-Add a small controlled rotation while the product enters the frame or moves toward the camera.
-Avoid aggressive spinning.
-
-Create a professional background using soft gradients, light beams, subtle atmospheric particles, reflections, soft shadows, abstract shapes, and color tones derived from the product.
-Create clear foreground, middle-ground and background separation.
-
-Use cinematic depth of field.
-Add a smooth slow camera push toward the product.
-Create subtle parallax between the background and product.
-Add a soft moving highlight or light sweep across the product as it reaches the final hero position.
-
-Motion structure:
-0–1 second: Product begins partially hidden or distant.
-1–3.5 seconds: Product moves forward, gently rotates and becomes fully revealed.
-3.5–5 seconds: Product settles into a clean premium hero position while camera movement slows.
-
-The final result should resemble a professionally produced commercial product reveal.
-`,
-  studio: `
-STYLE: CLEAN STUDIO
-
-Create a minimalist premium studio product commercial.
-
-Replace the original background with a clean professional studio environment.
-Choose a neutral or complementary background based on the uploaded product's colors.
-
-The product may appear on a clean studio surface, subtle pedestal, minimal platform, or soft reflective surface.
-Use realistic contact shadows and subtle reflections.
-
-The product should not remain completely static.
-Give it elegant controlled movement:
-- slowly rise or settle into position
-- gently rotate only a few degrees
-- optionally move slightly toward the camera
-
-Use a slow smooth camera push-in.
-Add very subtle horizontal camera movement or parallax.
-
-Use soft professional studio lighting.
-Allow highlights to move slowly across the product to reveal its shape, texture and packaging.
-
-The background should contain subtle depth, soft gradients and restrained atmospheric movement.
-Avoid a flat static background.
-Keep the background visually quiet so the product remains the main focus.
-
-Motion structure:
-0–1 second: Introduce the product and establish the premium studio setting.
-1–3.5 seconds: Slow product movement, subtle rotation and soft camera movement.
-3.5–5 seconds: Product settles into a very clean centered hero composition.
-
-The style should feel modern, elegant and premium.
-Do not add explosions, aggressive particles or chaotic movement.
-`,
-  social: `
-STYLE: ATTENTION GRABBER
-
-Create a bold high-energy short-form social media advertisement designed to attract attention immediately.
-
-Transform the original image into a dynamic advertising environment built around the product's category and dominant colors.
-
-The first second should contain an obvious visual change or motion.
-
-Animate the product into the hero position using:
-- controlled forward movement
-- slight rotation
-- quick scale/depth movement
-- subtle cinematic bounce or settling movement
-Do not use unrealistic uncontrolled spinning.
-
-Keep the product large and visually dominant.
-
-Generate energetic environmental motion around it using appropriate effects such as abstract shapes, particles, light streaks, splashes, fragments, category-related objects, or graphic motion elements.
-Keep most effects behind or around the product.
-
-Allow occasional foreground elements to move near the camera to create stronger depth and speed.
-
-Use strong parallax between foreground effects, product and background.
-Use a faster cinematic camera push during the first half of the video.
-Then slow the camera movement and hold the product clearly toward the end.
-
-Use dramatic but professional lighting, highlights and reflections.
-
-Motion structure:
-0–1 second: Strong attention-grabbing visual entrance.
-1–3.5 seconds: Highest energy product motion, environmental movement and camera movement.
-3.5–5 seconds: Motion becomes calmer and product settles into a clear hero composition.
-
-The result should feel designed for TikTok, Instagram Reels and short social media advertisements.
-It should stop the viewer's attention without making the product difficult to recognize.
-`
+  food: 'Food Burst: Use a warm, appetizing food or beverage setting. Sweep ingredients, steam, droplets, crumbs, or sauce naturally around and behind the product; add a smooth cinematic push-in.',
+  reveal: 'Product Reveal: Begin in soft shadow or mist, then reveal the product moving forward with controlled rotation. Add gentle light beams, reflections, and a slow cinematic push.',
+  studio: 'Clean Studio: Use a calm, minimalist studio with neutral or complementary tones, soft shadows, and restrained depth. Keep the backdrop quiet and the camera movement slow.',
+  social: 'Attention Grabber: Open with a bold, energetic entrance. Add a quick camera push, lively particles or light streaks, and strong parallax for a vivid short-form ad.'
 });
 
+function sanitizeVideoPrompt(prompt) {
+  const MAX_LENGTH = 2200;
+  return String(prompt || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_LENGTH);
+}
+
 function buildQuickAdPrompt(style) {
-  const stylePrompts = {
-    food: PROMPTS.food,
-    reveal: PROMPTS.reveal,
-    studio: PROMPTS.studio,
-    social: PROMPTS.social,
-  };
-
-  const selectedStyle = stylePrompts[style] || stylePrompts.studio;
-
-  return `
-${QUICK_AD_BASE_PROMPT}
-
-${selectedStyle}
-
-FINAL VIDEO REQUIREMENTS:
-
-Duration: approximately 5 seconds.
-
-The video must immediately feel more polished than the uploaded static image.
-The product should visibly move.
-The environment/background should visibly move.
-The camera should have controlled movement.
-Maintain realistic product geometry.
-Avoid morphing.
-Avoid product duplication.
-Avoid sudden packaging changes between frames.
-Avoid unreadable or changing logos.
-Do not generate random text.
-Do not place fake promotional text around the product.
-End with the product clearly visible in a stable hero position.
-`;
+  return `${QUICK_AD_BASE_PROMPT} ${PROMPTS[style] || PROMPTS.studio}`;
 }
 
 async function loadFalClient() {
@@ -248,6 +73,21 @@ function isHttpsUrl(value) {
 
 function generationError(code) {
   return Object.assign(new Error('Quick Ads generation failed'), { code });
+}
+
+function isFalValidationError(error) {
+  const payload = [
+    error?.message,
+    error?.details,
+    error?.body?.message,
+    error?.body?.error,
+    error?.response?.data?.message,
+    error?.response?.data?.error,
+    error?.response?.statusText
+  ].filter(Boolean).join(' ');
+
+  const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
+  return status === 400 || status === 422 || /validation|invalid parameter|invalid parameters|too long|max.*characters|at most 2500|string should have at most/i.test(payload);
 }
 
 // Allowlist diagnostic values; provider messages, bodies and headers may contain keys.
@@ -341,15 +181,11 @@ function createQuickAdsRouter({
       const imageUrl = uploaded?.secure_url;
       if (!isHttpsUrl(imageUrl)) throw generationError('INVALID_IMAGE_URL');
       stage = 'submission';
-      const finalPrompt = buildQuickAdPrompt(style);
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[Quick Ads] Style:', style);
-        console.log('[Quick Ads] Model:', MODEL);
-        console.log('[Quick Ads] Final prompt:', finalPrompt);
-      }
+      const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
+      console.log('Quick Ad prompt length:', safePrompt.length);
       const queued = await fal.queue.submit(MODEL, {
         // Kling 2.5 Turbo is silent; its schema has no generate_audio parameter.
-        input: { image_url: imageUrl, prompt: finalPrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
+        input: { image_url: imageUrl, prompt: safePrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
         abortSignal: controller.signal
       });
       requestId = queued?.request_id;
@@ -383,6 +219,13 @@ function createQuickAdsRouter({
       }
       if (res.destroyed) return;
       if (error.quickAdSafe || stage === 'credits') return safeError(res, error);
+      if (['submission', 'status', 'result'].includes(stage) && isFalValidationError(error)) {
+        return res.status(400).json({
+          success: false,
+          code: 'VIDEO_PROVIDER_VALIDATION_ERROR',
+          message: 'The video generation request contained invalid parameters.'
+        });
+      }
       if (timedOut) return res.status(504).json({
         success: false, message: 'Generation timed out. It may still be processing; do not automatically submit again.',
         ...(requestId ? { requestId } : {})

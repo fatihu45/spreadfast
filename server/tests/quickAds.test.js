@@ -111,10 +111,16 @@ async function fixture(t, options = {}) {
 }
 
 const firstLines = {
-  food: 'Create a polished 5-second commercial using this exact product image.',
-  reveal: 'Create a premium 5-second product advertisement.',
-  studio: 'Create a clean premium 5-second studio advertisement.',
-  social: 'Create an energetic 5-second short-form product advertisement.'
+  food: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
+  reveal: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
+  studio: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
+  social: 'Create a polished 5-second vertical product ad using the uploaded image as reference.'
+};
+const stylePhrases = {
+  food: 'Food Burst:',
+  reveal: 'Product Reveal:',
+  studio: 'Clean Studio:',
+  social: 'Attention Grabber:'
 };
 for (const [style, firstLine] of Object.entries(firstLines)) {
   test(`${style}: uploads the buffer before generation and returns the documented response`, async t => {
@@ -140,8 +146,13 @@ for (const [style, firstLine] of Object.entries(firstLines)) {
     // Silent-only endpoint: do not send an unsupported audio parameter.
     assert.equal(Object.hasOwn(args.input, 'generate_audio'), false);
     assert.ok(args.input.prompt.startsWith(firstLine));
-    assert.ok(args.input.prompt.includes('No people.'));
-    assert.ok(args.input.prompt.includes('No text.'));
+    assert.ok(args.input.prompt.includes(stylePhrases[style]));
+    assert.ok(args.input.prompt.includes('No morphing'));
+    assert.ok(args.input.prompt.includes('animate the background with subtle motion, depth, and parallax'));
+    assert.ok(args.input.prompt.includes('smooth camera movement'));
+    assert.ok(args.input.prompt.includes('stable hero shot'));
+    assert.ok(args.input.prompt.length <= 2200);
+    assert.ok(!/\s{2,}/.test(args.input.prompt));
     assert.equal(args.input.negative_prompt, 'blur, distortion, warped packaging, incorrect logo, duplicated objects, unreadable branding, low quality');
     assert.equal(f.calls.filter(c => c[0] === 'status').length, 3);
     assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
@@ -231,6 +242,22 @@ test('SDK, Cloudinary, and fal failures return safe JSON without leaking provide
   }
 });
 
+test('fal validation errors return a useful safe client response', async t => {
+  const error = Object.assign(new Error('String should have at most 2500 characters'), {
+    status: 422,
+    body: { detail: 'provider validation details' }
+  });
+  const f = await fixture(t, { submitError: error });
+  const result = await f.send();
+  assert.equal(result.status, 400);
+  assert.deepEqual(result.body, {
+    success: false,
+    code: 'VIDEO_PROVIDER_VALIDATION_ERROR',
+    message: 'The video generation request contained invalid parameters.'
+  });
+  assert.ok(!JSON.stringify(result.body).includes('provider validation details'));
+});
+
 test('generation timeout aborts polling and retains request ID without submitting twice', async t => {
   const f = await fixture(t, { hangStatus: true, timeout: 50 });
   const result = await f.send();
@@ -256,7 +283,11 @@ test('logs safe HTTP diagnostics for failures at each provider stage', async t =
     });
     const f = await fixture(t, { [option]: error });
     const result = await f.send();
-    assert.equal(result.status, 502);
+    assert.equal(result.status, status === 422 ? 400 : 502);
+    if (status === 422) {
+      assert.equal(result.body.code, 'VIDEO_PROVIDER_VALIDATION_ERROR');
+      assert.equal(result.body.message, 'The video generation request contained invalid parameters.');
+    }
     assert.deepEqual(f.logs, [['[Quick Ads] Request failed', { stage, style: 'food', model: MODEL, category, upstreamStatus: status }]]);
     assert.ok(!JSON.stringify({ result, logs: f.logs }).includes(TEST_KEY));
     assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
