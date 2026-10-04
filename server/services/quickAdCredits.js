@@ -49,7 +49,7 @@ async function beginGeneration(DB, { userId, key, style, model, leaseMs = 12 * 6
         { $set: { status: 'failed', failureCode: 'LEASE_EXPIRED' } });
     }
     const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model,
-      provider: 'fal', status: 'pending', freePreview: account.freePreviewAvailable,
+      provider: 'fal', status: 'pending', stage: 'queued', freePreview: account.freePreviewAvailable,
       creditUsed: false, downloadable: false, expiresAt: new Date(now + leaseMs) };
     await tx.User.updateOne({ id: userId }, { $set: {
       quickAdGenerationLock: generation.id, quickAdGenerationLockExpiresAt: generation.expiresAt
@@ -81,7 +81,16 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, now = Date.no
       quickAdGenerationLock: null, quickAdGenerationLockExpiresAt: null,
       ...(free ? { quickAdFreePreviewUsed: true } : {})
     }, $inc: { quickAdsGenerated: 1, ...(!free ? { quickAdCredits: -1, quickAdTotalCreditsUsed: 1 } : {}) } });
-    const completed = { status: 'completed', imageUrl, media, creditUsed: !free, downloadable: !free, completedAt: new Date(now) };
+    const completed = {
+      status: 'completed',
+      stage: 'completed',
+      imageUrl: imageUrl || generation.commercialImage?.url || generation.imageUrl,
+      commercialImage: generation.commercialImage || { url: imageUrl || generation.imageUrl, model: generation.model },
+      media,
+      creditUsed: !free,
+      downloadable: !free,
+      completedAt: new Date(now)
+    };
     await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: completed });
     if (!free) {
       const balance = account.quickAdCredits - 1;
@@ -99,7 +108,7 @@ async function failGeneration(DB, { userId, id, code = 'GENERATION_FAILED' }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
     if (!generation || generation.status !== 'pending') return;
-    await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: { status: 'failed', failureCode: code } });
+    await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: { status: 'failed', stage: 'failed', failureCode: code } });
     const user = await tx.User.findOne({ id: userId });
     if (user?.quickAdGenerationLock === id) await tx.User.updateOne({ id: userId }, {
       $set: { quickAdGenerationLock: null, quickAdGenerationLockExpiresAt: null }

@@ -14,11 +14,14 @@ test.after(() => { if (prior === undefined) delete process.env.JWT_SECRET; else 
 async function fixture(t, role = 'company') {
   const user = { id: 'owner', role, status: 'active', quickAdCredits: 3 };
   const DB = quickAdsDb([user, { id: 'other', role: 'company', status: 'active' }]);
-  for (const freePreview of [true, false]) await DB.QuickAdGeneration.create({
-    id: freePreview ? 'free' : 'paid', userId: 'owner', freePreview, status: 'completed',
-    downloadable: !freePreview, creditUsed: !freePreview,
-    media: { outputUrl: 'https://private.example/original.mp4', previewUrl: 'https://private.example/watermarked.mp4' }
-  });
+  const createdAt = [new Date('2024-01-01T00:00:00Z'), new Date('2024-01-02T00:00:00Z')];
+  for (const [index, freePreview] of [true, false].map((value, index) => [index, value])) {
+    await DB.QuickAdGeneration.create({
+      id: freePreview ? 'free' : 'paid', userId: 'owner', freePreview, status: 'completed',
+      downloadable: !freePreview, creditUsed: !freePreview, createdAt: createdAt[index], updatedAt: createdAt[index],
+      media: { outputUrl: 'https://private.example/original.mp4', previewUrl: 'https://private.example/watermarked.mp4' }
+    });
+  }
   const streamed = [];
   const app = express(); app.locals.db = DB;
   app.use('/api/quick-ads', createQuickAdMediaRouter({ stream: async (req, res, url, download) => {
@@ -119,6 +122,21 @@ test('promoters see their balance and preview, download paid media, and cannot a
     assert.equal((await f.get('/api/quick-ads/generations/paid/' + action)).status, 200);
     assert.equal((await f.get('/api/quick-ads/generations/paid/' + action, 'other')).status, 404);
   }
+});
+
+test('history list exposes only safe metadata and is scoped to the authenticated owner', async t => {
+  const f = await fixture(t);
+  const response = await (await f.get('/api/quick-ads/generations?limit=10')).json();
+  assert.equal(response.success, true);
+  assert.equal(response.generations.length, 2);
+  assert.equal(response.generations[0].generationId, 'paid');
+  assert.equal(response.generations[0].stage, 'completed');
+  assert.equal(response.generations[0].downloadable, true);
+  assert.equal(response.generations[0].thumbnail, null);
+  assert.ok(!JSON.stringify(response).includes('private.example'));
+  assert.equal((await f.get('/api/quick-ads/generations?limit=10', 'other')).status, 200);
+  const other = await (await f.get('/api/quick-ads/generations?limit=10', 'other')).json();
+  assert.deepEqual(other.generations, []);
   await f.DB.QuickAdGeneration.create({ id: 'company-ad', userId: 'other', status: 'completed' });
   assert.equal((await f.get('/api/quick-ads/generations/company-ad')).status, 404);
 });

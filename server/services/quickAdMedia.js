@@ -44,18 +44,20 @@ async function storeVideo(cloudinary, videoUrl, generation, signal) {
   return { publicId: uploaded.public_id, outputUrl, ...(previewUrl ? { previewUrl } : {}) };
 }
 function publicGeneration(generation, user) {
-  const result = { success: true, generationId: generation.id, status: generation.status,
+  const result = { success: true, generationId: generation.id, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     downloadable: generation.status === 'completed' && !generation.freePreview && generation.downloadable === true,
     ...accountSummary(user) };
   if (generation.status !== 'completed') return result;
+  const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl || generation.sourceImageUrl;
   if (generation.freePreview) {
     const token = jwt.sign({ generationId: generation.id, userId: user.id, tokenVersion: user.tokenVersion || 0 },
       previewSecret(), { algorithm: 'HS256', audience: 'quick-ad-preview', expiresIn: '5m' });
     result.previewPath = `/api/quick-ads/generations/${encodeURIComponent(generation.id)}/preview?token=${encodeURIComponent(token)}`;
+    if (commercialImageUrl) result.imageUrl = commercialImageUrl;
   } else {
-    result.videoUrl = generation.media.outputUrl;
-    result.imageUrl = generation.imageUrl;
+    result.videoUrl = generation.media?.outputUrl;
+    result.imageUrl = commercialImageUrl || generation.imageUrl;
     result.requestId = generation.requestId;
   }
   return result;

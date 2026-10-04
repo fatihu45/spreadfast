@@ -9,16 +9,25 @@ const { storeVideo, publicGeneration } = require('../services/quickAdMedia');
 const { createQuickAdMediaRouter, safeError } = require('./quickAdMedia');
 const { quickAdAccountOnly } = require('../services/quickAdAccess');
 
-const MODEL = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
+const COMMERCIAL_IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'bria/replace-background';
+const VIDEO_MODEL = process.env.VIDEO_MODEL || 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const NEGATIVE_PROMPT = 'blur, distortion, warped packaging, incorrect logo, duplicated objects, unreadable branding, low quality';
+const COMMERCIAL_NEGATIVE_PROMPT = 'warped packaging, changed logos, unreadable branding, product duplication, morphing, incorrect product geometry, low-quality imagery, random text, people unless explicitly required';
 const QUICK_AD_BASE_PROMPT = 'Create a polished 5-second vertical product ad using the uploaded image as reference. Keep the product sharp, dominant, and faithful in identity, shape, proportions, packaging, colors, and logo. Animate it with subtle lift, rotation, or forward movement; animate the background with subtle motion, depth, and parallax. Use smooth camera movement, realistic light, shadows, and reflections. No morphing, duplicate products, people, or added text. End on a stable hero shot.';
-const PROMPTS = Object.freeze({
+const IMAGE_STYLE_PROMPTS = Object.freeze({
+  food: 'Create premium commercial food/product advertising photography. Preserve the exact product, packaging, branding, proportions and important label details. Place it naturally in an appetizing advertising environment with professional food styling, complementary ingredients where appropriate, rich realistic lighting, depth, clean composition and a premium restaurant/brand campaign feel. Remove the ordinary original environment. No people, no extra product copies, no added text.',
+  reveal: 'Turn the uploaded product into premium cinematic product advertising photography. Preserve exact product identity, packaging, logo, proportions and colors. Replace the ordinary environment with a dramatic studio advertising set with controlled spotlighting, premium reflective surfaces, atmospheric depth and subtle mist where appropriate. The product is the hero. No people, duplicate products or added text.',
+  studio: 'Create polished minimalist commercial product photography. Preserve the exact product and branding. Use a clean premium studio environment with a complementary neutral background, realistic soft shadows, professional diffused lighting, subtle depth and elegant composition. Remove distracting original surroundings. No people, duplicate products or added text.',
+  social: 'Create bold modern social-media commercial product photography while preserving the exact product, packaging and branding. Replace the ordinary environment with an energetic graphic advertising set using complementary colors, depth, professional lighting and visually interesting environmental elements. Product remains dominant and realistic. No people, duplicate products or added text.'
+});
+const VIDEO_STYLE_PROMPTS = Object.freeze({
   food: 'Food Burst: Use a warm, appetizing food or beverage setting. Sweep ingredients, steam, droplets, crumbs, or sauce naturally around and behind the product; add a smooth cinematic push-in.',
   reveal: 'Product Reveal: Begin in soft shadow or mist, then reveal the product moving forward with controlled rotation. Add gentle light beams, reflections, and a slow cinematic push.',
   studio: 'Clean Studio: Use a calm, minimalist studio with neutral or complementary tones, soft shadows, and restrained depth. Keep the backdrop quiet and the camera movement slow.',
   social: 'Attention Grabber: Open with a bold, energetic entrance. Add a quick camera push, lively particles or light streaks, and strong parallax for a vivid short-form ad.'
 });
+const PROMPTS = Object.freeze({ ...VIDEO_STYLE_PROMPTS });
 
 function sanitizeVideoPrompt(prompt) {
   const MAX_LENGTH = 2200;
@@ -28,8 +37,12 @@ function sanitizeVideoPrompt(prompt) {
     .slice(0, MAX_LENGTH);
 }
 
+function buildCommercialImagePrompt(style) {
+  return sanitizeVideoPrompt(`${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio} ${COMMERCIAL_NEGATIVE_PROMPT}`);
+}
+
 function buildQuickAdPrompt(style) {
-  return `${QUICK_AD_BASE_PROMPT} ${PROMPTS[style] || PROMPTS.studio}`;
+  return `${QUICK_AD_BASE_PROMPT} ${VIDEO_STYLE_PROMPTS[style] || VIDEO_STYLE_PROMPTS.studio}`;
 }
 
 async function loadFalClient() {
@@ -66,6 +79,31 @@ function uploadImage(client, buffer, signal) {
   });
 }
 
+async function persistCommercialImage(client, imageUrl, generation, signal) {
+  if (!imageUrl || !isHttpsUrl(imageUrl)) return { url: imageUrl, publicId: null };
+  if (typeof client?.uploader?.upload !== 'function') return { url: imageUrl, publicId: null };
+  try {
+    const uploaded = await new Promise((resolve, reject) => {
+      const abort = () => reject(signal.reason || new Error('Commercial image upload aborted'));
+      if (signal.aborted) abort();
+      signal.addEventListener('abort', abort, { once: true });
+      client.uploader.upload(imageUrl, {
+        folder: 'spreadfast/quick-ads/commercial-images',
+        public_id: `spreadfast/quick-ads/commercial-images/${generation.id}`,
+        resource_type: 'image',
+        overwrite: true,
+        timeout: 120000
+      }, (error, result) => {
+        signal.removeEventListener('abort', abort);
+        if (error) reject(error); else resolve(result);
+      });
+    });
+    return { url: uploaded?.secure_url || imageUrl, publicId: uploaded?.public_id || null };
+  } catch {
+    return { url: imageUrl, publicId: null };
+  }
+}
+
 function isHttpsUrl(value) {
   if (typeof value !== 'string') return false;
   try { return new URL(value).protocol === 'https:'; } catch { return false; }
@@ -91,7 +129,7 @@ function isFalValidationError(error) {
 }
 
 // Allowlist diagnostic values; provider messages, bodies and headers may contain keys.
-function logFailure(logger, { stage, style, error, timedOut = false, disconnected = false }) {
+function logFailure(logger, { stage, style, error, timedOut = false, disconnected = false, model = VIDEO_MODEL }) {
   const status = error?.status ?? error?.statusCode ?? error?.http_code ?? error?.response?.status;
   const upstreamStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : undefined;
   const knownCodes = ['INVALID_IMAGE_URL', 'MISSING_REQUEST_ID', 'INVALID_QUEUE_STATUS', 'MISSING_VIDEO_URL',
@@ -102,7 +140,7 @@ function logFailure(logger, { stage, style, error, timedOut = false, disconnecte
     : upstreamStatus === 429 ? 'UPSTREAM_RATE_LIMITED'
     : upstreamStatus === 422 ? 'UPSTREAM_INPUT_REJECTED' : 'UPSTREAM_FAILURE';
   try {
-    logger.error('[Quick Ads] Request failed', { stage, style, model: MODEL, category, upstreamStatus });
+    logger.error('[Quick Ads] Request failed', { stage, style, model, category, upstreamStatus });
   } catch { /* Logging must not prevent a safe API response. */ }
 }
 
@@ -167,7 +205,7 @@ function createQuickAdsRouter({
     res.on('close', disconnect);
     try {
       stage = 'credits';
-      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: MODEL });
+      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL });
       generation = reservation.generation;
       if (reservation.reused) return res.json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
       controller.signal.throwIfAborted();
@@ -178,30 +216,55 @@ function createQuickAdsRouter({
       const uploaded = await uploadImage(cloudinaryClient, req.file.buffer, controller.signal);
       delete req.file.buffer;
       controller.signal.throwIfAborted();
-      const imageUrl = uploaded?.secure_url;
-      if (!isHttpsUrl(imageUrl)) throw generationError('INVALID_IMAGE_URL');
-      stage = 'submission';
-      const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
-      console.log('Quick Ad prompt length:', safePrompt.length);
-      const queued = await fal.queue.submit(MODEL, {
-        // Kling 2.5 Turbo is silent; its schema has no generate_audio parameter.
-        input: { image_url: imageUrl, prompt: safePrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
+      const sourceImageUrl = uploaded?.secure_url;
+      if (!isHttpsUrl(sourceImageUrl)) throw generationError('INVALID_IMAGE_URL');
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl, stage: 'preparing_image' } });
+      stage = 'creating_scene';
+      const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
+      const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
+        input: { image_url: sourceImageUrl, prompt: commercialPrompt },
         abortSignal: controller.signal
       });
-      requestId = queued?.request_id;
-      if (typeof requestId !== 'string' || !requestId.trim()) throw generationError('MISSING_REQUEST_ID');
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { requestId } });
-      stage = 'status';
-      // Use one deadline across submission, polling, and result retrieval.
+      const commercialRequestId = commercialQueue?.request_id;
+      if (typeof commercialRequestId !== 'string' || !commercialRequestId.trim()) throw generationError('MISSING_REQUEST_ID');
+      const commercialImage = { url: null, publicId: null, model: COMMERCIAL_IMAGE_MODEL, requestId: commercialRequestId };
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage, stage: 'creating_scene' } });
       while (true) {
         controller.signal.throwIfAborted();
-        const status = await fal.queue.status(MODEL, { requestId, logs: false, abortSignal: controller.signal });
+        const status = await fal.queue.status(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, logs: false, abortSignal: controller.signal });
         if (status?.status === 'COMPLETED') break;
         if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw generationError('INVALID_QUEUE_STATUS');
         await delay(pollIntervalMs, undefined, { signal: controller.signal });
       }
-      stage = 'result';
-      const result = await fal.queue.result(MODEL, { requestId, abortSignal: controller.signal });
+      const commercialResult = await fal.queue.result(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, abortSignal: controller.signal });
+      const commercialUrl = commercialResult?.data?.image?.url || commercialResult?.data?.image_url || commercialResult?.data?.url || commercialResult?.data?.output?.url;
+      if (!isHttpsUrl(commercialUrl)) throw generationError('INVALID_IMAGE_URL');
+      const commercialAsset = await persistCommercialImage(cloudinaryClient, commercialUrl, generation, controller.signal);
+      const nextCommercialImage = {
+        url: commercialAsset?.url || commercialUrl,
+        publicId: commercialAsset?.publicId || null,
+        model: COMMERCIAL_IMAGE_MODEL,
+        requestId: commercialRequestId
+      };
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl, stage: 'creating_video' } });
+      stage = 'creating_video';
+      const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
+      const queued = await fal.queue.submit(VIDEO_MODEL, {
+        input: { image_url: nextCommercialImage.url, prompt: safePrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
+        abortSignal: controller.signal
+      });
+      requestId = queued?.request_id;
+      if (typeof requestId !== 'string' || !requestId.trim()) throw generationError('MISSING_REQUEST_ID');
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { requestId, videoRequestId: requestId, stage: 'creating_video' } });
+      while (true) {
+        controller.signal.throwIfAborted();
+        const status = await fal.queue.status(VIDEO_MODEL, { requestId, logs: false, abortSignal: controller.signal });
+        if (status?.status === 'COMPLETED') break;
+        if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw generationError('INVALID_QUEUE_STATUS');
+        await delay(pollIntervalMs, undefined, { signal: controller.signal });
+      }
+      stage = 'finalizing';
+      const result = await fal.queue.result(VIDEO_MODEL, { requestId, abortSignal: controller.signal });
       controller.signal.throwIfAborted();
       const videoUrl = result?.data?.video?.url;
       if (!isHttpsUrl(videoUrl)) throw generationError('MISSING_VIDEO_URL');
@@ -209,13 +272,13 @@ function createQuickAdsRouter({
       const media = await protectVideo(cloudinaryClient, videoUrl, generation, controller.signal);
       controller.signal.throwIfAborted();
       stage = 'completion';
-      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl, media });
+      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media });
       return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
     } catch (error) {
-      logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed });
+      logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed, model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL : VIDEO_MODEL });
       if (generation?.status === 'pending') {
         try { await failGeneration(DB, { userId: req.user.id, id: generation.id, code: timedOut ? 'TIMEOUT' : 'GENERATION_FAILED' }); }
-        catch { logFailure(logger, { stage: 'credit-cleanup', style, error: generationError('CREDIT_CLEANUP_FAILED') }); }
+        catch { logFailure(logger, { stage: 'credit-cleanup', style, error: generationError('CREDIT_CLEANUP_FAILED'), model: VIDEO_MODEL }); }
       }
       if (res.destroyed) return;
       if (error.quickAdSafe || stage === 'credits') return safeError(res, error);
@@ -230,7 +293,6 @@ function createQuickAdsRouter({
         success: false, message: 'Generation timed out. It may still be processing; do not automatically submit again.',
         ...(requestId ? { requestId } : {})
       });
-      // Return friendly messages only; never serialize raw provider errors.
       const message = stage === 'upload' ? 'Image upload failed. Please try again.'
         : stage === 'setup' ? 'Quick Ads is temporarily unavailable.'
         : 'Video generation could not be completed. The provider may be unavailable or the image may not be supported.';
@@ -239,7 +301,6 @@ function createQuickAdsRouter({
       clearTimeout(timer);
       res.removeListener('close', disconnect);
       delete req.file.buffer;
-      // A timed-out/disconnected provider job may still need its source image.
     }
   });
   return router;

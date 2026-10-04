@@ -80,6 +80,23 @@
 .quick-ad-footer { display: flex; align-items: center; gap: 16px; padding: 24px; background: #f1faf5; border-radius: 18px; margin-top: 32px; }
 .quick-ad-footer strong { font-size: .875rem; font-weight: 600; }
 .quick-ad-footer p { font-size: .75rem; line-height: 1.7; color: rgb(var(--sf-muted)); margin-top: 5px; }
+.quick-ad-stage-list { list-style: none; margin: 18px 0 8px; padding: 0; display: grid; gap: 8px; }
+.quick-ad-stage-list li { display: flex; align-items: center; gap: 10px; font-size: .75rem; color: rgb(var(--sf-muted)); padding: 8px 10px; border-radius: 10px; background: rgba(15, 36, 53, 0.02); }
+.quick-ad-stage-list li.is-active { color: rgb(var(--sf-primary-hover)); background: rgb(var(--sf-primary-soft)); }
+.quick-ad-stage-list li.is-done { color: rgb(var(--sf-success)); background: rgba(34, 197, 94, 0.08); }
+.quick-ad-stage-list li.is-muted { opacity: 0.7; }
+.quick-ad-stage-marker { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: .65rem; font-weight: 700; background: currentColor; color: #fff; }
+.quick-ad-stage-image { position: absolute; inset: 48px 18px 58px; width: calc(100% - 36px); height: calc(100% - 106px); object-fit: cover; border-radius: 18px; box-shadow: 0 12px 28px rgba(15, 36, 53, 0.12); }
+.quick-ad-history { margin-top: 28px; border-top: 1px solid rgb(var(--sf-border)); padding-top: 28px; }
+.quick-ad-history-header h2 { font-size: 1.1rem; margin: 0 0 16px; }
+.quick-ad-empty-state { border: 1px dashed rgb(var(--sf-control-border)); border-radius: 18px; padding: 28px; text-align: center; color: rgb(var(--sf-muted)); background: #fafcfb; }
+.quick-ad-history-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.quick-ad-history-card { display: grid; gap: 12px; border: 1px solid rgb(var(--sf-border)); border-radius: 18px; padding: 12px; background: #fff; }
+.quick-ad-history-thumb { width: 100%; height: 150px; object-fit: cover; border-radius: 12px; }
+.quick-ad-history-copy { display: grid; gap: 4px; }
+.quick-ad-history-copy strong { font-size: .9rem; }
+.quick-ad-history-copy small, .quick-ad-history-copy span { color: rgb(var(--sf-muted)); font-size: .72rem; }
+.quick-ad-history-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 @keyframes quick-ad-spin { to { transform: rotate(360deg); } }
 @media (max-width: 1199px) and (min-width: 1024px), (max-width: 759px) {
   .quick-ad-layout { grid-template-columns: minmax(0, 1fr); }
@@ -94,6 +111,7 @@
   .quick-ad-template-copy { padding-inline: 3px; }
   .quick-ad-footer { padding: 18px 14px; gap: 12px; }
   .quick-ad-file { flex-wrap: wrap; justify-content: center; }
+  .quick-ad-stage-list li { font-size: .68rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .quick-ad-spinner { animation: none; }

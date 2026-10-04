@@ -33,6 +33,28 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
       res.set('Cache-Control', 'no-store').json(publicGeneration(generation, user));
     } catch (error) { safeError(res, error); }
   });
+  router.get('/generations', authenticate, quickAdAccountOnly, async (req, res) => {
+    try {
+      const DB = req.app.locals.db;
+      const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 12));
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const skip = (page - 1) * limit;
+      const rows = await DB.QuickAdGeneration.find({ userId: req.user.id }).sort({ createdAt: -1 }).skip(skip).limit(limit);
+      res.set('Cache-Control', 'no-store').json({ success: true, generations: rows.map(g => ({
+        generationId: g.id,
+        style: g.style,
+        status: g.status,
+        stage: g.stage || (g.status === 'completed' ? 'completed' : 'queued'),
+        freePreview: !!g.freePreview,
+        creditUsed: !!g.creditUsed,
+        downloadable: g.status === 'completed' && !g.freePreview && !!g.downloadable,
+        createdAt: g.createdAt,
+        completedAt: g.completedAt,
+        thumbnail: g.commercialImage?.url || g.imageUrl || null,
+        model: g.model
+      })) });
+    } catch (error) { safeError(res, error); }
+  });
   router.get('/generations/:id', authenticate, quickAdAccountOnly, async (req, res) => {
     try {
       const generation = await owned(req);
