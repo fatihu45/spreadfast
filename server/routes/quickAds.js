@@ -9,23 +9,37 @@ const { storeVideo, publicGeneration } = require('../services/quickAdMedia');
 const { createQuickAdMediaRouter, safeError } = require('./quickAdMedia');
 const { quickAdAccountOnly } = require('../services/quickAdAccess');
 
-const COMMERCIAL_IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'bria/replace-background';
+const COMMERCIAL_IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'fal-ai/nano-banana-2/edit';
 const VIDEO_MODEL = process.env.VIDEO_MODEL || 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const NEGATIVE_PROMPT = 'blur, distortion, warped packaging, morphing, melting, duplicated objects, extra products, people, hands, text, watermark, unreadable branding, low quality';
 const COMMERCIAL_NEGATIVE_PROMPT = 'people, hands, text, watermark, duplicate products, extra objects, blurry, low quality';
-const QUICK_AD_BASE_PROMPT = 'A premium 5-second vertical product ad. The product stays sharp, centered and unchanged in shape, color and branding. Slow, smooth camera push-in with soft realistic lighting and gentle depth. Ends on a stable hero shot.';
+const COMMERCIAL_IMAGE_BASE_PROMPT = `Transform the supplied product photograph into a professional commercial advertising key visual.
+The uploaded image contains the real customer's product. Preserve the exact identity of the main product.
+Do not redesign or replace the product.
+Preserve the product shape, proportions, colors, packaging, materials, logo, branding, labels, and important visible text.
+The product must remain clearly recognizable as the same real item in the uploaded photograph.
+Improve only the advertising presentation around it.
+Create realistic professional commercial lighting, accurate contact shadows, believable reflections where appropriate, depth, clean composition, and strong product separation.
+Remove distracting elements from the original environment and create a polished advertising scene appropriate to the selected style.
+Create one hero product only unless the source image itself clearly contains multiple products.
+Do not generate duplicate products.
+Do not add people, hands, random text, fake logos, extra packaging, or unrelated objects.
+Avoid warped packaging, malformed geometry, melted objects, changed brand names, misspelled labels, and distorted product proportions.
+The image will be used as the starting frame of a 5-second product commercial, so create a visually strong scene with enough depth for subtle cinematic camera movement.
+Keep the product as the unmistakable hero of the frame.`;
+const QUICK_AD_BASE_PROMPT = 'A polished 5-second commercial product video using the supplied advertising image as the visual source. Preserve the exact product shape, proportions, colors, packaging, logo, branding, and label throughout the entire shot. Do not redesign, deform, duplicate, melt, or replace the product. Keep the product recognizable in every frame. Preserve the established scene and art direction. Use controlled professional advertising cinematography, realistic physical motion, and smooth temporal consistency. No new text, products, people, or unrelated objects. End on a stable clear hero shot of the product.';
 const IMAGE_STYLE_PROMPTS = Object.freeze({
-  food: 'On a rustic wooden table in a warm, softly lit kitchen, a few fresh ingredients and herbs nearby, shallow depth of field, appetizing natural light, professional food photography.',
-  reveal: 'On a dark glossy reflective surface in a dramatic studio, a single soft spotlight from above, faint mist in the background, deep shadows, cinematic luxury product photography.',
-  studio: 'On a clean seamless neutral beige studio backdrop with a soft natural shadow beneath, diffused window-style lighting, minimal, premium product photography.',
-  social: 'On a smooth colored podium against a bold vibrant gradient backdrop, crisp studio lighting, clean modern look, commercial product photography.'
+  food: 'Create a premium food advertising scene around the original product. Make the food or beverage look fresh, appetizing, and professionally photographed. Use warm commercial food lighting with realistic highlights and shadows. Build a tasteful environment appropriate to the actual food or drink. Possible supporting details can include a premium tabletop, subtle ingredients that genuinely relate to the product, herbs, fruit, condensation, crumbs, sauce details, steam, or atmospheric depth where contextually appropriate. Do not overwhelm the product. Do not cover packaging, branding, or labels. Do not invent unrelated ingredients. Do not turn packaged food into a completely different food product. Use depth and foreground/background separation that can later support subtle motion. The result should resemble a polished restaurant, FMCG, or beverage advertising campaign rather than a casual kitchen snapshot.',
+  reveal: 'Create a dramatic cinematic product advertising scene while preserving the exact uploaded product. Place the product in a premium dark studio environment with controlled contrast. Use a dark or deep neutral background, elegant surface, realistic contact shadow, and subtle reflections where appropriate. Use one carefully controlled hero light, rim light, or spotlight to separate the real product from the background. Add only very subtle atmospheric depth when appropriate. The scene should feel like the opening frame of a premium cinematic product reveal. Do not hide the product in darkness. Branding and product details must remain clearly readable and recognizable. Avoid excessive smoke, fantasy effects, neon clutter, or unrealistic reflections. Leave visual space and depth around the product so Kling can later animate a slow reveal.',
+  studio: 'Create a clean premium studio advertising photograph of the exact uploaded product. Preserve the product perfectly. Use a seamless neutral studio environment appropriate to the product. Prefer soft beige, warm white, light grey, or another restrained neutral tone that complements the real product. Use large diffused commercial lighting, realistic soft contact shadows, and subtle depth. Keep props minimal or use none. Use clean geometry, generous negative space, and premium ecommerce/editorial composition. The result should feel like professional brand campaign photography rather than a plain catalogue cutout. Do not add unnecessary objects. Do not alter packaging, logos, product text, materials, or proportions. Keep the frame suitable for a subtle cinematic push-in during video generation.',
+  social: 'Create an eye-catching modern social-media product advertising scene while preserving the exact uploaded product. Use a bold, polished commercial background that complements the actual product colors. The scene may use a vibrant gradient, modern podium, geometric forms, or controlled graphic depth where appropriate. Keep the actual product clearly dominant. Use crisp commercial lighting, strong visual separation, and an energetic composition. Create depth behind and around the product so the video stage can introduce faster camera motion and subtle background movement. Do not add text, fake slogans, or fake brand elements. Do not duplicate the product. Do not overcrowd the scene. The result should look like a professionally art-directed Instagram, TikTok, or digital product campaign rather than a generic AI image.'
 });
 const VIDEO_STYLE_PROMPTS = Object.freeze({
-  food: 'Warm, appetizing setting. Slow push-in while gentle steam or a few droplets drift in the background.',
-  reveal: 'Dark, moody set. Soft light slowly brightens on the product as the camera pushes in; faint mist drifts behind.',
-  studio: 'Calm minimalist studio. Very slow push-in with softly shifting shadows. The backdrop stays still.',
-  social: 'Bright, energetic backdrop. Quick, smooth push-in with soft light streaks sweeping behind the product.'
+  food: 'Use an appetizing commercial food-film treatment. Use a smooth cinematic push-in or slight lateral camera move. Where appropriate to the existing generated scene, allow subtle realistic steam, condensation, tiny droplets, ingredient movement, or gentle atmospheric motion. Do not make the food explode. Do not create large splashes unless the generated image naturally contains a splash composition. Do not morph the food or packaging. Keep motion tasteful, believable, and premium.',
+  reveal: 'Create a slow cinematic reveal. Use a controlled dolly-in, subtle orbit, or elegant camera approach depending on the scene. Allow the existing key light or rim light to gradually reveal more product detail. Very subtle atmospheric movement is allowed if already present in the scene. Maintain dark premium contrast. Do not spin the product aggressively. Do not change the product geometry. Finish on a fully visible premium hero frame.',
+  studio: 'Use minimal premium motion. Apply a very slow smooth push-in, subtle parallax, or tiny camera slide. Allow extremely subtle natural shadow/light movement while keeping the studio background calm. The product itself should remain visually stable. No dramatic effects. No unnecessary particles. No aggressive rotation. The result should feel like a restrained high-end brand commercial.',
+  social: 'Use a quicker but still smooth social-ad camera move. Use a confident push-in, small arc, or dynamic parallax movement. Allow controlled movement in existing gradient, lighting, or graphic background elements. A subtle light sweep may pass behind or around the product. Keep the main product stable and recognizable. Do not use chaotic shaking, extreme zooms, morphing, duplicated objects, or random effects. The result should feel energetic enough to stop a social-media scroll while still looking like a professional advertisement.'
 });
 const PROMPTS = Object.freeze({ ...VIDEO_STYLE_PROMPTS });
 
@@ -38,7 +52,7 @@ function sanitizeVideoPrompt(prompt) {
 }
 
 function buildCommercialImagePrompt(style) {
-  return sanitizeVideoPrompt(IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio);
+  return sanitizeVideoPrompt(`${COMMERCIAL_IMAGE_BASE_PROMPT} ${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio}`);
 }
 
 function buildQuickAdPrompt(style) {
@@ -222,11 +236,17 @@ function createQuickAdsRouter({
       stage = 'creating_scene';
       const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
       const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
-        input: { image_url: sourceImageUrl, prompt: commercialPrompt, negative_prompt: COMMERCIAL_NEGATIVE_PROMPT },
+        input: {
+          prompt: commercialPrompt,
+          image_urls: [sourceImageUrl],
+          resolution: '1K',
+          limit_generations: true
+        },
         abortSignal: controller.signal
       });
       const commercialRequestId = commercialQueue?.request_id;
       if (typeof commercialRequestId !== 'string' || !commercialRequestId.trim()) throw generationError('MISSING_REQUEST_ID');
+      requestId = commercialRequestId;
       const commercialImage = { url: null, publicId: null, model: COMMERCIAL_IMAGE_MODEL, requestId: commercialRequestId };
       await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage, stage: 'creating_scene' } });
       while (true) {
@@ -237,7 +257,7 @@ function createQuickAdsRouter({
         await delay(pollIntervalMs, undefined, { signal: controller.signal });
       }
       const commercialResult = await fal.queue.result(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, abortSignal: controller.signal });
-      const commercialUrl = commercialResult?.data?.image?.url || commercialResult?.data?.image_url || commercialResult?.data?.url || commercialResult?.data?.output?.url;
+      const commercialUrl = commercialResult?.data?.images?.[0]?.url || commercialResult?.data?.image?.url || commercialResult?.data?.image_url || commercialResult?.data?.url || commercialResult?.data?.output?.url;
       if (!isHttpsUrl(commercialUrl)) throw generationError('INVALID_IMAGE_URL');
       const commercialAsset = await persistCommercialImage(cloudinaryClient, commercialUrl, generation, controller.signal);
       const nextCommercialImage = {
@@ -282,11 +302,15 @@ function createQuickAdsRouter({
       }
       if (res.destroyed) return;
       if (error.quickAdSafe || stage === 'credits') return safeError(res, error);
-      if (['submission', 'status', 'result'].includes(stage) && isFalValidationError(error)) {
+      const isCommercialValidation = stage === 'creating_scene';
+      const isVideoValidation = stage === 'creating_video';
+      if ((['creating_scene', 'creating_video', 'submission', 'status', 'result'].includes(stage) && isFalValidationError(error))) {
         return res.status(400).json({
           success: false,
-          code: 'VIDEO_PROVIDER_VALIDATION_ERROR',
-          message: 'The video generation request contained invalid parameters.'
+          code: isCommercialValidation ? 'IMAGE_PROVIDER_VALIDATION_ERROR' : 'VIDEO_PROVIDER_VALIDATION_ERROR',
+          message: isCommercialValidation
+            ? 'The commercial image generation request contained invalid parameters.'
+            : 'The video generation request contained invalid parameters.'
         });
       }
       if (timedOut) return res.status(504).json({
@@ -294,6 +318,8 @@ function createQuickAdsRouter({
         ...(requestId ? { requestId } : {})
       });
       const message = stage === 'upload' ? 'Image upload failed. Please try again.'
+        : stage === 'creating_scene' ? 'We could not prepare your commercial scene. Please try another image.'
+        : stage === 'creating_video' ? 'We could not animate your Quick Ad. Please try again.'
         : stage === 'setup' ? 'Quick Ads is temporarily unavailable.'
         : 'Video generation could not be completed. The provider may be unavailable or the image may not be supported.';
       return res.status(stage === 'setup' ? 503 : 502).json({ success: false, message, ...(requestId ? { requestId } : {}) });

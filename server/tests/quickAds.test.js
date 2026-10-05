@@ -73,6 +73,7 @@ async function fixture(t, options = {}) {
     async result(model, args) {
       calls.push(['result', model, args]);
       if (options.resultError) throw options.resultError;
+      if (model === 'fal-ai/nano-banana-2/edit') return options.badResult ? { data: {} } : { data: { images: [{ url: IMAGE_URL }] } };
       return options.badResult ? { data: {} } : { data: { video: { url: VIDEO_URL } } };
     }
   } };
@@ -111,16 +112,16 @@ async function fixture(t, options = {}) {
 }
 
 const firstLines = {
-  food: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
-  reveal: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
-  studio: 'Create a polished 5-second vertical product ad using the uploaded image as reference.',
-  social: 'Create a polished 5-second vertical product ad using the uploaded image as reference.'
+  food: 'Transform the supplied product photograph into a professional commercial advertising key visual.',
+  reveal: 'Transform the supplied product photograph into a professional commercial advertising key visual.',
+  studio: 'Transform the supplied product photograph into a professional commercial advertising key visual.',
+  social: 'Transform the supplied product photograph into a professional commercial advertising key visual.'
 };
 const stylePhrases = {
-  food: 'Food Burst:',
-  reveal: 'Product Reveal:',
-  studio: 'Clean Studio:',
-  social: 'Attention Grabber:'
+  food: 'Create a premium food advertising scene around the original product.',
+  reveal: 'Create a dramatic cinematic product advertising scene while preserving the exact uploaded product.',
+  studio: 'Create a clean premium studio advertising photograph of the exact uploaded product.',
+  social: 'Create an eye-catching modern social-media product advertising scene while preserving the exact uploaded product.'
 };
 for (const [style, firstLine] of Object.entries(firstLines)) {
   test(`${style}: uploads the buffer before generation and returns the documented response`, async t => {
@@ -139,24 +140,26 @@ for (const [style, firstLine] of Object.entries(firstLines)) {
     assert.deepEqual(f.calls.find(c => c[0] === 'buffer')[1], png);
     const submitIndex = f.calls.findIndex(c => c[0] === 'submit');
     assert.ok(submitIndex > f.calls.findIndex(c => c[0] === 'buffer'));
-    const [, model, args] = f.calls[submitIndex];
-    assert.equal(model, MODEL);
-    assert.equal(args.input.image_url, IMAGE_URL);
-    assert.equal(args.input.duration, '5');
-    // Silent-only endpoint: do not send an unsupported audio parameter.
-    assert.equal(Object.hasOwn(args.input, 'generate_audio'), false);
-    assert.ok(args.input.prompt.startsWith(firstLine));
-    assert.ok(args.input.prompt.includes(stylePhrases[style]));
-    assert.ok(args.input.prompt.includes('No morphing'));
-    assert.ok(args.input.prompt.includes('animate the background with subtle motion, depth, and parallax'));
-    assert.ok(args.input.prompt.includes('smooth camera movement'));
-    assert.ok(args.input.prompt.includes('stable hero shot'));
-    assert.ok(args.input.prompt.length <= 2200);
-    assert.ok(!/\s{2,}/.test(args.input.prompt));
-    assert.equal(args.input.negative_prompt, 'blur, distortion, warped packaging, incorrect logo, duplicated objects, unreadable branding, low quality');
-    assert.equal(f.calls.filter(c => c[0] === 'status').length, 3);
-    assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
-    assert.ok(f.calls.filter(c => ['submit', 'status', 'result'].includes(c[0])).every(c => c[1] === MODEL));
+    const [, commercialModel, commercialArgs] = f.calls[submitIndex];
+    assert.equal(commercialModel, 'fal-ai/nano-banana-2/edit');
+    assert.deepEqual(commercialArgs.input.image_urls, [IMAGE_URL]);
+    assert.equal(commercialArgs.input.resolution, '1K');
+    assert.equal(commercialArgs.input.limit_generations, true);
+    assert.ok(commercialArgs.input.prompt.startsWith(firstLine));
+    assert.ok(commercialArgs.input.prompt.includes(stylePhrases[style]));
+    assert.ok(commercialArgs.input.prompt.includes('Do not generate duplicate products.'));
+    assert.ok(commercialArgs.input.prompt.length <= 2200);
+    assert.ok(!/\s{2,}/.test(commercialArgs.input.prompt));
+    const videoSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === MODEL);
+    assert.ok(videoSubmit);
+    assert.equal(videoSubmit[2].input.image_url, IMAGE_URL);
+    assert.equal(videoSubmit[2].input.duration, '5');
+    assert.equal(Object.hasOwn(videoSubmit[2].input, 'generate_audio'), false);
+    assert.ok(videoSubmit[2].input.prompt.startsWith('A polished 5-second commercial product video using the supplied advertising image as the visual source.'));
+    assert.ok(videoSubmit[2].input.prompt.includes('Preserve the exact product shape, proportions, colors, packaging, logo, branding, and label throughout the entire shot.'));
+    assert.equal(f.calls.filter(c => c[0] === 'status').length, 4);
+    assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
+    assert.ok(f.calls.filter(c => ['submit', 'status', 'result'].includes(c[0])).every(c => c[1] === MODEL || c[1] === 'fal-ai/nano-banana-2/edit'));
     assert.equal(f.logs.length, 0);
     assert.ok(!JSON.stringify(result.body).includes(TEST_KEY));
     assert.deepEqual(await (await fetch(f.base + '/existing', { signal: AbortSignal.timeout(15000) })).json(), { unchanged: true });
@@ -252,8 +255,8 @@ test('fal validation errors return a useful safe client response', async t => {
   assert.equal(result.status, 400);
   assert.deepEqual(result.body, {
     success: false,
-    code: 'VIDEO_PROVIDER_VALIDATION_ERROR',
-    message: 'The video generation request contained invalid parameters.'
+    code: 'IMAGE_PROVIDER_VALIDATION_ERROR',
+    message: 'The commercial image generation request contained invalid parameters.'
   });
   assert.ok(!JSON.stringify(result.body).includes('provider validation details'));
 });
@@ -267,15 +270,15 @@ test('generation timeout aborts polling and retains request ID without submittin
   assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
   assert.ok(f.calls.find(c => c[0] === 'status')[2].abortSignal.aborted);
   assert.equal(f.logs[0][1].category, 'TIMEOUT');
-  assert.equal(f.logs[0][1].stage, 'status');
+  assert.equal(f.logs[0][1].stage, 'creating_scene');
 });
 
 test('logs safe HTTP diagnostics for failures at each provider stage', async t => {
-  for (const [option, stage, status, category] of [
-    ['submitError', 'submission', 401, 'UPSTREAM_AUTHORIZATION_FAILED'],
-    ['statusError', 'status', 429, 'UPSTREAM_RATE_LIMITED'],
-    ['resultError', 'result', 422, 'UPSTREAM_INPUT_REJECTED'],
-    ['resultError', 'result', 503, 'UPSTREAM_FAILURE']
+  for (const [option, status, category] of [
+    ['submitError', 401, 'UPSTREAM_AUTHORIZATION_FAILED'],
+    ['statusError', 429, 'UPSTREAM_RATE_LIMITED'],
+    ['resultError', 422, 'UPSTREAM_INPUT_REJECTED'],
+    ['resultError', 503, 'UPSTREAM_FAILURE']
   ]) {
     const error = Object.assign(new Error(TEST_KEY), {
       status, code: TEST_KEY, body: { detail: TEST_KEY },
@@ -285,10 +288,10 @@ test('logs safe HTTP diagnostics for failures at each provider stage', async t =
     const result = await f.send();
     assert.equal(result.status, status === 422 ? 400 : 502);
     if (status === 422) {
-      assert.equal(result.body.code, 'VIDEO_PROVIDER_VALIDATION_ERROR');
-      assert.equal(result.body.message, 'The video generation request contained invalid parameters.');
+      assert.equal(result.body.code, 'IMAGE_PROVIDER_VALIDATION_ERROR');
+      assert.equal(result.body.message, 'The commercial image generation request contained invalid parameters.');
     }
-    assert.deepEqual(f.logs, [['[Quick Ads] Request failed', { stage, style: 'food', model: MODEL, category, upstreamStatus: status }]]);
+    assert.deepEqual(f.logs, [['[Quick Ads] Request failed', { stage: 'creating_scene', style: 'food', model: 'fal-ai/nano-banana-2/edit', category, upstreamStatus: status }]]);
     assert.ok(!JSON.stringify({ result, logs: f.logs }).includes(TEST_KEY));
     assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
   }
@@ -345,7 +348,7 @@ test('retrying a completed request with the same key never resubmits or deducts 
   assert.equal(first.status, 200); assert.equal(second.status, 200);
   assert.equal(first.body.generationId, second.body.generationId);
   assert.equal(second.body.quickAdCredits, 0);
-  assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
 });
 
 test('promoters use the same free, paid, no-credit, retry and failed-generation flow', async t => {
@@ -359,7 +362,7 @@ test('promoters use the same free, paid, no-credit, retry and failed-generation 
   assert.equal(first.status, 200); assert.equal(first.body.quickAdCredits, 0);
   assert.equal(first.body.downloadable, true);
   assert.equal((await paid.send(form(), undefined, 'promoter-request-123')).body.generationId, first.body.generationId);
-  assert.equal(paid.calls.filter(c => c[0] === 'submit').length, 1);
+  assert.equal(paid.calls.filter(c => c[0] === 'submit').length, 2);
   for (const failure of [{ submitError: new Error('failed') }, { hangStatus: true, timeout: 50 }]) {
     const failed = await fixture(t, { role: 'promoter', credits: 1, ...failure });
     assert.ok((await failed.send()).status >= 500);
