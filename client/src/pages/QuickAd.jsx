@@ -30,7 +30,12 @@ export default function QuickAd() {
   const [videoUrl, setVideoUrl] = useState('');
   const [result, setResult] = useState(null);
   const [generationStage, setGenerationStage] = useState('queued');
+  const [stageImage, setStageImage] = useState('');
   const [history, setHistory] = useState([]);
+  const [historyStatus, setHistoryStatus] = useState('loading');
+  const [historyError, setHistoryError] = useState('');
+  const [historyActionError, setHistoryActionError] = useState('');
+  const [failedThumbnails, setFailedThumbnails] = useState(() => new Set());
   const [balance, setBalance] = useState(null);
   const storageKey = `spreadfast-quick-ad-generation:${user?.id}`;
   const [pendingKey, setPendingKey] = useState(() => { try { return sessionStorage.getItem(storageKey) || ''; } catch { return ''; } });
@@ -38,21 +43,31 @@ export default function QuickAd() {
   const request = useRef(null);
   const download = useRef(null);
   const downloadUrls = useRef([]);
+  const previewPanel = useRef(null);
   const generating = phase === 'generating';
   const ready = phase === 'ready';
   const downloadable = ready && result?.downloadable === true && !result?.freePreview;
   const outOfCredits = balance && !balance.freePreviewAvailable && balance.quickAdCredits < 1;
   const buyCredits = () => navigate('/quickads/credits', { state: { outOfCredits } });
   const stageSteps = [
-    { key: 'queued', label: 'Preparing your product' },
     { key: 'preparing_image', label: 'Preparing your product' },
     { key: 'creating_scene', label: 'Building your commercial scene' },
     { key: 'creating_video', label: 'Adding cinematic motion' },
     { key: 'finalizing', label: 'Finishing your Quick Ad' },
-    { key: 'completed', label: 'Quick Ad ready' },
+    { key: 'completed', label: 'Your Quick Ad is ready' },
   ];
-  const currentStageIndex = Math.max(0, stageSteps.findIndex(step => step.key === generationStage));
-  const previewImage = (result?.imageUrl || result?.commercialImage?.url || product?.url || null);
+  const normalizedStage = generationStage === 'queued' ? 'preparing_image' : generationStage;
+  const currentStageIndex = Math.max(0, stageSteps.findIndex(step => step.key === normalizedStage));
+  const stageLabel = stageSteps.find(step => step.key === normalizedStage)?.label || stageSteps[0].label;
+  const previewImage = stageImage || product?.url || null;
+
+  useEffect(() => {
+    if (!generating || !window.matchMedia?.('(max-width: 759px)').matches) return;
+    const panel = previewPanel.current;
+    if (!panel || typeof panel.scrollIntoView !== 'function') return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    panel.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  }, [generating]);
   useEffect(() => {
     if (!canGenerate) return undefined;
     const controller = new AbortController();
@@ -71,7 +86,8 @@ export default function QuickAd() {
     try { if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); } catch { /* Current-page duplicate protection remains active. */ }
   }
   function showResult(data) {
-    setVideoUrl(generationVideoUrl(data)); setResult(data); setBalance(data); setPhase('ready'); setGenerationStage(data?.stage || 'completed'); rememberKey('');
+    setVideoUrl(generationVideoUrl(data)); setResult(data); setBalance(data); setPhase('ready'); setGenerationStage(data?.stage || 'completed');
+    setStageImage(data?.commercialImage?.url || data?.imageUrl || ''); rememberKey('');
     loadHistory();
   }
   async function recover() {
@@ -81,8 +97,9 @@ export default function QuickAd() {
       const { data } = await axios.get(quickAdsUrl(`/requests/${encodeURIComponent(pendingKey)}`), { headers: quickAdsAuth(token), signal: controller.signal, timeout: 20000 });
       if (controller.signal.aborted) return;
       setGenerationStage(data?.stage || (data.status === 'completed' ? 'completed' : 'queued'));
+      if (data?.commercialImage?.url || data?.imageUrl) setStageImage(data.commercialImage?.url || data.imageUrl);
       if (data.status === 'completed') { showResult(data); setError(''); }
-      else if (data.status === 'failed') { rememberKey(''); setError(GENERATION_ERROR); }
+      else if (data.status === 'failed') { rememberKey(''); setStageImage(''); setError(GENERATION_ERROR); }
       else setError('Your ad is still processing. Check generation again shortly.');
     } catch (failure) {
       if (!controller.signal.aborted) {
@@ -100,8 +117,9 @@ export default function QuickAd() {
         const { data } = await axios.get(quickAdsUrl(`/requests/${encodeURIComponent(pendingKey)}`), { headers: quickAdsAuth(token), timeout: 15000 });
         if (cancelled || !data) return;
         setGenerationStage(data?.stage || (data.status === 'completed' ? 'completed' : 'queued'));
+        if (data?.commercialImage?.url || data?.imageUrl) setStageImage(data.commercialImage?.url || data.imageUrl);
         if (data.status === 'completed') { showResult(data); }
-        else if (data.status === 'failed') { rememberKey(''); setPhase('idle'); setError(GENERATION_ERROR); }
+        else if (data.status === 'failed') { rememberKey(''); setStageImage(''); setPhase('idle'); setError(GENERATION_ERROR); }
       } catch (failure) {
         if ([404, 410].includes(failure.response?.status)) { return; }
       }
@@ -113,11 +131,52 @@ export default function QuickAd() {
 
   async function loadHistory() {
     if (!canGenerate || !token) return;
+    setHistoryStatus('loading');
+    setHistoryError('');
     try {
       const { data } = await axios.get(quickAdsUrl('/generations'), { headers: quickAdsAuth(token), timeout: 20000 });
-      if (data?.success) setHistory(data.generations || []);
+      if (!data?.success || !Array.isArray(data.generations)) throw new Error('Invalid Quick Ads history response');
+      setHistory(data.generations);
+      setFailedThumbnails(new Set());
+      setHistoryStatus('loaded');
     } catch {
-      setHistory([]);
+      setHistoryError('We could not load your Quick Ads. Please try again.');
+      setHistoryStatus('error');
+    }
+  }
+
+  async function openHistoryItem(item) {
+    setHistoryActionError('');
+    try {
+      const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}`), { headers: quickAdsAuth(token), timeout: 20000 });
+      showResult(data);
+      setNotice('');
+    } catch {
+      setHistoryActionError('Could not open that Quick Ad. Please try again.');
+    }
+  }
+
+  async function downloadHistoryItem(item) {
+    if (!item.downloadable || item.freePreview || saving) return;
+    setSaving(true);
+    setHistoryActionError('');
+    try {
+      const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}/download`), {
+        headers: quickAdsAuth(token), responseType: 'blob', timeout: 60000,
+      });
+      if (!data.size) throw new Error('Empty video');
+      const objectUrl = URL.createObjectURL(data);
+      downloadUrls.current.push(objectUrl);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = 'spreadfast-quick-ad.mp4';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      setHistoryActionError('Could not download that Quick Ad. Please try again.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -145,6 +204,7 @@ export default function QuickAd() {
     setSaving(false);
     setVideoUrl('');
     setResult(null);
+    setStageImage('');
     setGenerationStage('queued');
     setPhase('idle');
     setNotice('');
@@ -175,6 +235,7 @@ export default function QuickAd() {
     const controller = new AbortController();
     request.current = controller;
     setError(''); setNotice(''); setPhase('generating'); setGenerationStage('queued');
+    setStageImage('');
     setVideoUrl('');
     setResult(null);
     try {
@@ -200,6 +261,7 @@ export default function QuickAd() {
         setError(timedOut
           ? 'Your advert is taking longer than expected and may still be processing. Please wait before trying again to avoid creating a duplicate advert.'
           : GENERATION_ERROR);
+        setStageImage('');
         setPhase('idle');
       }
     } finally {
@@ -257,17 +319,28 @@ export default function QuickAd() {
 
   return <section className="quick-ad" aria-labelledby="quick-ad-title">
     <header className="quick-ad-heading">
-      <span className="quick-ad-badge"><UiIcon name="video" /> SpreadFast Quick Ads</span>
-      <h1 id="quick-ad-title">Turn one photo into an ad.</h1>
-      <p>Upload your product. Choose a style. SpreadFast does the rest.</p>
+      <div className="quick-ad-heading-line">
+        <h1 id="quick-ad-title">Quick Ads</h1>
+        <span className="quick-ad-studio-badge">AI studio</span>
+      </div>
+      <p>Turn one photo into an ad. Upload your product, choose a style, and SpreadFast does the rest.</p>
     </header>
-    {canGenerate && <div className="quick-ad-credit-summary"><div><strong>{balance ? `${balance.quickAdCredits} credits available` : 'Loading credits...'}</strong>{balance?.freePreviewAvailable && <><p>1 free preview available</p><p>Preview your first Quick Ad free. Purchase credits to download new paid ads and continue creating.</p></>}</div><Button variant="secondary" onClick={buyCredits}>Buy Credits</Button></div>}
+    {canGenerate && <div className="quick-ad-credit-summary">
+      <div className="quick-ad-credit-copy">
+        <span className="quick-ad-credit-icon"><UiIcon name="wallet" /></span>
+        <div><strong>{balance ? `${balance.quickAdCredits} credits available` : 'Loading credits...'}</strong>
+          {balance?.freePreviewAvailable && <span className="quick-ad-free-preview">1 free preview available</span>}
+        </div>
+      </div>
+      <Button variant="secondary" onClick={buyCredits}>Buy Credits</Button>
+    </div>}
+    {balance?.freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Downloads remain locked for free previews.</p>}
     {pendingKey && !generating && <Alert>Your last generation needs confirmation. <Button variant="secondary" disabled={saving} onClick={recover}>Check generation</Button></Alert>}
     <div className="quick-ad-layout">
       <div className="quick-ad-editor">
         <section className="quick-ad-panel" aria-labelledby="quick-ad-upload-title">
-          <div className="quick-ad-step"><span aria-hidden="true">1</span><div><h2 id="quick-ad-upload-title">Add your product</h2><p>A great ad starts with a clear photo.</p></div></div>
-          <div className={'quick-ad-upload' + (dragging ? ' is-dragging' : '')}
+          <div className="quick-ad-step"><span aria-hidden="true">1</span><div><h2 id="quick-ad-upload-title">Your product</h2><p>Start with a clear product photo.</p></div></div>
+          <div className={'quick-ad-upload' + (dragging ? ' is-dragging' : '') + (product ? ' is-populated' : '')}
             onDragOver={event => { event.preventDefault(); if (!generating) setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={event => { event.preventDefault(); setDragging(false); selectPhoto(event.dataTransfer.files); }}>
@@ -286,12 +359,12 @@ export default function QuickAd() {
           {error && <Alert tone="error">{error}</Alert>}
         </section>
         <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
-          <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose an ad style</h2><p>Find the feeling that fits your product.</p></div></div>
+          <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose your style</h2><p>Find the feeling that fits your product.</p></div></div>
           <fieldset className="quick-ad-templates" disabled={generating}>
             <legend className="sr-only">Ad style</legend>
             {styles.map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
               <input type="radio" name="quick-ad-style" value={style.id} checked={styleId === style.id} onChange={() => { setStyleId(style.id); reset(); }} />
-              <span className="quick-ad-art" aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /><span>{style.caption}</span></span>
+              <span className="quick-ad-art" aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /></span>
               <span className="quick-ad-template-copy"><strong>{style.name}</strong><span>{style.description}</span></span>
               {styleId === style.id && <span className="quick-ad-selected" aria-hidden="true"><UiIcon name="check" /></span>}
             </label>)}
@@ -304,30 +377,30 @@ export default function QuickAd() {
           <p id="quick-ad-generation-note">{canGenerate ? 'Generation can take a few minutes. Keep this page open.' : 'A company or promoter account is required to generate Quick Ads.'}</p>
         </div>
       </div>
-      <aside className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
-        <div className="quick-ad-preview-heading"><h2 id="quick-ad-preview-title">Video preview</h2><span>0:05</span></div>
-        <div className={'quick-ad-phone' + (ready ? ' is-ready' : '')} aria-busy={generating}>
-          <div className="quick-ad-phone-top"><UiIcon name="video" /><span>SpreadFast</span><span className="quick-ad-phone-dot" /></div>
-          {ready && videoUrl ? <video key={videoUrl} className="quick-ad-video" src={videoUrl}
-            poster={product?.url} playsInline controls loop muted controlsList={result?.freePreview ? 'nodownload' : undefined} preload="metadata" aria-label="Your generated advert"
-            onError={() => setNotice(result?.freePreview ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
-            : <div className="quick-ad-placeholder">
-              {generating && previewImage ? <img className="quick-ad-stage-image" src={previewImage} alt="Product or commercial preview" /> : null}
-              <span className="quick-ad-round-icon"><UiIcon name={generating ? 'clock' : 'video'} /></span>
-              <strong>{generating ? (generationStage === 'creating_video' ? 'Bringing your ad to life...' : 'A little magic in progress.') : 'Your ad will appear here.'}</strong>
-              <p>{generating ? (generationStage === 'creating_video' ? 'Kling is creating the final commercial motion.' : 'Creating your ad...') : 'One photo. Five seconds. Endless possibilities.'}</p>
-            </div>}
-          {!ready && <div className="quick-ad-phone-bottom"><span /><small>Made for the small screen</small></div>}
+      <aside ref={previewPanel} className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
+        <div className="quick-ad-preview-heading">
+          <div><h2 id="quick-ad-preview-title">Your creative preview</h2><p>See your product take the spotlight.</p></div>
+          <span className={'quick-ad-processing-status' + (generating ? ' is-active' : '')}><i aria-hidden="true" />{generating ? 'Processing' : ready ? 'Ready' : 'Preview'}</span>
         </div>
-        {generating && <ol className="quick-ad-stage-list" aria-live="polite">
+        <div className={'quick-ad-media' + (generating ? ' is-generating' : '') + (ready ? ' is-ready' : '')} aria-busy={generating}>
+          {ready && videoUrl ? <video key={videoUrl} className="quick-ad-video" src={videoUrl}
+            poster={result?.commercialImage?.url || result?.imageUrl || product?.url} playsInline controls loop muted controlsList={result?.freePreview ? 'nodownload' : undefined} preload="metadata" aria-label="Your generated advert"
+            onError={() => setNotice(result?.freePreview ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
+            : previewImage ? <img className="quick-ad-stage-image" src={previewImage} alt={stageImage ? 'Commercial scene preview' : 'Selected product preview'}
+              onError={() => { if (stageImage) setStageImage(''); }} />
+              : <div className="quick-ad-placeholder"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>Your preview starts here</strong><p>Upload a product photo to see it in your creative workspace.</p></div>}
+          {stageImage && !ready && <span className="quick-ad-scene-tag">Commercial scene</span>}
+          {generating && <div className="quick-ad-processing-label"><span className="quick-ad-processing-sparkle"><UiIcon name="star" /></span><span>{stageLabel}</span></div>}
+        </div>
+        {(generating || ready) && <ol className="quick-ad-stage-list" aria-label="Quick Ad generation progress" aria-live="polite">
           {stageSteps.map((step, index) => (
-            <li key={step.key} className={index < currentStageIndex ? 'is-done' : index === currentStageIndex ? 'is-active' : 'is-muted'}>
-              <span className="quick-ad-stage-marker" aria-hidden="true">{index < currentStageIndex ? '✓' : index === currentStageIndex ? '•' : ''}</span>
+            <li key={step.key} className={ready || index < currentStageIndex ? 'is-done' : index === currentStageIndex ? 'is-active' : 'is-muted'}>
+              <span className="quick-ad-stage-marker" aria-hidden="true">{ready || index < currentStageIndex ? '✓' : index === currentStageIndex ? '•' : ''}</span>
               <span>{step.label}</span>
             </li>
           ))}
         </ol>}
-        <p className="quick-ad-result-status" role="status">{ready ? 'Your ad is ready. Tap play to preview it.' : generating ? 'Creating your ad... This can take a few minutes.' : 'Choose a photo and style to get started.'}</p>
+        <p className="quick-ad-result-status" role="status">{ready ? 'Your Quick Ad is ready. Tap play to preview it.' : generating ? 'Generation can take a few minutes. Keep this page open.' : 'Choose a photo and style to get started.'}</p>
         <div className="quick-ad-result-actions">
           {ready && result?.freePreview && <><strong>Your free Quick Ad is ready.</strong><p>Purchase Quick Ads credits to download new paid ads and continue creating. This free preview stays locked.</p><Button onClick={buyCredits}>Buy Credits</Button><Button variant="secondary" disabled={saving} onClick={previewAgain}>Preview Again</Button></>}
           <Button variant="secondary" fullWidth disabled={!downloadable || saving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
@@ -342,27 +415,33 @@ export default function QuickAd() {
     <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
       <div className="quick-ad-history-header">
         <h2 id="quick-ad-history-title">My Quick Ads</h2>
+        {historyStatus === 'loading' && history.length > 0 && <span className="quick-ad-history-loading" role="status">Refreshing...</span>}
       </div>
-      {history.length === 0 ? (
-        <div className="quick-ad-empty-state">Your Quick Ads will appear here after you create them.</div>
-      ) : (
-        <div className="quick-ad-history-grid">
+      {!canGenerate && <div className="quick-ad-empty-state">Quick Ads history is available to company and promoter accounts.</div>}
+      {canGenerate && historyStatus === 'loading' && history.length === 0 && <div className="quick-ad-empty-state" role="status">Loading your Quick Ads...</div>}
+      {canGenerate && historyStatus === 'error' && <Alert tone="error">{historyError} <Button variant="secondary" size="sm" onClick={loadHistory}>Retry</Button></Alert>}
+      {historyActionError && <Alert tone="error">{historyActionError}</Alert>}
+      {canGenerate && historyStatus === 'loaded' && history.length === 0 && <div className="quick-ad-empty-state">Your Quick Ads will appear here after you create them.</div>}
+      {history.length > 0 && <div className="quick-ad-history-grid">
           {history.map(item => (
             <article key={item.generationId} className="quick-ad-history-card">
-              <img className="quick-ad-history-thumb" src={item.thumbnail || '/dynamic_grilled_salmon_bowl_with_lemon_splash.png'} alt={item.style || 'Quick Ad'} />
+              {item.thumbnail && !failedThumbnails.has(item.generationId)
+                ? <img className="quick-ad-history-thumb" src={item.thumbnail} alt={`${styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'} thumbnail`}
+                  onError={() => setFailedThumbnails(previous => new Set(previous).add(item.generationId))} />
+                : <div className="quick-ad-history-thumb quick-ad-history-thumb-empty" aria-label="No thumbnail available"><UiIcon name="image" /></div>}
               <div className="quick-ad-history-copy">
-                <strong>{styles.find(s => s.id === item.style)?.name || item.style}</strong>
-                <small>{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()}</small>
-                <span>{item.status === 'completed' ? 'Ready' : item.status}</span>
+                <strong>{styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'}</strong>
+                <small>{(item.completedAt || item.createdAt) && !Number.isNaN(new Date(item.completedAt || item.createdAt).getTime())
+                  ? new Date(item.completedAt || item.createdAt).toLocaleDateString() : 'Date unavailable'}</small>
+                <span className={'quick-ad-history-status is-' + (item.status || 'unknown')}>{item.status === 'completed' ? 'Ready' : item.status === 'pending' ? 'Processing' : item.status || 'Status unavailable'}</span>
               </div>
               <div className="quick-ad-history-actions">
-                <Button size="sm" variant="secondary" onClick={() => { if (item.generationId) { const url = quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}`); axios.get(url,{ headers: quickAdsAuth(token), timeout:20000 }).then(({data}) => { if (data.success) showResult(data); }).catch(()=>setNotice('Could not open that Quick Ad.')); } }}>Watch</Button>
-                {item.downloadable && <Button size="sm" variant="secondary" onClick={async () => { const url = quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}/download`); const { data } = await axios.get(url,{headers: quickAdsAuth(token), responseType:'blob', timeout:60000}); const objectUrl = URL.createObjectURL(data); downloadUrls.current.push(objectUrl); const link = document.createElement('a'); link.href = objectUrl; link.download='spreadfast-quick-ad.mp4'; document.body.appendChild(link); link.click(); link.remove(); }}>Download</Button>}
+                <Button size="sm" variant="secondary" disabled={item.status !== 'completed' || saving} onClick={() => openHistoryItem(item)}>Watch</Button>
+                {item.downloadable && !item.freePreview && <Button size="sm" variant="secondary" disabled={saving} onClick={() => downloadHistoryItem(item)}>Download</Button>}
               </div>
             </article>
           ))}
-        </div>
-      )}
+        </div>}
     </section>
     <footer className="quick-ad-footer"><span className="quick-ad-round-icon"><UiIcon name="sun" /></span><div><strong>A little inspiration. A bigger impression.</strong><p>Give your product a moment in the spotlight.</p></div></footer>
   </section>;

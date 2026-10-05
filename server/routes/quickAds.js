@@ -12,20 +12,20 @@ const { quickAdAccountOnly } = require('../services/quickAdAccess');
 const COMMERCIAL_IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'bria/replace-background';
 const VIDEO_MODEL = process.env.VIDEO_MODEL || 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
-const NEGATIVE_PROMPT = 'blur, distortion, warped packaging, incorrect logo, duplicated objects, unreadable branding, low quality';
-const COMMERCIAL_NEGATIVE_PROMPT = 'warped packaging, changed logos, unreadable branding, product duplication, morphing, incorrect product geometry, low-quality imagery, random text, people unless explicitly required';
-const QUICK_AD_BASE_PROMPT = 'Create a polished 5-second vertical product ad using the uploaded image as reference. Keep the product sharp, dominant, and faithful in identity, shape, proportions, packaging, colors, and logo. Animate it with subtle lift, rotation, or forward movement; animate the background with subtle motion, depth, and parallax. Use smooth camera movement, realistic light, shadows, and reflections. No morphing, duplicate products, people, or added text. End on a stable hero shot.';
+const NEGATIVE_PROMPT = 'blur, distortion, warped packaging, morphing, melting, duplicated objects, extra products, people, hands, text, watermark, unreadable branding, low quality';
+const COMMERCIAL_NEGATIVE_PROMPT = 'people, hands, text, watermark, duplicate products, extra objects, blurry, low quality';
+const QUICK_AD_BASE_PROMPT = 'A premium 5-second vertical product ad. The product stays sharp, centered and unchanged in shape, color and branding. Slow, smooth camera push-in with soft realistic lighting and gentle depth. Ends on a stable hero shot.';
 const IMAGE_STYLE_PROMPTS = Object.freeze({
-  food: 'Create premium commercial food/product advertising photography. Preserve the exact product, packaging, branding, proportions and important label details. Place it naturally in an appetizing advertising environment with professional food styling, complementary ingredients where appropriate, rich realistic lighting, depth, clean composition and a premium restaurant/brand campaign feel. Remove the ordinary original environment. No people, no extra product copies, no added text.',
-  reveal: 'Turn the uploaded product into premium cinematic product advertising photography. Preserve exact product identity, packaging, logo, proportions and colors. Replace the ordinary environment with a dramatic studio advertising set with controlled spotlighting, premium reflective surfaces, atmospheric depth and subtle mist where appropriate. The product is the hero. No people, duplicate products or added text.',
-  studio: 'Create polished minimalist commercial product photography. Preserve the exact product and branding. Use a clean premium studio environment with a complementary neutral background, realistic soft shadows, professional diffused lighting, subtle depth and elegant composition. Remove distracting original surroundings. No people, duplicate products or added text.',
-  social: 'Create bold modern social-media commercial product photography while preserving the exact product, packaging and branding. Replace the ordinary environment with an energetic graphic advertising set using complementary colors, depth, professional lighting and visually interesting environmental elements. Product remains dominant and realistic. No people, duplicate products or added text.'
+  food: 'On a rustic wooden table in a warm, softly lit kitchen, a few fresh ingredients and herbs nearby, shallow depth of field, appetizing natural light, professional food photography.',
+  reveal: 'On a dark glossy reflective surface in a dramatic studio, a single soft spotlight from above, faint mist in the background, deep shadows, cinematic luxury product photography.',
+  studio: 'On a clean seamless neutral beige studio backdrop with a soft natural shadow beneath, diffused window-style lighting, minimal, premium product photography.',
+  social: 'On a smooth colored podium against a bold vibrant gradient backdrop, crisp studio lighting, clean modern look, commercial product photography.'
 });
 const VIDEO_STYLE_PROMPTS = Object.freeze({
-  food: 'Food Burst: Use a warm, appetizing food or beverage setting. Sweep ingredients, steam, droplets, crumbs, or sauce naturally around and behind the product; add a smooth cinematic push-in.',
-  reveal: 'Product Reveal: Begin in soft shadow or mist, then reveal the product moving forward with controlled rotation. Add gentle light beams, reflections, and a slow cinematic push.',
-  studio: 'Clean Studio: Use a calm, minimalist studio with neutral or complementary tones, soft shadows, and restrained depth. Keep the backdrop quiet and the camera movement slow.',
-  social: 'Attention Grabber: Open with a bold, energetic entrance. Add a quick camera push, lively particles or light streaks, and strong parallax for a vivid short-form ad.'
+  food: 'Warm, appetizing setting. Slow push-in while gentle steam or a few droplets drift in the background.',
+  reveal: 'Dark, moody set. Soft light slowly brightens on the product as the camera pushes in; faint mist drifts behind.',
+  studio: 'Calm minimalist studio. Very slow push-in with softly shifting shadows. The backdrop stays still.',
+  social: 'Bright, energetic backdrop. Quick, smooth push-in with soft light streaks sweeping behind the product.'
 });
 const PROMPTS = Object.freeze({ ...VIDEO_STYLE_PROMPTS });
 
@@ -38,7 +38,7 @@ function sanitizeVideoPrompt(prompt) {
 }
 
 function buildCommercialImagePrompt(style) {
-  return sanitizeVideoPrompt(`${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio} ${COMMERCIAL_NEGATIVE_PROMPT}`);
+  return sanitizeVideoPrompt(IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio);
 }
 
 function buildQuickAdPrompt(style) {
@@ -222,7 +222,7 @@ function createQuickAdsRouter({
       stage = 'creating_scene';
       const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
       const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
-        input: { image_url: sourceImageUrl, prompt: commercialPrompt },
+        input: { image_url: sourceImageUrl, prompt: commercialPrompt, negative_prompt: COMMERCIAL_NEGATIVE_PROMPT },
         abortSignal: controller.signal
       });
       const commercialRequestId = commercialQueue?.request_id;

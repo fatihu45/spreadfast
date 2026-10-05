@@ -126,8 +126,10 @@ test('saves a blob without sending credentials to the media host and offers a br
   photo();
   await act(async () => button('Generate Quick Ad').click());
   await act(async () => button('Save video').click());
-  expect(axios.get.mock.calls[1][0]).toBe('https://api.example/api/quick-ads/generations/ad-1/download');
-  expect(axios.get.mock.calls[1][1].headers).toEqual({ Authorization: 'Bearer session-token' });
+  const downloadCall = axios.get.mock.calls.find(([url]) => url === 'https://api.example/api/quick-ads/generations/ad-1/download');
+  expect(downloadCall[0]).toBe('https://api.example/api/quick-ads/generations/ad-1/download');
+  expect(downloadCall[1].headers).toEqual({ Authorization: 'Bearer session-token' });
+  expect(downloadCall[1].headers).toEqual({ Authorization: 'Bearer session-token' });
   expect(downloadClick).toHaveBeenCalled();
   expect(container.querySelector('.quick-ad-open-video').href).toBe(videoUrl);
   axios.get.mockRejectedValue(new Error('CORS denied'));
@@ -213,4 +215,45 @@ test('promoters with an exhausted preview and zero credits cannot submit another
   expect(button('Buy Credits').disabled).toBe(false);
   photo();
   expect(axios.post).not.toHaveBeenCalled();
+});
+
+test('history distinguishes an empty result from a fetch failure and can be retried', async () => {
+  act(() => root.unmount()); root = createRoot(container);
+  axios.get.mockImplementation(url => url.endsWith('/generations')
+    ? Promise.reject(new Error('history unavailable'))
+    : Promise.resolve({ data: { success: true, quickAdCredits: 2, freePreviewAvailable: false } }));
+  await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'company-1', role: 'company' } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
+  expect(container.textContent).toContain('We could not load your Quick Ads.');
+  expect(button('Retry')).toBeDefined();
+
+  axios.get.mockImplementation(url => url.endsWith('/generations')
+    ? Promise.resolve({ data: { success: true, generations: [] } })
+    : Promise.resolve({ data: { success: true, quickAdCredits: 2, freePreviewAvailable: false } }));
+  await act(async () => button('Retry').click());
+  expect(container.textContent).toContain('Your Quick Ads will appear here after you create them.');
+});
+
+test('history shows real generation details and keeps free previews non-downloadable', async () => {
+  act(() => root.unmount()); root = createRoot(container);
+  const freeHistoryItem = {
+    generationId: 'free-history-1',
+    style: 'studio',
+    status: 'completed',
+    freePreview: true,
+    downloadable: false,
+    thumbnail: 'https://media.example/scene.jpg',
+    createdAt: '2026-09-18T12:00:00.000Z',
+  };
+  axios.get.mockImplementation(url => {
+    if (url.endsWith('/credits')) return Promise.resolve({ data: { success: true, quickAdCredits: 0, freePreviewAvailable: false } });
+    if (url.endsWith('/generations')) return Promise.resolve({ data: { success: true, generations: [freeHistoryItem] } });
+    return Promise.resolve({ data: { success: true, generations: [] } });
+  });
+  await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'company-1', role: 'company' } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
+
+  expect(container.textContent).toContain('Clean Studio');
+  expect(container.textContent).toContain('Ready');
+  expect(container.querySelector('.quick-ad-history-thumb').src).toBe(freeHistoryItem.thumbnail);
+  expect(button('Watch').disabled).toBe(false);
+  expect(button('Download')).toBeUndefined();
 });
