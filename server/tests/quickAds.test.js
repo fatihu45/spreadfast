@@ -261,6 +261,28 @@ test('fal validation errors return a useful safe client response', async t => {
   assert.ok(!JSON.stringify(result.body).includes('provider validation details'));
 });
 
+test('fashion studio accepts front and back images and preserves the dual-photo flow', async t => {
+  const f = await fixture(t, { statuses: ['IN_QUEUE', 'IN_PROGRESS', 'COMPLETED', 'IN_QUEUE', 'IN_PROGRESS', 'COMPLETED', 'IN_QUEUE', 'IN_PROGRESS', 'COMPLETED'] });
+  const front = new Blob([png], { type: 'image/png' });
+  const back = new Blob([png], { type: 'image/png' });
+  const body = new FormData();
+  body.append('style', 'fashion_studio');
+  body.append('frontImage', front, 'front.png');
+  body.append('backImage', back, 'back.png');
+
+  const result = await f.send(body);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.equal(result.body.style, 'fashion_studio');
+  assert.equal(f.calls.filter(c => c[0] === 'upload').length, 2);
+  const imageSubmits = f.calls.filter(c => c[0] === 'submit' && c[1] === 'fal-ai/nano-banana-2/edit');
+  assert.equal(imageSubmits.length, 2);
+  assert.deepEqual(imageSubmits[0][2].input.image_urls.length, 2);
+  const videoSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === MODEL);
+  assert.ok(videoSubmit);
+  assert.equal(videoSubmit[2].input.image_url, IMAGE_URL);
+});
+
 test('generation timeout aborts polling and retains request ID without submitting twice', async t => {
   const f = await fixture(t, { hangStatus: true, timeout: 50 });
   const result = await f.send();

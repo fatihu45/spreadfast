@@ -44,7 +44,7 @@ async function storeVideo(cloudinary, videoUrl, generation, signal) {
   return { publicId: uploaded.public_id, outputUrl, ...(previewUrl ? { previewUrl } : {}) };
 }
 function publicGeneration(generation, user) {
-  const result = { success: true, generationId: generation.id, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+  const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     downloadable: generation.status === 'completed' && !generation.freePreview && generation.downloadable === true,
     ...accountSummary(user) };

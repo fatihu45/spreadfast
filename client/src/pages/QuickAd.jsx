@@ -13,6 +13,7 @@ const styles = [
   { id: 'reveal', name: 'Product Reveal', description: 'A cinematic product reveal.', image: '/luxury_amber_perfume_spotlight.png', caption: 'In the spotlight' },
   { id: 'studio', name: 'Clean Studio', description: 'Simple, premium product motion.', image: '/luxury_skincare_bottle_in_soft_beige_studio.png', caption: 'Less. But better.' },
   { id: 'social', name: 'Attention Grabber', description: 'Fast movement made for social media.', image: '/energetic_citrus_juice_splash.png', caption: 'Make them look.' },
+  { id: 'fashion_studio', name: 'Fashion Studio', description: 'Front & back photos into a clean fashion ad.', image: '/fashion-studio-kaftan.png', caption: 'Front to back.' },
 ];
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
@@ -22,6 +23,8 @@ export default function QuickAd() {
   const canStartCampaign = user?.role === 'company';
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
+  const [frontPhoto, setFrontPhoto] = useState(null);
+  const [backPhoto, setBackPhoto] = useState(null);
   const [styleId, setStyleId] = useState('food');
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState('');
@@ -44,6 +47,7 @@ export default function QuickAd() {
   const download = useRef(null);
   const downloadUrls = useRef([]);
   const previewPanel = useRef(null);
+  const isFashionStyle = styleId === 'fashion_studio';
   const generating = phase === 'generating';
   const ready = phase === 'ready';
   const downloadable = ready && result?.downloadable === true && !result?.freePreview;
@@ -195,6 +199,14 @@ export default function QuickAd() {
     if (!product) return undefined;
     return () => URL.revokeObjectURL(product.url);
   }, [product]);
+  useEffect(() => {
+    if (!frontPhoto) return undefined;
+    return () => URL.revokeObjectURL(frontPhoto.url);
+  }, [frontPhoto]);
+  useEffect(() => {
+    if (!backPhoto) return undefined;
+    return () => URL.revokeObjectURL(backPhoto.url);
+  }, [backPhoto]);
 
   function reset() {
     request.current?.abort();
@@ -225,13 +237,44 @@ export default function QuickAd() {
     setProduct({ file, name: file.name, url: URL.createObjectURL(file) });
   }
 
+  function selectFashionPhoto(slot, files) {
+    if (generating || !files?.length) return;
+    if (files.length !== 1) { setError('Please choose exactly one outfit photo.'); return; }
+    const file = files[0];
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPG, PNG, or WEBP image for both outfit photos.'); return;
+    }
+    if (!file.size || file.size > 8 * 1024 * 1024) {
+      setError('Choose a non-empty image up to 8 MB for each outfit photo.'); return;
+    }
+    reset();
+    setError('');
+    const next = { file, name: file.name, url: URL.createObjectURL(file) };
+    if (slot === 'front') setFrontPhoto(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return next; });
+    else setBackPhoto(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return next; });
+  }
+
   function removePhoto() { reset(); setProduct(null); setError(''); }
+  function removeFashionPhoto(slot) {
+    reset();
+    if (slot === 'front') setFrontPhoto(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return null; });
+    else setBackPhoto(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return null; });
+    setError('');
+  }
 
   async function generate() {
     if (!canGenerate) return;
     if (generating || request.current || pendingKey || !balance) return;
     if (outOfCredits) { buyCredits(); return; }
-    if (!product?.file) { setError('Please add a product photo first.'); return; }
+    if (isFashionStyle) {
+      if (!frontPhoto?.file || !backPhoto?.file) {
+        setError('Please add both the front and back outfit photos.');
+        return;
+      }
+    } else if (!product?.file) {
+      setError('Please add a product photo first.');
+      return;
+    }
     const controller = new AbortController();
     request.current = controller;
     setError(''); setNotice(''); setPhase('generating'); setGenerationStage('queued');
@@ -242,7 +285,12 @@ export default function QuickAd() {
       const baseUrl = process.env.REACT_APP_API_URL?.trim().replace(/\/+$/, '');
       if (!baseUrl || !token) throw new Error('Missing API configuration or session');
       const form = new FormData();
-      form.append('image', product.file);
+      if (isFashionStyle) {
+        form.append('frontImage', frontPhoto.file);
+        form.append('backImage', backPhoto.file);
+      } else {
+        form.append('image', product.file);
+      }
       form.append('style', styleId);
       const key = newGenerationKey(); rememberKey(key);
       const { data } = await axios.post(`${baseUrl}/api/quick-ads/generate`, form, {
@@ -323,7 +371,8 @@ export default function QuickAd() {
         <h1 id="quick-ad-title">Quick Ads</h1>
         <span className="quick-ad-studio-badge">AI studio</span>
       </div>
-      <p>Turn one photo into an ad. Upload your product, choose a style, and SpreadFast does the rest.</p>
+      <p>Turn your product photos into an ad.</p>
+      {isFashionStyle && <p className="quick-ad-fashion-hint">Photograph the same outfit from the front and back, fully visible in good lighting.</p>}
     </header>
     {canGenerate && <div className="quick-ad-credit-summary">
       <div className="quick-ad-credit-copy">
@@ -339,8 +388,27 @@ export default function QuickAd() {
     <div className="quick-ad-layout">
       <div className="quick-ad-editor">
         <section className="quick-ad-panel" aria-labelledby="quick-ad-upload-title">
-          <div className="quick-ad-step"><span aria-hidden="true">1</span><div><h2 id="quick-ad-upload-title">Your product</h2><p>Start with a clear product photo.</p></div></div>
-          <div className={'quick-ad-upload' + (dragging ? ' is-dragging' : '') + (product ? ' is-populated' : '')}
+          <div className="quick-ad-step"><span aria-hidden="true">1</span><div><h2 id="quick-ad-upload-title">{isFashionStyle ? 'Your outfit' : 'Your product'}</h2><p>{isFashionStyle ? 'Add both sides of the same garment.' : 'Start with a clear product photo.'}</p></div></div>
+          {isFashionStyle ? <div className="quick-ad-fashion-grid">
+            {['front', 'back'].map(slot => (
+              <div key={slot} className={'quick-ad-fashion-slot' + ((slot === 'front' ? frontPhoto : backPhoto) ? ' is-populated' : '')}>
+                <label className="quick-ad-fashion-label">{slot === 'front' ? 'Front photo' : 'Back photo'}</label>
+                <div className="quick-ad-upload" onDragOver={event => { event.preventDefault(); if (!generating) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); selectFashionPhoto(slot, event.dataTransfer.files); }}>
+                  {(slot === 'front' ? frontPhoto : backPhoto) ? <>
+                    <img className="quick-ad-product" src={slot === 'front' ? frontPhoto.url : backPhoto.url} alt={slot === 'front' ? 'Front outfit photo' : 'Back outfit photo'} onError={() => { removeFashionPhoto(slot); setError('This image could not be opened. Please choose another photo.'); }} />
+                    <div className="quick-ad-file"><span>{slot === 'front' ? frontPhoto.name : backPhoto.name}</span><Button size="sm" variant="secondary" disabled={generating} onClick={() => removeFashionPhoto(slot)} aria-label={`Remove ${slot} outfit photo`}><UiIcon name="close" /> Remove</Button></div>
+                  </> : <div className="quick-ad-upload-copy"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>{slot === 'front' ? 'Front photo' : 'Back photo'}</strong><span>Choose a garment photo</span></div>}
+                  <label className={'quick-ad-picker' + (generating ? ' is-disabled' : '')}>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" disabled={generating}
+                      aria-label={slot === 'front' ? 'Upload front outfit photo' : 'Upload back outfit photo'}
+                      onChange={event => { selectFashionPhoto(slot, event.target.files); event.target.value = ''; }} />
+                    <span>{(slot === 'front' ? frontPhoto : backPhoto) ? 'Change photo' : 'Choose photo'} <UiIcon name="plus" /></span>
+                  </label>
+                </div>
+              </div>
+            ))}
+            <p className="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB each</p>
+          </div> : <div className={'quick-ad-upload' + (dragging ? ' is-dragging' : '') + (product ? ' is-populated' : '')}
             onDragOver={event => { event.preventDefault(); if (!generating) setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={event => { event.preventDefault(); setDragging(false); selectPhoto(event.dataTransfer.files); }}>
@@ -355,7 +423,7 @@ export default function QuickAd() {
               <span>{product ? 'Change photo' : 'Choose photo'} <UiIcon name="plus" /></span>
             </label>
             <p id="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB</p>
-          </div>
+          </div>}
           {error && <Alert tone="error">{error}</Alert>}
         </section>
         <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
@@ -364,7 +432,7 @@ export default function QuickAd() {
             <legend className="sr-only">Ad style</legend>
             {styles.map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
               <input type="radio" name="quick-ad-style" value={style.id} checked={styleId === style.id} onChange={() => { setStyleId(style.id); reset(); }} />
-              <span className="quick-ad-art" aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /></span>
+              <span className={'quick-ad-art' + (style.id === 'fashion_studio' ? ' is-fashion' : '')} aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /></span>
               <span className="quick-ad-template-copy"><strong>{style.name}</strong><span>{style.description}</span></span>
               {styleId === style.id && <span className="quick-ad-selected" aria-hidden="true"><UiIcon name="check" /></span>}
             </label>)}

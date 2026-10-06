@@ -4,7 +4,7 @@ const schema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   userId: { type: String, required: true, index: true },
   idempotencyKey: { type: String, required: true },
-  style: { type: String, enum: ['food', 'reveal', 'studio', 'social'], required: true },
+  style: { type: String, enum: ['food', 'reveal', 'studio', 'social', 'fashion_studio'], required: true },
   status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
   stage: { type: String, enum: ['queued', 'preparing_image', 'creating_scene', 'creating_video', 'finalizing', 'completed', 'failed'], default: 'queued' },
   freePreview: { type: Boolean, required: true },

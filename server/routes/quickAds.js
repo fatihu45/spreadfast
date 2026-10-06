@@ -41,7 +41,12 @@ const VIDEO_STYLE_PROMPTS = Object.freeze({
   studio: 'Use minimal premium motion. Apply a very slow smooth push-in, subtle parallax, or tiny camera slide. Allow extremely subtle natural shadow/light movement while keeping the studio background calm. The product itself should remain visually stable. No dramatic effects. No unnecessary particles. No aggressive rotation. The result should feel like a restrained high-end brand commercial.',
   social: 'Use a quicker but still smooth social-ad camera move. Use a confident push-in, small arc, or dynamic parallax movement. Allow controlled movement in existing gradient, lighting, or graphic background elements. A subtle light sweep may pass behind or around the product. Keep the main product stable and recognizable. Do not use chaotic shaking, extreme zooms, morphing, duplicated objects, or random effects. The result should feel energetic enough to stop a social-media scroll while still looking like a professional advertisement.'
 });
-const PROMPTS = Object.freeze({ ...VIDEO_STYLE_PROMPTS });
+const PROMPTS = Object.freeze({ ...VIDEO_STYLE_PROMPTS, fashion_studio: 'fashion_studio' });
+const FASHION_GARMENT_PROMPT = 'Create a professional ecommerce invisible-mannequin photograph of the exact outfit in the supplied source photographs. Preserve visible garment identity: colour, fabric texture, print placement, embroidery, seams, buttons, zippers, pockets, sleeve shape, collar, hem, length, silhouette and proportions. Remove the person, body parts, mannequin, hanger and original environment. Present only the garment, naturally filled as though worn by an invisible mannequin, with realistic fabric volume and hollow openings where appropriate. Reconstruct only minimal hidden interior fabric needed for the hollow effect; do not invent decorative details. Keep all parts of the supplied outfit, if it is still present, intact and recognisable.';
+const FASHION_VIEW_PROMPTS = Object.freeze({
+  front: 'Front view: frame the full front of the garment with the neckline, shoulders, bodice, sleeves, waist, hem and inseam clearly visible; centre the garment in a clean white studio background with soft commercial lighting, subtle shadows and accurate garment proportions.',
+  back: 'Back view: frame the full back of the garment with the back neckline, shoulders, back panels, sleeves, hem, closures, seam lines and any back details clearly readable; centre the garment in the same clean white studio background with soft commercial lighting, subtle shadows and accurate garment proportions.'
+});
 
 function sanitizeVideoPrompt(prompt) {
   const MAX_LENGTH = 2200;
@@ -55,8 +60,45 @@ function buildCommercialImagePrompt(style) {
   return sanitizeVideoPrompt(`${COMMERCIAL_IMAGE_BASE_PROMPT} ${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio}`);
 }
 
+function buildFashionImagePrompt(view) {
+  const viewPrompt = FASHION_VIEW_PROMPTS[view] || FASHION_VIEW_PROMPTS.front;
+  return sanitizeVideoPrompt(`${FASHION_GARMENT_PROMPT} ${viewPrompt}`);
+}
+
 function buildQuickAdPrompt(style) {
   return `${QUICK_AD_BASE_PROMPT} ${VIDEO_STYLE_PROMPTS[style] || VIDEO_STYLE_PROMPTS.studio}`;
+}
+
+function supportsCommercialImageModel(model) {
+  return typeof model === 'string' && /fal-ai\/nano-banana-2\/edit/i.test(model.trim());
+}
+
+async function runCommercialImageGeneration({ fal, model, prompt, imageUrls, controller, pollIntervalMs = 2000 }) {
+  const submitted = await fal.queue.submit(model, {
+    input: {
+      prompt,
+      image_urls: imageUrls,
+      num_images: 1,
+      aspect_ratio: '9:16',
+      resolution: '1K',
+      output_format: 'png',
+      limit_generations: true
+    },
+    abortSignal: controller.signal
+  });
+  const requestId = submitted?.request_id;
+  if (typeof requestId !== 'string' || !requestId.trim()) throw generationError('MISSING_REQUEST_ID');
+  while (true) {
+    controller.signal.throwIfAborted();
+    const status = await fal.queue.status(model, { requestId, logs: false, abortSignal: controller.signal });
+    if (status?.status === 'COMPLETED') break;
+    if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw generationError('INVALID_QUEUE_STATUS');
+    await delay(pollIntervalMs, undefined, { signal: controller.signal });
+  }
+  const result = await fal.queue.result(model, { requestId, abortSignal: controller.signal });
+  const generatedUrl = result?.data?.images?.[0]?.url || result?.data?.image?.url || result?.data?.image_url || result?.data?.url || result?.data?.output?.url;
+  if (!isHttpsUrl(generatedUrl)) throw generationError('INVALID_IMAGE_URL');
+  return { requestId, generatedUrl };
 }
 
 async function loadFalClient() {
@@ -169,31 +211,57 @@ function createQuickAdsRouter({
   const upload = multer({
     storage: multer.memoryStorage(),
     // Busboy emits its size-limit event at equality; allow exactly 8 MB.
-    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 1, fields: 1, fieldSize: 32 },
+    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 2, fields: 3, fieldSize: 32 },
     fileFilter: (req, file, callback) => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
         callback(Object.assign(new Error('Unsupported image'), { code: 'INVALID_IMAGE_TYPE' }));
       } else callback(null, true);
     }
-  }).single('image');
+  }).fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'frontImage', maxCount: 1 },
+    { name: 'backImage', maxCount: 1 }
+  ]);
 
   router.post('/generate', authenticate, quickAdAccountOnly, (req, res, next) => {
     upload(req, res, error => {
       if (!error) return next();
       if (error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ success: false, message: 'Image must be 8 MB or smaller.' });
+      if (error.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ success: false, message: 'Only one product image or one front/back pair is allowed.' });
       const message = error.code === 'INVALID_IMAGE_TYPE'
         ? 'Only JPG, PNG, and WEBP images are supported.'
-        : 'Send one image file and one style field as multipart/form-data.';
+        : 'Send a valid product image or a front/back outfit pair as multipart/form-data.';
       return res.status(400).json({ success: false, message });
     });
   }, async (req, res) => {
-    if (!req.file || !req.file.buffer?.length) return res.status(400).json({ success: false, message: 'An image is required.' });
-    if (req.file.size > MAX_IMAGE_SIZE) return res.status(413).json({ success: false, message: 'Image must be 8 MB or smaller.' });
+    const files = req.files || {};
     const style = req.body?.style;
-    if (typeof style !== 'string' || !Object.prototype.hasOwnProperty.call(PROMPTS, style)) {
-      return res.status(400).json({ success: false, message: 'Style must be food, reveal, studio, or social.' });
+    const singleImage = Array.isArray(files.image) ? files.image[0] : null;
+    const frontImage = Array.isArray(files.frontImage) ? files.frontImage[0] : null;
+    const backImage = Array.isArray(files.backImage) ? files.backImage[0] : null;
+    const unexpectedFields = Object.keys(req.body || {}).filter(key => !['style', 'image', 'frontImage', 'backImage'].includes(key));
+    if (unexpectedFields.length > 0) {
+      return res.status(400).json({ success: false, message: 'Unexpected request fields were provided.' });
     }
-    if (!matchesImageType(req.file)) return res.status(400).json({ success: false, message: 'The file must contain a valid JPG, PNG, or WEBP image.' });
+    if (typeof style !== 'string' || !Object.prototype.hasOwnProperty.call(PROMPTS, style)) {
+      return res.status(400).json({ success: false, message: 'Style must be food, reveal, studio, social, or fashion_studio.' });
+    }
+    const isFashionStyle = style === 'fashion_studio';
+    const hasOrdinaryImage = !!singleImage && !frontImage && !backImage;
+    const hasFashionPair = !!frontImage && !!backImage && !singleImage;
+    if (isFashionStyle) {
+      if (!hasFashionPair) {
+        return res.status(400).json({ success: false, message: 'Fashion Studio requires exactly one front photo and one back photo.' });
+      }
+    } else if (!hasOrdinaryImage) {
+      return res.status(400).json({ success: false, message: 'Exactly one product image is required for this style.' });
+    }
+    const imageFiles = isFashionStyle ? [frontImage, backImage] : [singleImage];
+    for (const imageFile of imageFiles) {
+      if (!imageFile || !imageFile.buffer?.length) return res.status(400).json({ success: false, message: 'An image is required.' });
+      if (imageFile.size > MAX_IMAGE_SIZE) return res.status(413).json({ success: false, message: 'Image must be 8 MB or smaller.' });
+      if (!matchesImageType(imageFile)) return res.status(400).json({ success: false, message: 'The file must contain a valid JPG, PNG, or WEBP image.' });
+    }
     const key = req.headers['idempotency-key'] || randomUUID();
     if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(key)) {
       return res.status(400).json({ success: false, message: 'Invalid generation request key.' });
@@ -218,6 +286,9 @@ function createQuickAdsRouter({
     const disconnect = () => controller.abort();
     res.on('close', disconnect);
     try {
+      if (!supportsCommercialImageModel(COMMERCIAL_IMAGE_MODEL)) {
+        throw Object.assign(new Error('Quick Ads requires a Nano Banana 2 edit model.'), { code: 'UNSUPPORTED_IMAGE_MODEL' });
+      }
       stage = 'credits';
       const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL });
       generation = reservation.generation;
@@ -227,46 +298,87 @@ function createQuickAdsRouter({
       const fal = await getFalClient();
       controller.signal.throwIfAborted();
       stage = 'upload';
-      const uploaded = await uploadImage(cloudinaryClient, req.file.buffer, controller.signal);
-      delete req.file.buffer;
-      controller.signal.throwIfAborted();
-      const sourceImageUrl = uploaded?.secure_url;
-      if (!isHttpsUrl(sourceImageUrl)) throw generationError('INVALID_IMAGE_URL');
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl, stage: 'preparing_image' } });
-      stage = 'creating_scene';
-      const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
-      const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
-        input: {
-          prompt: commercialPrompt,
-          image_urls: [sourceImageUrl],
-          resolution: '1K',
-          limit_generations: true
-        },
-        abortSignal: controller.signal
-      });
-      const commercialRequestId = commercialQueue?.request_id;
-      if (typeof commercialRequestId !== 'string' || !commercialRequestId.trim()) throw generationError('MISSING_REQUEST_ID');
-      requestId = commercialRequestId;
-      const commercialImage = { url: null, publicId: null, model: COMMERCIAL_IMAGE_MODEL, requestId: commercialRequestId };
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage, stage: 'creating_scene' } });
-      while (true) {
-        controller.signal.throwIfAborted();
-        const status = await fal.queue.status(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, logs: false, abortSignal: controller.signal });
-        if (status?.status === 'COMPLETED') break;
-        if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw generationError('INVALID_QUEUE_STATUS');
-        await delay(pollIntervalMs, undefined, { signal: controller.signal });
+      const sourceFiles = isFashionStyle ? [frontImage, backImage] : [singleImage];
+      const uploadedSourceUrls = [];
+      for (const sourceFile of sourceFiles) {
+        const uploaded = await uploadImage(cloudinaryClient, sourceFile.buffer, controller.signal);
+        delete sourceFile.buffer;
+        const sourceImageUrl = uploaded?.secure_url;
+        if (!isHttpsUrl(sourceImageUrl)) throw generationError('INVALID_IMAGE_URL');
+        uploadedSourceUrls.push(sourceImageUrl);
       }
-      const commercialResult = await fal.queue.result(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, abortSignal: controller.signal });
-      const commercialUrl = commercialResult?.data?.images?.[0]?.url || commercialResult?.data?.image?.url || commercialResult?.data?.image_url || commercialResult?.data?.url || commercialResult?.data?.output?.url;
-      if (!isHttpsUrl(commercialUrl)) throw generationError('INVALID_IMAGE_URL');
-      const commercialAsset = await persistCommercialImage(cloudinaryClient, commercialUrl, generation, controller.signal);
-      const nextCommercialImage = {
-        url: commercialAsset?.url || commercialUrl,
-        publicId: commercialAsset?.publicId || null,
-        model: COMMERCIAL_IMAGE_MODEL,
-        requestId: commercialRequestId
-      };
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl, stage: 'creating_video' } });
+      const [firstSourceUrl, secondSourceUrl] = uploadedSourceUrls;
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl: firstSourceUrl, stage: 'preparing_image' } });
+      stage = 'creating_scene';
+      let primaryCommercialUrl = null;
+      let primaryRequestId = null;
+      let nextCommercialImage = null;
+      if (isFashionStyle) {
+        const frontPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('front'));
+        const frontCommercial = await runCommercialImageGeneration({
+          fal,
+          model: COMMERCIAL_IMAGE_MODEL,
+          prompt: frontPrompt,
+          imageUrls: [firstSourceUrl, secondSourceUrl],
+          controller,
+          pollIntervalMs
+        });
+        primaryCommercialUrl = frontCommercial.generatedUrl;
+        primaryRequestId = frontCommercial.requestId;
+        const backPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('back'));
+        const backCommercial = await runCommercialImageGeneration({
+          fal,
+          model: COMMERCIAL_IMAGE_MODEL,
+          prompt: backPrompt,
+          imageUrls: [secondSourceUrl, firstSourceUrl, primaryCommercialUrl],
+          controller,
+          pollIntervalMs
+        });
+        const nextCommercialUrl = backCommercial.generatedUrl;
+        const commercialAsset = await persistCommercialImage(cloudinaryClient, nextCommercialUrl, generation, controller.signal);
+        nextCommercialImage = {
+          url: commercialAsset?.url || nextCommercialUrl,
+          publicId: commercialAsset?.publicId || null,
+          model: COMMERCIAL_IMAGE_MODEL,
+          requestId: backCommercial.requestId
+        };
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
+        requestId = backCommercial.requestId;
+      } else {
+        const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
+        const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
+          input: {
+            prompt: commercialPrompt,
+            image_urls: [firstSourceUrl],
+            resolution: '1K',
+            limit_generations: true
+          },
+          abortSignal: controller.signal
+        });
+        const commercialRequestId = commercialQueue?.request_id;
+        if (typeof commercialRequestId !== 'string' || !commercialRequestId.trim()) throw generationError('MISSING_REQUEST_ID');
+        requestId = commercialRequestId;
+        const commercialImage = { url: null, publicId: null, model: COMMERCIAL_IMAGE_MODEL, requestId: commercialRequestId };
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage, stage: 'creating_scene' } });
+        while (true) {
+          controller.signal.throwIfAborted();
+          const status = await fal.queue.status(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, logs: false, abortSignal: controller.signal });
+          if (status?.status === 'COMPLETED') break;
+          if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw generationError('INVALID_QUEUE_STATUS');
+          await delay(pollIntervalMs, undefined, { signal: controller.signal });
+        }
+        const commercialResult = await fal.queue.result(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, abortSignal: controller.signal });
+        const commercialUrl = commercialResult?.data?.images?.[0]?.url || commercialResult?.data?.image?.url || commercialResult?.data?.image_url || commercialResult?.data?.url || commercialResult?.data?.output?.url;
+        if (!isHttpsUrl(commercialUrl)) throw generationError('INVALID_IMAGE_URL');
+        const commercialAsset = await persistCommercialImage(cloudinaryClient, commercialUrl, generation, controller.signal);
+        nextCommercialImage = {
+          url: commercialAsset?.url || commercialUrl,
+          publicId: commercialAsset?.publicId || null,
+          model: COMMERCIAL_IMAGE_MODEL,
+          requestId: commercialRequestId
+        };
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
+      }
       stage = 'creating_video';
       const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
       const queued = await fal.queue.submit(VIDEO_MODEL, {
@@ -326,7 +438,9 @@ function createQuickAdsRouter({
     } finally {
       clearTimeout(timer);
       res.removeListener('close', disconnect);
-      delete req.file.buffer;
+      for (const imageFile of [singleImage, frontImage, backImage].filter(Boolean)) {
+        delete imageFile.buffer;
+      }
     }
   });
   return router;
