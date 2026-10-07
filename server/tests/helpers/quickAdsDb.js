@@ -52,7 +52,12 @@ function quickAdsDb(users = []) {
       if (!row) return { matchedCount: 0, modifiedCount: 0 };
       for (const [key, value] of Object.entries(update)) {
         if (key === '$inc') for (const [field, amount] of Object.entries(value)) row[field] = (row[field] || 0) + amount;
-        else if (key === '$set') Object.assign(row, structuredClone(value));
+        else if (key === '$set') for (const [field, entry] of Object.entries(value)) {
+          const parts = field.split('.');
+          let target = row;
+          for (const part of parts.slice(0, -1)) target = target[part] ||= {};
+          target[parts.at(-1)] = structuredClone(entry);
+        }
         else row[key] = structuredClone(value);
       }
       return { matchedCount: 1, modifiedCount: 1 };

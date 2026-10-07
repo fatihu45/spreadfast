@@ -85,6 +85,45 @@ test('sends authenticated multipart once and renders an inline playable result',
   expect(button('Save video').disabled).toBe(true);
 });
 
+test('fashion enables generation with both outfit photos and sends the pair without an ordinary product', async () => {
+  act(() => Simulate.change(container.querySelector('input[value="fashion_studio"]')));
+  const front = new File(['front'], 'front.png', { type: 'image/png' });
+  const back = new File(['back'], 'back.png', { type: 'image/png' });
+  const choose = (label, file) => act(() => Simulate.change(container.querySelector(`input[aria-label="${label}"]`), { target: { files: [file], value: '' } }));
+  choose('Upload front outfit photo', front);
+  expect(button('Generate Quick Ad').disabled).toBe(true);
+  expect(container.querySelector('.quick-ad-stage-image').src).toBe('blob:preview');
+  choose('Upload back outfit photo', back);
+  expect(button('Generate Quick Ad').disabled).toBe(false);
+  click(button('Remove'));
+  expect(button('Generate Quick Ad').disabled).toBe(true);
+  choose('Upload front outfit photo', front);
+  axios.post.mockResolvedValue({ data: { ...paidResult, style: 'fashion_studio' } });
+  await act(async () => button('Generate Quick Ad').click());
+  const [, form] = axios.post.mock.calls[0];
+  expect(form.get('frontImage')).toBe(front);
+  expect(form.get('backImage')).toBe(back);
+  expect(form.get('image')).toBeNull();
+  expect(form.get('style')).toBe('fashion_studio');
+  expect(container.querySelector('video').src).toBe(videoUrl);
+});
+
+test('a refreshed page resumes status checks for the saved job without submitting again', async () => {
+  act(() => root.unmount()); root = createRoot(container);
+  sessionStorage.setItem('spreadfast-quick-ad-generation:company-1', 'existing-fashion-job');
+  axios.get.mockImplementation(url => {
+    if (url.includes('/requests/')) return Promise.resolve({ data: { success: true, status: 'pending', stage: 'creating_scene', imageUrl: 'https://media.example/front.png' } });
+    if (url.endsWith('/generations')) return Promise.resolve({ data: { success: true, generations: [] } });
+    return Promise.resolve({ data: { success: true, quickAdCredits: 2, freePreviewAvailable: false } });
+  });
+  await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'company-1', role: 'company' } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
+  await act(async () => button('Check generation').click());
+  expect(container.textContent).toContain('Creating your Quick Ad...');
+  expect(container.querySelector('.quick-ad-stage-image').src).toBe('https://media.example/front.png');
+  expect(axios.post).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem('spreadfast-quick-ad-generation:company-1')).toBe('existing-fashion-job');
+});
+
 test.each([
   () => Promise.reject(new Error('private provider error')),
   () => Promise.resolve({ data: { success: false, message: 'private provider error' } }),
