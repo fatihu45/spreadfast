@@ -131,7 +131,7 @@
 .quick-ad-history .sf-alert { align-items: center; }
 .quick-ad-empty-state { padding: 20px 14px; border: 1px dashed rgb(var(--sf-control-border)); border-radius: 12px; background: #fbfdfc; color: rgb(var(--sf-muted)); font-size: .8rem; text-align: center; }
 .quick-ad-history-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.quick-ad-history-card { display: grid; min-width: 0; grid-template-columns: minmax(0, 1.1fr) minmax(100px, .9fr); align-items: center; gap: 10px; padding: 9px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; }
+.quick-ad-history-card { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 10px; padding: 9px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; }
 .quick-ad-history-thumb { display: block; width: 100%; min-width: 0; aspect-ratio: 16 / 9; border-radius: 8px; background: rgb(var(--sf-surface-muted)); object-fit: cover; }
 .quick-ad-history-thumb-empty { display: grid; place-items: center; color: rgb(var(--sf-muted)); }
 .quick-ad-history-thumb-empty svg { width: 24px; height: 24px; }
@@ -222,7 +222,7 @@
 
 @media (max-width: 359px) {
   .quick-ad-history-grid { grid-template-columns: minmax(0, 1fr); }
-  .quick-ad-history-card { grid-template-columns: minmax(0, 1.1fr) minmax(100px, .9fr); }
+  .quick-ad-history-card { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -235,3 +235,9 @@
   .quick-ad-upload { transition: none; }
   .quick-ad-templates:not(:disabled) .quick-ad-template:hover .quick-ad-style-image { transform: none; }
 }
+
+.quick-ad-history-media { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #10151c; color: #fff; display: grid; place-items: center; }
+.quick-ad-history-media video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.quick-ad-history-media-message { padding: 12px; text-align: center; font-size: .8rem; }
+.quick-ad-history-media-message button { display: block; margin: 8px auto 0; padding: 8px 12px; }
+.quick-ad-history-actions .quick-ad-history-delete { color: rgb(var(--sf-danger)); margin-left: auto; }

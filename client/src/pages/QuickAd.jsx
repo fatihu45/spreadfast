@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import { quickAdsUrl, quickAdsAuth, generationVideoUrl, newGenerationKey, canUseQuickAds } from '../utils/quickAdsApi';
+import QuickAdHistoryVideo from '../components/QuickAdHistoryVideo';
 import './QuickAd.css';
 import './QuickAdCredits.css';
 
@@ -38,7 +39,8 @@ export default function QuickAd() {
   const [historyStatus, setHistoryStatus] = useState('loading');
   const [historyError, setHistoryError] = useState('');
   const [historyActionError, setHistoryActionError] = useState('');
-  const [failedThumbnails, setFailedThumbnails] = useState(() => new Set());
+  const [deletingId, setDeletingId] = useState(null);
+  const deletedHistoryIds = useRef(new Set());
   const [balance, setBalance] = useState(null);
   const storageKey = `spreadfast-quick-ad-generation:${user?.id}`;
   const [pendingKey, setPendingKey] = useState(() => { try { return sessionStorage.getItem(storageKey) || ''; } catch { return ''; } });
@@ -145,13 +147,32 @@ export default function QuickAd() {
     try {
       const { data } = await axios.get(quickAdsUrl('/generations'), { headers: quickAdsAuth(token), timeout: 20000 });
       if (!data?.success || !Array.isArray(data.generations)) throw new Error('Invalid Quick Ads history response');
-      setHistory(data.generations);
-      setFailedThumbnails(new Set());
+      setHistory(data.generations.filter(item => !deletedHistoryIds.current.has(item.generationId)));
       setHistoryStatus('loaded');
     } catch {
       setHistoryError('We could not load your Quick Ads. Please try again.');
       setHistoryStatus('error');
     }
+  }
+
+  async function deleteHistoryItem(item) {
+    if (deletingId || item.status === 'pending') return;
+    if (!window.confirm('Delete this video from My Quick Ads? Credits will not be refunded. Videos already used in campaigns will remain available.')) return;
+    setDeletingId(item.generationId);
+    setHistoryActionError('');
+    try {
+      const { data } = await axios.delete(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}`), {
+        headers: quickAdsAuth(token), timeout: 20000,
+      });
+      if (!data?.success) throw new Error('Delete failed');
+      deletedHistoryIds.current.add(item.generationId);
+      setHistory(previous => previous.filter(row => row.generationId !== item.generationId));
+      if (result?.generationId === item.generationId) {
+        setResult(null); setVideoUrl(''); setStageImage(''); setPhase('idle');
+      }
+    } catch {
+      setHistoryActionError('Could not delete that Quick Ad. Please try again.');
+    } finally { setDeletingId(null); }
   }
 
   async function openHistoryItem(item) {
@@ -498,10 +519,7 @@ export default function QuickAd() {
       {history.length > 0 && <div className="quick-ad-history-grid">
           {history.map(item => (
             <article key={item.generationId} className="quick-ad-history-card">
-              {item.thumbnail && !failedThumbnails.has(item.generationId)
-                ? <img className="quick-ad-history-thumb" src={item.thumbnail} alt={`${styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'} thumbnail`}
-                  onError={() => setFailedThumbnails(previous => new Set(previous).add(item.generationId))} />
-                : <div className="quick-ad-history-thumb quick-ad-history-thumb-empty" aria-label="No thumbnail available"><UiIcon name="image" /></div>}
+              <QuickAdHistoryVideo item={item} token={token} />
               <div className="quick-ad-history-copy">
                 <strong>{styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'}</strong>
                 <small>{(item.completedAt || item.createdAt) && !Number.isNaN(new Date(item.completedAt || item.createdAt).getTime())
@@ -511,6 +529,7 @@ export default function QuickAd() {
               <div className="quick-ad-history-actions">
                 <Button size="sm" variant="secondary" disabled={item.status !== 'completed' || saving} onClick={() => openHistoryItem(item)}>Watch</Button>
                 {item.downloadable && !item.freePreview && <Button size="sm" variant="secondary" disabled={saving} onClick={() => downloadHistoryItem(item)}>Download</Button>}
+                <Button size="sm" variant="secondary" className="quick-ad-history-delete" disabled={item.status === 'pending' || !!deletingId} onClick={() => deleteHistoryItem(item)}>{deletingId === item.generationId ? 'Deleting...' : 'Delete'}</Button>
               </div>
             </article>
           ))}

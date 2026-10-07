@@ -30,6 +30,7 @@ const schema = new mongoose.Schema({
   media: { publicId: String, outputUrl: String, previewUrl: String },
   expiresAt: { type: Date, required: true },
   completedAt: Date,
+  deletedAt: Date,
   failureCode: String
 }, { timestamps: true });
 schema.index({ userId: 1, idempotencyKey: 1 }, { unique: true });
