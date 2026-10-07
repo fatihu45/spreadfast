@@ -15,6 +15,11 @@ const schema = new mongoose.Schema({
   requestId: String,
   videoRequestId: String,
   sourceImageUrl: String,
+  sourceBackImageUrl: String,
+  fashionImages: {
+    front: { url: String, publicId: String, model: String, requestId: String },
+    back: { url: String, publicId: String, model: String, requestId: String }
+  },
   imageUrl: String,
   commercialImage: {
     url: String,

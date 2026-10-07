@@ -66,6 +66,7 @@ function buildFashionImagePrompt(view) {
 }
 
 function buildQuickAdPrompt(style) {
+  if (style === 'fashion_studio') return 'A premium 5-second invisible-mannequin fashion film. Start exactly on the supplied front-view image and finish exactly on the supplied back-view end frame. Show one complete outfit turning smoothly through a controlled 180-degree rotation from front to back, centred at a consistent scale with a fixed camera. Preserve the garment colour, fabric, embroidery, seams, silhouette and all outfit pieces. Maintain the clean white studio, soft lighting, hollow openings and natural fabric volume. No visible person, mannequin, hanger, extra garments, morphing, text or new decorations. End on a stable, clear back view.';
   return `${QUICK_AD_BASE_PROMPT} ${VIDEO_STYLE_PROMPTS[style] || VIDEO_STYLE_PROMPTS.studio}`;
 }
 
@@ -73,7 +74,7 @@ function supportsCommercialImageModel(model) {
   return typeof model === 'string' && /fal-ai\/nano-banana-2\/edit/i.test(model.trim());
 }
 
-async function runCommercialImageGeneration({ fal, model, prompt, imageUrls, controller, pollIntervalMs = 2000 }) {
+async function runCommercialImageGeneration({ fal, model, prompt, imageUrls, controller, pollIntervalMs = 2000, onSubmitted = async () => {} }) {
   const submitted = await fal.queue.submit(model, {
     input: {
       prompt,
@@ -88,6 +89,7 @@ async function runCommercialImageGeneration({ fal, model, prompt, imageUrls, con
   });
   const requestId = submitted?.request_id;
   if (typeof requestId !== 'string' || !requestId.trim()) throw generationError('MISSING_REQUEST_ID');
+  await onSubmitted(requestId);
   while (true) {
     controller.signal.throwIfAborted();
     const status = await fal.queue.status(model, { requestId, logs: false, abortSignal: controller.signal });
@@ -135,17 +137,17 @@ function uploadImage(client, buffer, signal) {
   });
 }
 
-async function persistCommercialImage(client, imageUrl, generation, signal) {
+async function persistCommercialImage(client, imageUrl, generation, signal, view = '') {
   if (!imageUrl || !isHttpsUrl(imageUrl)) return { url: imageUrl, publicId: null };
   if (typeof client?.uploader?.upload !== 'function') return { url: imageUrl, publicId: null };
   try {
     const uploaded = await new Promise((resolve, reject) => {
       const abort = () => reject(signal.reason || new Error('Commercial image upload aborted'));
-      if (signal.aborted) abort();
+      if (signal.aborted) { abort(); return; }
       signal.addEventListener('abort', abort, { once: true });
       client.uploader.upload(imageUrl, {
         folder: 'spreadfast/quick-ads/commercial-images',
-        public_id: `spreadfast/quick-ads/commercial-images/${generation.id}`,
+        public_id: `spreadfast/quick-ads/commercial-images/${generation.id}${view ? `-${view}` : ''}`,
         resource_type: 'image',
         overwrite: true,
         timeout: 120000
@@ -283,11 +285,14 @@ function createQuickAdsRouter({
     const DB = req.app.locals.db;
     let stage = 'setup';
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, generationTimeoutMs);
-    const disconnect = () => controller.abort();
-    res.on('close', disconnect);
+    // Once uploads are received, the job belongs to the account, not this socket.
+    // Keep processing through page refresh/navigation; the owner can poll by key.
     try {
       if (!supportsCommercialImageModel(COMMERCIAL_IMAGE_MODEL)) {
         throw Object.assign(new Error('Quick Ads requires a Nano Banana 2 edit model.'), { code: 'UNSUPPORTED_IMAGE_MODEL' });
+      }
+      if (isFashionStyle && VIDEO_MODEL !== 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video') {
+        throw generationError('UNSUPPORTED_FASHION_VIDEO_MODEL');
       }
       stage = 'credits';
       const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL });
@@ -310,10 +315,12 @@ function createQuickAdsRouter({
       const [firstSourceUrl, secondSourceUrl] = uploadedSourceUrls;
       await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl: firstSourceUrl, stage: 'preparing_image' } });
       stage = 'creating_scene';
-      let primaryCommercialUrl = null;
-      let primaryRequestId = null;
       let nextCommercialImage = null;
+      let fashionBackImage = null;
       if (isFashionStyle) {
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+          sourceBackImageUrl: secondSourceUrl, stage: 'creating_scene'
+        } });
         const frontPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('front'));
         const frontCommercial = await runCommercialImageGeneration({
           fal,
@@ -321,28 +328,47 @@ function createQuickAdsRouter({
           prompt: frontPrompt,
           imageUrls: [firstSourceUrl, secondSourceUrl],
           controller,
-          pollIntervalMs
+          pollIntervalMs,
+          onSubmitted: async id => {
+            requestId = id;
+            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+              'fashionImages.front.requestId': id, 'fashionImages.front.model': COMMERCIAL_IMAGE_MODEL
+            } });
+          }
         });
-        primaryCommercialUrl = frontCommercial.generatedUrl;
-        primaryRequestId = frontCommercial.requestId;
+        const frontAsset = await persistCommercialImage(cloudinaryClient, frontCommercial.generatedUrl, generation, controller.signal, 'front');
+        nextCommercialImage = { url: frontAsset.url, publicId: frontAsset.publicId,
+          model: COMMERCIAL_IMAGE_MODEL, requestId: frontCommercial.requestId };
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+          commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url,
+          'fashionImages.front': nextCommercialImage
+        } });
         const backPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('back'));
         const backCommercial = await runCommercialImageGeneration({
           fal,
           model: COMMERCIAL_IMAGE_MODEL,
           prompt: backPrompt,
-          imageUrls: [secondSourceUrl, firstSourceUrl, primaryCommercialUrl],
+          imageUrls: [secondSourceUrl, firstSourceUrl, nextCommercialImage.url],
           controller,
-          pollIntervalMs
+          pollIntervalMs,
+          onSubmitted: async id => {
+            requestId = id;
+            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+              'fashionImages.back.requestId': id, 'fashionImages.back.model': COMMERCIAL_IMAGE_MODEL
+            } });
+          }
         });
         const nextCommercialUrl = backCommercial.generatedUrl;
-        const commercialAsset = await persistCommercialImage(cloudinaryClient, nextCommercialUrl, generation, controller.signal);
-        nextCommercialImage = {
+        const commercialAsset = await persistCommercialImage(cloudinaryClient, nextCommercialUrl, generation, controller.signal, 'back');
+        fashionBackImage = {
           url: commercialAsset?.url || nextCommercialUrl,
           publicId: commercialAsset?.publicId || null,
           model: COMMERCIAL_IMAGE_MODEL,
           requestId: backCommercial.requestId
         };
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+          'fashionImages.back': fashionBackImage, stage: 'creating_video'
+        } });
         requestId = backCommercial.requestId;
       } else {
         const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
@@ -382,7 +408,9 @@ function createQuickAdsRouter({
       stage = 'creating_video';
       const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
       const queued = await fal.queue.submit(VIDEO_MODEL, {
-        input: { image_url: nextCommercialImage.url, prompt: safePrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
+        input: { image_url: nextCommercialImage.url,
+          ...(isFashionStyle ? { tail_image_url: fashionBackImage.url } : {}),
+          prompt: safePrompt, duration: '5', negative_prompt: NEGATIVE_PROMPT },
         abortSignal: controller.signal
       });
       requestId = queued?.request_id;
@@ -396,6 +424,7 @@ function createQuickAdsRouter({
         await delay(pollIntervalMs, undefined, { signal: controller.signal });
       }
       stage = 'finalizing';
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'finalizing' } });
       const result = await fal.queue.result(VIDEO_MODEL, { requestId, abortSignal: controller.signal });
       controller.signal.throwIfAborted();
       const videoUrl = result?.data?.video?.url;
@@ -405,6 +434,7 @@ function createQuickAdsRouter({
       controller.signal.throwIfAborted();
       stage = 'completion';
       generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media });
+      if (res.destroyed) return;
       return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
     } catch (error) {
       logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed, model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL : VIDEO_MODEL });
@@ -437,7 +467,6 @@ function createQuickAdsRouter({
       return res.status(stage === 'setup' ? 503 : 502).json({ success: false, message, ...(requestId ? { requestId } : {}) });
     } finally {
       clearTimeout(timer);
-      res.removeListener('close', disconnect);
       for (const imageFile of [singleImage, frontImage, backImage].filter(Boolean)) {
         delete imageFile.buffer;
       }

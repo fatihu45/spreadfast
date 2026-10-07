@@ -48,8 +48,10 @@ function publicGeneration(generation, user) {
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     downloadable: generation.status === 'completed' && !generation.freePreview && generation.downloadable === true,
     ...accountSummary(user) };
+  const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl;
+  // Return only generated image previews, never source uploads or internal metadata.
+  if (commercialImageUrl) result.imageUrl = commercialImageUrl;
   if (generation.status !== 'completed') return result;
-  const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl || generation.sourceImageUrl;
   if (generation.freePreview) {
     const token = jwt.sign({ generationId: generation.id, userId: user.id, tokenVersion: user.tokenVersion || 0 },
       previewSecret(), { algorithm: 'HS256', audience: 'quick-ad-preview', expiresIn: '5m' });

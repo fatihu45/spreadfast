@@ -63,7 +63,8 @@ export default function QuickAd() {
   const normalizedStage = generationStage === 'queued' ? 'preparing_image' : generationStage;
   const currentStageIndex = Math.max(0, stageSteps.findIndex(step => step.key === normalizedStage));
   const stageLabel = stageSteps.find(step => step.key === normalizedStage)?.label || stageSteps[0].label;
-  const previewImage = stageImage || product?.url || null;
+  const previewImage = stageImage || (isFashionStyle ? frontPhoto?.url : product?.url) || null;
+  const hasRequiredPhotos = isFashionStyle ? !!(frontPhoto?.file && backPhoto?.file) : !!product?.file;
 
   useEffect(() => {
     if (!generating || !window.matchMedia?.('(max-width: 759px)').matches) return;
@@ -104,7 +105,7 @@ export default function QuickAd() {
       if (data?.commercialImage?.url || data?.imageUrl) setStageImage(data.commercialImage?.url || data.imageUrl);
       if (data.status === 'completed') { showResult(data); setError(''); }
       else if (data.status === 'failed') { rememberKey(''); setStageImage(''); setError(GENERATION_ERROR); }
-      else setError('Your ad is still processing. Check generation again shortly.');
+      else { setPhase('generating'); setError(''); }
     } catch (failure) {
       if (!controller.signal.aborted) {
         if ([404, 410].includes(failure.response?.status)) rememberKey('');
@@ -125,7 +126,11 @@ export default function QuickAd() {
         if (data.status === 'completed') { showResult(data); }
         else if (data.status === 'failed') { rememberKey(''); setStageImage(''); setPhase('idle'); setError(GENERATION_ERROR); }
       } catch (failure) {
-        if ([404, 410].includes(failure.response?.status)) { return; }
+        if (cancelled) return;
+        if (failure.response?.status === 410) {
+          rememberKey(''); setPhase('idle'); setStageImage('');
+          setError('This generation expired. No credit was used. Please try again.');
+        }
       }
     };
     poll();
@@ -439,7 +444,7 @@ export default function QuickAd() {
           </fieldset>
         </section>
         <div className="quick-ad-generate">
-          <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!product && !outOfCredits) || generating || saving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
+          <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!hasRequiredPhotos && !outOfCredits) || generating || saving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
             {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{outOfCredits ? 'Buy Credits' : balance?.freePreviewAvailable ? 'Create Free Preview' : 'Generate Quick Ad'} <UiIcon name="star" /></>}
           </Button>
           <p id="quick-ad-generation-note">{canGenerate ? 'Generation can take a few minutes. Keep this page open.' : 'A company or promoter account is required to generate Quick Ads.'}</p>
