@@ -140,3 +140,27 @@ test('history list exposes only safe metadata and is scoped to the authenticated
   await f.DB.QuickAdGeneration.create({ id: 'company-ad', userId: 'other', status: 'completed' });
   assert.equal((await f.get('/api/quick-ads/generations/company-ad')).status, 404);
 });
+
+for (const role of ['company', 'promoter']) test(`${role} can delete own history without altering credits or campaign assets`, async t => {
+  const f = await fixture(t, role);
+  const remove = (id, owner = 'owner') => fetch(`${f.base}/api/quick-ads/generations/${id}`, {
+    method: 'DELETE', headers: owner ? { Authorization: `Bearer ${jwt.sign({ id: owner }, process.env.JWT_SECRET)}` } : {}
+  });
+  const preview = await (await f.get('/api/quick-ads/generations/free')).json();
+  assert.equal((await remove('paid', null)).status, 401);
+  assert.equal((await remove('paid', 'other')).status, 404);
+  await f.DB.QuickAdGeneration.create({ id: 'pending', userId: 'owner', status: 'pending' });
+  assert.equal((await remove('pending')).status, 409);
+  for (const id of ['paid', 'free']) {
+    assert.equal((await remove(id)).status, 200);
+    assert.equal((await remove(id)).status, 404);
+    for (const suffix of ['', '/download', '/export']) assert.equal((await f.get(`/api/quick-ads/generations/${id}${suffix}`)).status, 404);
+    const retained = await f.DB.QuickAdGeneration.findOne({ id });
+    assert.ok(retained.deletedAt);
+    assert.ok(retained.media.outputUrl);
+  }
+  assert.equal((await f.get(preview.previewPath, null)).status, 404);
+  const list = await (await f.get('/api/quick-ads/generations')).json();
+  assert.deepEqual(list.generations.map(row => row.generationId), ['pending']);
+  assert.equal((await f.DB.User.findOne({ id: 'owner' })).quickAdCredits, 3);
+});

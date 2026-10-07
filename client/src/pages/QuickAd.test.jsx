@@ -6,7 +6,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import QuickAd from './QuickAd';
 
-jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn() }));
+jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn(), delete: jest.fn() }));
 
 let container;
 let root;
@@ -286,13 +286,29 @@ test('history shows real generation details and keeps free previews non-download
   axios.get.mockImplementation(url => {
     if (url.endsWith('/credits')) return Promise.resolve({ data: { success: true, quickAdCredits: 0, freePreviewAvailable: false } });
     if (url.endsWith('/generations')) return Promise.resolve({ data: { success: true, generations: [freeHistoryItem] } });
-    return Promise.resolve({ data: { success: true, generations: [] } });
+    return Promise.resolve({ data: { success: true, ...freeHistoryItem, previewPath: '/api/quick-ads/generations/free-history-1/preview?token=test' } });
   });
   await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'company-1', role: 'company' } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
 
   expect(container.textContent).toContain('Clean Studio');
   expect(container.textContent).toContain('Ready');
-  expect(container.querySelector('.quick-ad-history-thumb').src).toBe(freeHistoryItem.thumbnail);
+  const video = container.querySelector('.quick-ad-history-media video');
+  expect(video.src).toContain('/free-history-1/preview?token=test');
+  expect(video.controls).toBe(true);
+  expect(video.autoplay).toBe(false);
+  expect(container.querySelector('.quick-ad-history-media img')).toBeNull();
   expect(button('Watch').disabled).toBe(false);
   expect(button('Download')).toBeUndefined();
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  await act(async () => button('Delete').click());
+  expect(axios.delete).not.toHaveBeenCalled();
+  confirm.mockReturnValue(true);
+  axios.delete.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => button('Delete').click());
+  expect(container.textContent).toContain('Could not delete that Quick Ad');
+  expect(container.querySelector('.quick-ad-history-card')).not.toBeNull();
+  axios.delete.mockResolvedValueOnce({ data: { success: true } });
+  await act(async () => button('Delete').click());
+  expect(axios.delete).toHaveBeenLastCalledWith(expect.stringContaining('/generations/free-history-1'), expect.objectContaining({ headers: { Authorization: 'Bearer session-token' } }));
+  expect(container.querySelector('.quick-ad-history-card')).toBeNull();
 });
