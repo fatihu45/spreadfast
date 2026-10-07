@@ -6,6 +6,8 @@ import { MegaphoneIcon, PeopleIcon, ShareIcon } from './Icons';
 import { Button, Container } from '../components/ui';
 
 import LandingHeroVisual from '../components/LandingHeroVisual';
+import LandingSampleVideo from '../components/LandingSampleVideo';
+import LandingVideoCarousel from '../components/LandingVideoCarousel';
 import './Landing.css';
 
 export default function LandingPage() {
@@ -144,8 +146,8 @@ export default function LandingPage() {
                 <Link to="/quick-ad" className="sf-control sf-button sf-button--primary">Create a Quick Ad <UiIcon name="arrow" /></Link>
                 <p className="landing-quick-ads-support">No editing. No prompts. No design experience needed.</p>
               </div>
-              <figure className="landing-quick-ads-visual" aria-label="Before and after: a simple jollof rice, chicken, and plantain takeaway photo becomes a polished five-second food advert preview.">
-                <div className="landing-quick-ads-flow" aria-hidden="true">
+              <figure className="landing-quick-ads-visual" aria-label="Before and after: a simple jollof rice, chicken, and plantain takeaway photo becomes a generated food advert video.">
+                <div className="landing-quick-ads-flow">
                   <div className="landing-quick-ads-source">
                     <span className="landing-quick-ads-label">Your photo</span>
                     <div className="landing-quick-ads-photo"><div><img src="/quick-ads-food-photo.png" alt="" width="1254" height="1254" loading="lazy" decoding="async" /></div></div>
@@ -155,16 +157,16 @@ export default function LandingPage() {
                   <div className="landing-quick-ads-output">
                     <span className="landing-quick-ads-label">Your next ad</span>
                     <div className="landing-quick-ads-phone">
-                      <img src="/quick-ads-food-ad.png" alt="" width="941" height="1672" loading="lazy" decoding="async" />
+                      <LandingSampleVideo name="jollof" label="Jollof rice, chicken and plantain Quick Ad" autoPlay />
                       <span className="landing-quick-ads-phone-brand">SpreadFast</span>
                       <div className="landing-quick-ads-caption"><strong>Craving something good?</strong><span>Made fresh. Delivered fast.</span></div>
-                      <div className="landing-quick-ads-timeline"><span /><div><UiIcon name="video" /><span>0:00 / 0:05</span></div></div>
                     </div>
                   </div>
                 </div>
-                <figcaption>Illustrative preview</figcaption>
+                <figcaption>Generated Quick Ad · 8 seconds</figcaption>
               </figure>
             </div>
+            <LandingVideoCarousel />
           </Container>
         </section>
 
