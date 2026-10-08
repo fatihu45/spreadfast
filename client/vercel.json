@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "seo/technical-audit-2026-10-08": false
+      "seo/technical-audit-2026-10-08": false,
+      "seo/fix-hosted-404": false
     }
   },
   "buildCommand": "npm run vercel-build",
@@ -262,5 +263,7 @@
       ]
     }
   ],
-  "trailingSlash": false
+  "trailingSlash": false,
+  "framework": null,
+  "outputDirectory": "build"
 }
