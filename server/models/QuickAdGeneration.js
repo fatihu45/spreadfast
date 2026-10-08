@@ -27,7 +27,9 @@ const schema = new mongoose.Schema({
     model: String,
     requestId: String
   },
-  media: { publicId: String, outputUrl: String, previewUrl: String },
+  branding: { mode: { type: String, enum: ['none', 'name', 'logo'], default: 'none' }, name: String, publicId: String, logoUrl: String },
+  brandingRevision: Number,
+  media: { publicId: String, outputUrl: String, originalOutputUrl: String, previewUrl: String },
   expiresAt: { type: Date, required: true },
   completedAt: Date,
   deletedAt: Date,

@@ -42,13 +42,18 @@ async function fixture(t, options = {}) {
   let imageNumber = 0;
   const cloudinaryClient = {
     config: () => options.noCloudinary ? {} : { cloud_name: 'test', api_key: 'test', api_secret: 'test' },
+    url: id => `https://res.cloudinary.com/test/image/authenticated/${id}.png`,
     uploader: {
+      explicit: async (id, settings) => {
+        calls.push(['branding', id, settings]);
+        return { eager: settings.eager.map((entry, index) => ({ secure_url: `https://res.cloudinary.com/test/video/authenticated/branded-${index}.mp4` })) };
+      },
       upload_stream(uploadOptions, callback) {
         calls.push(['upload', uploadOptions]);
         return new Writable({
           write(chunk, encoding, done) { calls.push(['buffer', Buffer.from(chunk)]); done(); },
           final(done) {
-            if (!options.hangUpload) callback(options.uploadError || null, { secure_url: options.distinctImages ? `https://media.example/source-${++imageNumber}.png` : IMAGE_URL });
+            if (!options.hangUpload) callback(options.uploadError || null, { public_id: uploadOptions.public_id, width: 400, height: 200, secure_url: options.distinctImages ? `https://media.example/source-${++imageNumber}.png` : IMAGE_URL });
             done();
           }
         });
@@ -479,4 +484,34 @@ test('disconnecting after upload keeps the job running and recoverable without a
   assert.equal(retry.body.generationId, recovered.generationId);
   assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
   assert.equal((await f.DB.User.findOne({ id: 'business-1' })).quickAdTotalCreditsUsed, 1);
+});
+
+test('business name is composited after fashion generation and never sent to the AI', async t => {
+  const f = await fixture(t);
+  const body = form({ style: 'fashion_studio', field: 'frontImage' });
+  body.append('backImage', new Blob([png], { type: 'image/png' }), 'back.png');
+  body.append('brandingMode', 'name'); body.append('businessName', 'Arewa Tailors');
+  const result = await f.send(body);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.branding.name, 'Arewa Tailors');
+  assert.match(result.body.videoUrl, /branded/);
+  const aiCalls = f.calls.filter(c => c[0] === 'submit');
+  assert.equal(aiCalls.length, 3);
+  assert.ok(!JSON.stringify(aiCalls).includes('Arewa Tailors'));
+  assert.equal(f.calls.filter(c => c[0] === 'branding').length, 1);
+});
+
+test('logo upload stays separate from AI product inputs and a retry does not re-render', async t => {
+  const f = await fixture(t);
+  const body = form(); body.append('brandingMode', 'logo');
+  body.append('brandingLogo', new Blob([png], { type: 'image/png' }), 'logo.png');
+  const result = await f.send(body, undefined, 'branded-request-123');
+  assert.equal(result.status, 200); assert.equal(result.body.branding.mode, 'logo');
+  assert.match(result.body.branding.logoUrl, /image\/authenticated/);
+  assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
+  const uploads = f.calls.filter(c => c[0] === 'upload');
+  assert.equal(uploads.length, 2); assert.equal(uploads[0][1].type, 'authenticated');
+  assert.ok(!JSON.stringify(f.calls.filter(c => c[0] === 'submit')).includes('/logos/'));
+  assert.equal((await f.send(body, undefined, 'branded-request-123')).status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'branding').length, 1);
 });

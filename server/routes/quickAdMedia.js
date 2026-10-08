@@ -1,3 +1,7 @@
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { MAX_LOGO_SIZE, readBranding, uploadBranding, renderBranding } = require('../services/quickAdBranding');
+const { PREVIEW_TRANSFORMATION } = require('../services/quickAdMedia');
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { accountSummary, fail } = require('../services/quickAdCredits');
@@ -10,7 +14,7 @@ function safeError(res, error) {
     ...(error.quickAdSafe ? { code: error.code } : {}),
     message: error.quickAdSafe ? error.message : 'Quick Ads is temporarily unavailable. Please try again.' });
 }
-function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = streamVideo } = {}) {
+function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = streamVideo, cloudinaryClient = cloudinary } = {}) {
   const router = express.Router();
   router.get('/plans', (req, res) => res.json({ success: true, plans: QUICK_AD_PLANS, pricePerCredit: QUICK_AD_CREDIT_PRICE }));
   router.get('/credits', authenticate, quickAdAccountOnly, async (req, res) => {
@@ -24,6 +28,27 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
     if (!generation || generation.deletedAt) fail('GENERATION_NOT_FOUND', 'Ad not found.', 404);
     return generation;
   }
+  const brandingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_LOGO_SIZE + 1, files: 1, fields: 2, fieldSize: 256 } }).single('brandingLogo');
+  router.patch('/generations/:id/branding', authenticate, quickAdAccountOnly, (req, res, next) => {
+    brandingUpload(req, res, error => error ? res.status(400).json({ success: false, message: 'Choose a PNG, JPG, or WEBP logo up to 2 MB.' }) : next());
+  }, async (req, res) => {
+    try {
+      const generation = await owned(req);
+      if (generation.status !== 'completed') fail('GENERATION_IN_PROGRESS', 'Wait until your video is ready.', 409);
+      if (Object.keys(req.body || {}).some(key => !['brandingMode', 'businessName'].includes(key))) fail('INVALID_BRANDING', 'Unexpected branding fields.', 400);
+      const selected = readBranding(req.body, req.file);
+      const branding = await uploadBranding(cloudinaryClient, selected, req.file);
+      const media = await renderBranding(cloudinaryClient, generation, branding, PREVIEW_TRANSFORMATION);
+      // Compare-and-set prevents overlapping edits or deletion from replacing newer work.
+      const updated = await req.app.locals.db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id,
+        deletedAt: { $exists: false }, status: 'completed',
+        brandingRevision: generation.brandingRevision == null ? { $exists: false } : generation.brandingRevision
+      }, { $set: { branding, media }, $inc: { brandingRevision: 1 } });
+      if (!updated.modifiedCount) fail('BRANDING_CHANGED', 'This video changed. Open it again and retry.', 409);
+      const user = await req.app.locals.db.User.findOne({ id: req.user.id });
+      res.set('Cache-Control', 'no-store').json(publicGeneration({ ...(generation.toObject ? generation.toObject() : generation), branding, media }, user));
+    } catch (error) { safeError(res, error); }
+  });
   router.get('/requests/:key', authenticate, quickAdAccountOnly, async (req, res) => {
     try {
       const generation = await req.app.locals.db.QuickAdGeneration.findOne({ userId: req.user.id, idempotencyKey: req.params.key });
@@ -52,7 +77,8 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
         createdAt: g.createdAt,
         completedAt: g.completedAt,
         thumbnail: g.commercialImage?.url || g.imageUrl || null,
-        model: g.model
+        model: g.model,
+        brandingRevision: g.brandingRevision || 0
       })) });
     } catch (error) { safeError(res, error); }
   });

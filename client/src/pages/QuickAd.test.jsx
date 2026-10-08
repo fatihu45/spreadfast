@@ -6,7 +6,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import QuickAd from './QuickAd';
 
-jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn(), delete: jest.fn() }));
+jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn(), delete: jest.fn(), patch: jest.fn() }));
 
 let container;
 let root;
@@ -314,4 +314,39 @@ test('history shows real generation details and keeps free previews non-download
   await act(async () => container.querySelector('button[aria-label="Delete video"]').click());
   expect(axios.delete).toHaveBeenLastCalledWith(expect.stringContaining('/generations/free-history-1'), expect.objectContaining({ headers: { Authorization: 'Bearer session-token' } }));
   expect(container.querySelector('.quick-ad-history-card')).toBeNull();
+});
+
+test('branding stays collapsed by default and sends the selected business name with generation', async () => {
+  expect(container.querySelector('.quick-ad-branding').open).toBe(false);
+  photo(); click(button('Business name'));
+  const name = container.querySelector('.quick-ad-branding-name input');
+  act(() => Simulate.change(name, { target: { value: 'Arewa Tailors' } }));
+  axios.post.mockResolvedValue({ data: paidResult });
+  await act(async () => button('Generate Quick Ad').click());
+  expect(axios.post.mock.calls[0][1].get('brandingMode')).toBe('name');
+  expect(axios.post.mock.calls[0][1].get('businessName')).toBe('Arewa Tailors');
+});
+
+test('invalid logos are rejected and valid logo replacement is optional', () => {
+  photo(); click(button('Upload logo'));
+  const input = container.querySelector('input[aria-label="Upload branding logo"]');
+  act(() => Simulate.change(input, { target: { files: [new File(['bad'], 'logo.svg', { type: 'image/svg+xml' })], value: '' } }));
+  expect(container.textContent).toContain('Choose a PNG, JPG, or WEBP logo up to 2 MB.');
+  click(button('Remove branding'));
+  expect(container.querySelector('input[aria-label="Upload branding logo"]')).toBeNull();
+});
+
+test('editing a finished video updates playback without another generation request', async () => {
+  photo(); axios.post.mockResolvedValue({ data: paidResult });
+  await act(async () => button('Generate Quick Ad').click());
+  click(button('Edit branding'));
+  const edit = container.querySelector('.quick-ad-branding-edit');
+  act(() => [...edit.querySelectorAll('button')].find(b => b.textContent === 'Business name').click());
+  act(() => Simulate.change(edit.querySelector('input[type="text"]'), { target: { value: 'My Shop' } }));
+  axios.patch.mockResolvedValue({ data: { ...paidResult, videoUrl: 'https://media.example/branded.mp4', branding: { mode: 'name', name: 'My Shop' } } });
+  await act(async () => button('Save branding').click());
+  expect(axios.patch.mock.calls.at(-1)[1].get('businessName')).toBe('My Shop');
+  expect(axios.post).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('video').src).toBe('https://media.example/branded.mp4');
+  expect(container.textContent).toContain('No generation credit was used.');
 });
