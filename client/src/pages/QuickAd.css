@@ -131,18 +131,19 @@
 .quick-ad-history .sf-alert { align-items: center; }
 .quick-ad-empty-state { padding: 20px 14px; border: 1px dashed rgb(var(--sf-control-border)); border-radius: 12px; background: #fbfdfc; color: rgb(var(--sf-muted)); font-size: .8rem; text-align: center; }
 .quick-ad-history-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.quick-ad-history-card { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 10px; padding: 9px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; }
+.quick-ad-history-card { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; padding: 9px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; }
 .quick-ad-history-thumb { display: block; width: 100%; min-width: 0; aspect-ratio: 16 / 9; border-radius: 8px; background: rgb(var(--sf-surface-muted)); object-fit: cover; }
 .quick-ad-history-thumb-empty { display: grid; place-items: center; color: rgb(var(--sf-muted)); }
 .quick-ad-history-thumb-empty svg { width: 24px; height: 24px; }
-.quick-ad-history-copy { display: grid; min-width: 0; gap: 3px; }
-.quick-ad-history-copy strong { overflow-wrap: anywhere; font-size: .78rem; line-height: 1.35; }
+.quick-ad-history-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.quick-ad-history-copy { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: 4px 8px; }
+.quick-ad-history-copy strong { width: 100%; overflow-wrap: anywhere; font-size: .78rem; line-height: 1.35; }
 .quick-ad-history-copy small,
 .quick-ad-history-copy span { color: rgb(var(--sf-muted)); font-size: .68rem; line-height: 1.4; }
-.quick-ad-history-copy .quick-ad-history-status.is-completed { color: rgb(var(--sf-primary-hover)); font-weight: 650; }
+.quick-ad-history-copy .quick-ad-history-status.is-completed { color: rgb(var(--sf-primary-hover)); font-weight: 650; background: #e9f7ef; padding: 2px 7px; border-radius: 999px; }
 .quick-ad-history-copy .quick-ad-history-status.is-failed { color: rgb(var(--sf-danger)); }
-.quick-ad-history-actions { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 7px; }
-.quick-ad-history-actions .sf-button { min-height: 40px; }
+.quick-ad-history-actions { display: flex; flex-shrink: 0; gap: 7px; }
+.quick-ad-history-actions .sf-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; }
 .quick-ad-history-actions .sf-button:disabled { opacity: .55; }
 .quick-ad-footer { display: flex; align-items: center; gap: 13px; margin-top: 16px; padding: 15px; border-radius: 13px; background: #f1faf5; }
 .quick-ad-footer strong { font-size: .82rem; font-weight: 600; }
@@ -172,7 +173,7 @@
   .quick-ad-editor > .quick-ad-generate { order: 3; }
   .quick-ad-preview-panel { order: 4; }
   .quick-ad-history { order: 5; }
-  .quick-ad-history-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-ad-history-grid { grid-template-columns: minmax(0, 1fr); }
   .quick-ad-panel,
   .quick-ad-preview-panel { padding: 14px; }
   .quick-ad-panel > .quick-ad-step { margin-bottom: 10px; }
@@ -217,7 +218,7 @@
   .quick-ad-history-grid { gap: 8px; }
   .quick-ad-history-card { padding: 7px; }
   .quick-ad-history-actions { gap: 5px; }
-  .quick-ad-history-actions .sf-button { padding-inline: 9px; font-size: .72rem; }
+
 }
 
 @media (max-width: 359px) {
@@ -241,3 +242,9 @@
 .quick-ad-history-media-message { padding: 12px; text-align: center; font-size: .8rem; }
 .quick-ad-history-media-message button { display: block; margin: 8px auto 0; padding: 8px 12px; }
 .quick-ad-history-actions .quick-ad-history-delete { color: rgb(var(--sf-danger)); margin-left: auto; }
+
+.quick-ad-history-play { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; border: 0; padding: 0; background: transparent; color: #fff; cursor: pointer; }
+.quick-ad-history-play span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: rgb(16 21 28 / .65); box-shadow: 0 2px 12px rgb(0 0 0 / .15); }
+.quick-ad-history-play svg { width: 24px; height: 24px; }
+.quick-ad-history-play:hover span { background: rgb(16 21 28 / .85); }
+.quick-ad-history-play:focus-visible { outline: 3px solid rgb(var(--sf-primary)); outline-offset: -3px; }
