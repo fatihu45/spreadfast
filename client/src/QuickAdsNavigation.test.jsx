@@ -73,7 +73,7 @@ test.each([
   root = createRoot(container);
   render(path, role);
   expect(container.querySelector('#quick-ad-title')).not.toBeNull();
-  expect(deployment.rewrites).toContainEqual({ source: path, destination: '/app-shell.html' });
+  expect(deployment.routes).toContainEqual({ src: `^${path}/?$`, dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
 
 test.each([
@@ -102,7 +102,7 @@ test.each(['company', 'promoter'])('%s credits direct route retains dashboard na
   render('/quickads/credits', role);
   expect(container.querySelector('h1').textContent).toBe('Quick Ads Credits');
   expect(quickLink(navs()[0]).getAttribute('aria-current')).toBe('page');
-  expect(deployment.rewrites).toContainEqual({ source: '/quickads/credits', destination: '/app-shell.html' });
+  expect(deployment.routes).toContainEqual({ src: '^/quickads/credits/?$', dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
 
 test.each([['company', '/company'], ['promoter', '/promoter-dashboard']])('legacy dashboard opens the working %s dashboard', (role, destination) => {

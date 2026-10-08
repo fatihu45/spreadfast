@@ -50,7 +50,7 @@ const urls = [metadataForPath('/').canonical, ...policies.map(file => `${SITE_UR
 fs.writeFileSync(path.join(build, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc></url>`).join('\n')}\n</urlset>\n`);
 const config = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../vercel.json')));
 for (const appPath of APP_PATHS) {
-  if (!config.rewrites.some(rule => rule.source === appPath && rule.destination === '/app-shell.html')) {
+  if (!config.routes.some(rule => rule.src === `^${appPath}/?$` && rule.dest === '/app-shell.html')) {
     throw new Error(`Missing application rewrite for ${appPath}`);
   }
 }

@@ -3,267 +3,150 @@
   "git": {
     "deploymentEnabled": {
       "seo/technical-audit-2026-10-08": false,
-      "seo/fix-hosted-404": false
+      "seo/fix-hosted-404": false,
+      "seo/explicit-404": false
     }
   },
   "buildCommand": "npm run vercel-build",
-  "rewrites": [
-    {
-      "source": "/login",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/register",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/forgot-password",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/reset-password",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/payment-callback",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/dashboard",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/company",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/wallet",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/company/quick-ads",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/promoter/quick-ads",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/quick-ad",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/quickads",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/quickads/credits",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/promoter-dashboard",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/available-campaigns",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/submit-proof",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/admin-portal",
-      "destination": "/app-shell.html"
-    },
-    {
-      "source": "/campaigns",
-      "destination": "/app-shell.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/login",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/register",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/forgot-password",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/reset-password",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/payment-callback",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/dashboard",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/company",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/wallet",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/company/quick-ads",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/promoter/quick-ads",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/quick-ad",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/quickads",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/quickads/credits",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/promoter-dashboard",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/available-campaigns",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/submit-proof",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/admin-portal",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/campaigns",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/app-shell.html",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    },
-    {
-      "source": "/404.html",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
-    }
-  ],
-  "trailingSlash": false,
   "framework": null,
-  "outputDirectory": "build"
+  "outputDirectory": "build",
+  "routes": [
+    {
+      "src": "^/login/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/register/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/forgot-password/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/reset-password/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/payment-callback/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/dashboard/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/company/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/wallet/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/company/quick-ads/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/promoter/quick-ads/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/quick-ad/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/quickads/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/quickads/credits/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/promoter-dashboard/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/available-campaigns/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/submit-proof/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/admin-portal/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/campaigns/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/.*",
+      "dest": "/404.html",
+      "status": 404,
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    }
+  ]
 }

@@ -34,13 +34,13 @@ test('homepage metadata is restored after private navigation without leaking que
 test.each(APP_PATHS)('%s has noindex in the browser and a server header on direct load', path => {
   visit(path);
   expect(document.querySelector('meta[name="robots"]').content).toBe('noindex, nofollow');
-  expect(deployment.headers).toContainEqual({ source: path, headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] });
-  expect(deployment.rewrites).toContainEqual({ source: path, destination: '/app-shell.html' });
+  expect(deployment.routes).toContainEqual({ src: `^${path}/?$`, dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
 test('unknown pages are noindex and deployment has no catch-all success rewrite', () => {
   visit('/unknown-page');
   expect(document.title).toBe('Page Not Found | SpreadFast');
   expect(document.querySelector('meta[name="robots"]').content).toBe('noindex, nofollow');
-  expect(deployment.rewrites.some(rule => rule.source === '/:path*')).toBe(false);
+  expect(deployment.routes[deployment.routes.length - 2]).toEqual({ handle: 'filesystem' });
+  expect(deployment.routes[deployment.routes.length - 1]).toEqual({ src: '/.*', dest: '/404.html', status: 404, headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
   expect(deployment.git.deploymentEnabled['seo/technical-audit-2026-10-08']).toBe(false);
 });
