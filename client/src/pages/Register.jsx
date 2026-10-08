@@ -1,3 +1,4 @@
+import { getAuthDestination } from '../utils/authDestination';
 import Alert from '../components/ui/Alert';
 import AuthLayout from '../components/ui/AuthLayout';
 /* eslint-disable */
@@ -69,7 +70,7 @@ export default function Register() {
       registrationData.socialMedia
     );
     if (result.success) {
-      window.location.href = role === 'company' ? '/company' : '/promoter-dashboard';
+      window.location.href = getAuthDestination(result.user || { role });
     } else {
       setError(result.message);
     }
@@ -88,7 +89,7 @@ export default function Register() {
   return <AuthLayout>
       <ol className="sf-signup-progress" aria-label="Signup progress"><li aria-current={step === 1 ? 'step' : undefined}><span>1</span> Account</li><li aria-current={step === 2 ? 'step' : undefined}><span>2</span> Your role</li></ol>
       <h1 ref={headingRef} tabIndex={-1}>{step === 1 ? 'Create your account' : 'What best describes you?'}</h1>
-      <p className="sf-signup-intro">{step === 1 ? 'Join creators and businesses growing with SpreadFast.' : 'Choose how you want to use SpreadFast.'}</p>
+      <p className="sf-signup-intro">{step === 1 ? 'Create AI video ads and grow with SpreadFast.' : 'Choose how you want to use SpreadFast.'}</p>
       {error && <Alert tone="error">{error}</Alert>}
       <form className="sf-signup-form" onSubmit={next}>
         <fieldset hidden={step !== 1} disabled={step !== 1 || loading}>
@@ -101,8 +102,8 @@ export default function Register() {
         {step === 2 && <fieldset disabled={loading} className="sf-signup-role-fields">
           <legend className="sr-only">Choose your role</legend>
           <div className="sf-signup-roles">{[
-            { value: 'promoter', title: 'Promote campaigns', description: 'Create content and earn with growing brands.', icon: 'campaign' },
-            { value: 'company', title: 'Advertise my business', description: 'Reach more people with authentic creator content.', icon: 'home' }
+            { value: 'promoter', title: 'Promote campaigns', description: 'Create AI video ads and earn by promoting brands.', icon: 'campaign' },
+            { value: 'company', title: 'Advertise my business', description: 'Create AI video ads and reach customers with creators.', icon: 'home' }
           ].map(option => <label key={option.value} className={'sf-signup-role' + (role === option.value ? ' is-selected' : '')}>
             <span className="sf-signup-role-icon"><UiIcon name={option.icon} /></span><span className="sf-signup-role-copy"><strong>{option.title}</strong><span>{option.description}</span></span>
             <input type="radio" name="account-role" value={option.value} checked={role === option.value} onChange={() => setRole(option.value)} />

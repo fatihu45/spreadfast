@@ -16,8 +16,8 @@ async function submit() { await act(async () => { Simulate.change(host.querySele
 
 test('login keeps its credentials and server error feedback', async () => { await render(); await submit(); expect(login).toHaveBeenCalledWith('person@example.test', 'test-password'); expect(host.querySelector('[role="alert"]').textContent).toBe('Incorrect credentials'); expect(host.querySelector('button[type="submit"]').disabled).toBe(false); });
 test.each([
-  [{ role: 'promoter', email: 'creator@example.test' }, '/promoter-dashboard'],
-  [{ role: 'company', email: 'business@example.test' }, '/company'],
+  [{ role: 'promoter', email: 'creator@example.test' }, '/promoter/quick-ads'],
+  [{ role: 'company', email: 'business@example.test' }, '/company/quick-ads'],
   [{ role: 'company', email: process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com' }, '/admin-portal'],
   [{ role: 'unknown', email: 'other@example.test' }, '/']
 ])('keeps the redirect for %j', async (user, target) => { login.mockResolvedValue({ success: true, user }); sessionStorage.setItem('token', 'test-token'); await render(); await submit(); expect(host.querySelector('output').textContent).toBe(target); });
@@ -30,7 +30,7 @@ test('redirects with memory auth when browser storage is denied', async () => {
 });
 test.each(['//evil.test', 'https://evil.test', '/\\evil.test', '/login'])('rejects unsafe login return %s', async from => {
   login.mockResolvedValue({ success: true, user: { role: 'company', email: 'business@example.test' } });
-  await render(from); await submit(); expect(host.querySelector('output').textContent).toBe('/company');
+  await render(from); await submit(); expect(host.querySelector('output').textContent).toBe('/company/quick-ads');
 });
 
 test('password visibility and existing account links remain available', async () => { await render(); await act(async () => host.querySelector('[aria-label="Show password"]').click()); expect(host.querySelector('#login-password').type).toBe('text'); expect(login).not.toHaveBeenCalled(); expect(host.querySelector('a[href="/forgot-password"]')).not.toBeNull(); expect(host.querySelector('a[href="/register"]')).not.toBeNull(); expect(host.querySelector('a[href="/"] img').getAttribute('src')).toBe('/spreadfast-logo.png'); });

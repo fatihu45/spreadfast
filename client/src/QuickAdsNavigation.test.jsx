@@ -40,9 +40,9 @@ afterEach(() => {
 });
 
 test.each([
-  ['company', '/company', '/company/quick-ads', 'Create Campaign'],
-  ['promoter', '/promoter-dashboard', '/promoter/quick-ads', 'Wallet'],
-])('%s navigation links reuse desktop and mobile styles and become active on click', (role, home, destination, previous) => {
+  ['company', '/company', '/company/quick-ads', 'Overview'],
+  ['promoter', '/promoter-dashboard', '/promoter/quick-ads', 'Dashboard'],
+])('%s navigation links reuse desktop and mobile styles and become active on click', (role, home, destination, next) => {
   render(home, role);
   expect(navs()).toHaveLength(2);
   for (const nav of navs()) {
@@ -50,12 +50,12 @@ test.each([
     expect(link.getAttribute('href')).toBe(destination);
     expect(link.className).toBe('sf-navigation-link');
     expect(link.querySelector('.sf-icon')).not.toBeNull();
-    expect(link.closest('li').previousElementSibling.textContent).toBe(previous);
-    expect(link.closest('li').nextElementSibling.textContent).toBe('Profile');
+    expect(link.closest('li').previousElementSibling).toBeNull();
+    expect(link.closest('li').nextElementSibling.textContent).toBe(next);
   }
   act(() => quickLink(navs()[1]).click());
   expect(window.location.pathname).toBe(destination);
-  expect(container.querySelector('#quick-ad-title').textContent).toBe('Turn one photo into an ad.');
+  expect(container.querySelector('#quick-ad-title').textContent).toBe('Quick Ads');
   for (const nav of navs()) {
     expect(quickLink(nav).getAttribute('aria-current')).toBe('page');
     expect(quickLink(nav).classList.contains('sf-navigation-link--active')).toBe(true);

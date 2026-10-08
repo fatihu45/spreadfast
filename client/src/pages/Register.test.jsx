@@ -31,13 +31,13 @@ test('creator signup keeps consent, social payload and server error behavior', a
   expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'promoter', { tiktok: '@creator', instagram: '', twitter: '', facebook: '', youtube: '' });
   expect(host.querySelector('[role="alert"]').textContent).toBe('Email already registered');
 });
-test('business role link stays preselected and successful signup keeps its redirect', async () => {
+test('business role link stays preselected and successful signup opens Quick Ads', async () => {
   await render('/register?role=company'); await details(); expect(host.querySelector('input[value="company"]').checked).toBe(true); expect(host.querySelector('.sf-signup-social')).toBeNull();
   await consent(); register.mockResolvedValue({ success: true }); await submit();
-  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'company', undefined); expect(window.location.href).toBe('/company');
+  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'company', undefined); expect(window.location.href).toBe('/company/quick-ads');
 });
-test('role can change and creator success retains the promoter dashboard redirect', async () => {
-  await render('/register?role=company'); await details(); await act(async () => Simulate.change(host.querySelector('input[value="promoter"]'))); await consent(); register.mockResolvedValue({ success: true }); await submit(); expect(window.location.href).toBe('/promoter-dashboard');
+test('role can change and creator success opens creator Quick Ads', async () => {
+  await render('/register?role=company'); await details(); await act(async () => Simulate.change(host.querySelector('input[value="promoter"]'))); await consent(); register.mockResolvedValue({ success: true }); await submit(); expect(window.location.href).toBe('/promoter/quick-ads');
 });
 test('password toggle and policy actions never submit registration', async () => {
   await render(); await click(button('Show')); expect(host.querySelector('#signup-password').type).toBe('text'); await details();

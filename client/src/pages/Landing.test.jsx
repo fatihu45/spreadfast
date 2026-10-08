@@ -92,3 +92,15 @@ test('FAQ accordion retains its answers and accessible expansion state', () => {
   act(() => button.click());
   expect(answer.hidden).toBe(true);
 });
+
+test.each([
+  [{ role: 'company' }, '/company/quick-ads', 'Open Quick Ads'],
+  [{ role: 'promoter' }, '/promoter/quick-ads', 'Open Quick Ads'],
+  [{ role: 'company', email: process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com' }, '/admin-portal', 'Admin Dashboard'],
+])('signed-in header opens the account home for %j', (user, destination, label) => {
+  render(user);
+  const link = [...host.querySelectorAll('header a')].find(node => node.textContent === label);
+  expect(link.getAttribute('href')).toBe(destination);
+  act(() => link.click());
+  expect(host.querySelector('[data-testid="location"]').textContent).toBe(destination);
+});

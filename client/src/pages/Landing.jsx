@@ -1,3 +1,4 @@
+import { getAuthDestination } from '../utils/authDestination';
 import UiIcon from '../components/ui/UiIcon';
 import React, { useContext, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -99,7 +100,7 @@ export default function LandingPage() {
               {user ? (
                 <>
                   <span className="landing-welcome">Welcome, {user.name}</span>
-                  <Link to="/dashboard" className="sf-control sf-button sf-button--primary">Dashboard</Link>
+                  <Link to={getAuthDestination(user)} className="sf-control sf-button sf-button--primary">{getAuthDestination(user) === '/admin-portal' ? 'Admin Dashboard' : 'Open Quick Ads'}</Link>
                 </>
               ) : (
                 <>

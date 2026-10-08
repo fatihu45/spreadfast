@@ -1,3 +1,4 @@
+import { getAuthDestination } from '../utils/authDestination';
 import Alert from '../components/ui/Alert';
 import AuthLayout from '../components/ui/AuthLayout';
 import React, { useState, useContext } from 'react';
@@ -23,19 +24,8 @@ export default function Login() {
 
     const result = await login(email, password);
     if (result.success) {
-      // Determine redirect target based on user role
-      const user = result.user;
-      const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
-      
-      let target = '/';
-      if (user.email === adminEmail) {
-        target = '/admin-portal';
-      } else if (user.role === 'promoter') {
-        target = '/promoter-dashboard';
-      } else if (user.role === 'company') {
-        target = '/company';
-      }
-      
+      const target = getAuthDestination(result.user);
+
       const from = location.state?.from;
       const safeReturn = typeof from === 'string' && from.startsWith('/')
         && !from.startsWith('//') && !/[\\\r\n]/.test(from)
