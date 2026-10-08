@@ -9,7 +9,7 @@ export const canUseQuickAds = role => role === 'company' || role === 'promoter';
 export const quickAdsHome = role => role === 'promoter' ? '/promoter/quick-ads' : '/company/quick-ads';
 export function generationVideoUrl(data) {
   if (!data?.success || data.status !== 'completed' || typeof data.generationId !== 'string') throw new Error('Missing completed ad');
-  if (data.freePreview === true) {
+  if (data.freePreview === true && data.downloadable !== true) {
     const prefix = `/api/quick-ads/generations/${encodeURIComponent(data.generationId)}/preview?token=`;
     if (typeof data.previewPath !== 'string' || !data.previewPath.startsWith(prefix)) throw new Error('Invalid preview');
     return quickAdsBaseUrl() + data.previewPath;

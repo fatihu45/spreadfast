@@ -43,6 +43,8 @@ test.each(['company', 'promoter'])('%s callback uses backend balance and returns
   expect(container.textContent).toContain('Payment successful');
   expect(container.textContent).toContain('3 Quick Ads credits have been added');
   expect(container.textContent).toContain('Your balance: 9 credits');
+  expect(container.textContent).toContain('no credit deducted');
+  expect(container.querySelector('a[href="/' + role + '/quick-ads#quick-ad-history-title"]')).not.toBeNull();
   expect(container.querySelector('a[href="/' + role + '/quick-ads"]')).not.toBeNull();
 });
 test('failed verification never awards credits locally and can retry the same reference', async () => {

@@ -113,8 +113,10 @@ export default function QuickAdCredits() {
       <h2>Payment successful</h2>
       <p>{paid.creditsPurchased} Quick Ads {paid.creditsPurchased === 1 ? 'credit has' : 'credits have'} been added to your account.</p>
       <p>Credits added successfully. Your balance: {balance} credits</p>
+      <p>Your saved free trial is now unlocked, with no credit deducted.</p>
       <div className="quick-ad-credit-links">
         <Link to={quickAdsHome(user?.role)} className="sf-control sf-button sf-button--primary">Create Quick Ad</Link>
+        <Link to={`${quickAdsHome(user?.role)}#quick-ad-history-title`} className="sf-control sf-button sf-button--secondary">View my videos</Link>
         <Button variant="secondary" onClick={() => document.getElementById('quick-ad-plans')?.scrollIntoView({ block: 'start' })}>View Credits</Button>
       </div>
     </div>}
@@ -131,7 +133,7 @@ export default function QuickAdCredits() {
         <Button fullWidth disabled={!eligibleAccount || processing} onClick={() => purchase(plan.id)}>{plan.cta}</Button>
       </article>)}
     </div>
-    <p className="quick-ad-credit-note">Free previews stay preview-only. Paid credits create new ads you can download and use in campaigns. Failed generations do not use credits.</p>
+    <p className="quick-ad-credit-note">Your first credit purchase unlocks your saved free trial at no extra credit cost. Paid credits create new ads you can download and use in campaigns. Failed generations do not use credits.</p>
     {history.length > 0 && <section className="quick-ad-purchases" aria-label="Recent credit purchases">
       <h2>Recent purchases</h2>
       {history.map(item => <div className="quick-ad-purchase" key={item.reference}>

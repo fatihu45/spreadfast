@@ -2,7 +2,7 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { accountSummary, fail } = require('../services/quickAdCredits');
 const { QUICK_AD_PLANS, QUICK_AD_CREDIT_PRICE } = require('../config/quickAdPlans');
-const { publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo } = require('../services/quickAdMedia');
+const { canDownloadGeneration, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo } = require('../services/quickAdMedia');
 const { canUseQuickAds, quickAdAccountOnly } = require('../services/quickAdAccess');
 
 function safeError(res, error) {
@@ -39,6 +39,7 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
       const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 12));
       const page = Math.max(1, Number(req.query.page) || 1);
       const skip = (page - 1) * limit;
+      const user = await DB.User.findOne({ id: req.user.id });
       const rows = await DB.QuickAdGeneration.find({ userId: req.user.id, deletedAt: { $exists: false } }).sort({ createdAt: -1 }).skip(skip).limit(limit);
       res.set('Cache-Control', 'no-store').json({ success: true, generations: rows.map(g => ({
         generationId: g.id,
@@ -47,7 +48,7 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
         stage: g.stage || (g.status === 'completed' ? 'completed' : 'queued'),
         freePreview: !!g.freePreview,
         creditUsed: !!g.creditUsed,
-        downloadable: g.status === 'completed' && !g.freePreview && !!g.downloadable,
+        downloadable: canDownloadGeneration(g, user),
         createdAt: g.createdAt,
         completedAt: g.completedAt,
         thumbnail: g.commercialImage?.url || g.imageUrl || null,
@@ -95,14 +96,16 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
   router.get('/generations/:id/download', authenticate, quickAdAccountOnly, async (req, res) => {
     try {
       const generation = await owned(req);
-      assertDownloadable(generation);
+      const user = await req.app.locals.db.User.findOne({ id: req.user.id });
+      assertDownloadable(generation, user);
       await stream(req, res, generation.media.outputUrl, true);
     } catch (error) { if (!res.headersSent) safeError(res, error); }
   });
   router.get('/generations/:id/export', authenticate, quickAdAccountOnly, async (req, res) => {
     try {
       const generation = await owned(req);
-      assertDownloadable(generation);
+      const user = await req.app.locals.db.User.findOne({ id: req.user.id });
+      assertDownloadable(generation, user);
       res.set('Cache-Control', 'no-store').json({ success: true, videoUrl: generation.media.outputUrl, imageUrl: generation.imageUrl });
     } catch (error) { safeError(res, error); }
   });

@@ -27,10 +27,10 @@ export default function QuickAdHistoryVideo({ item, token }) {
       if (!controller.signal.aborted) setSrc(generationVideoUrl(data) + '#t=0.001');
     }).catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
-  }, [visible, item.generationId, item.status, token, attempt]);
+  }, [visible, item.generationId, item.status, item.downloadable, token, attempt]);
   return <div className="quick-ad-history-media" ref={host}>
     {src && !error ? <video src={src} controls playsInline preload="metadata"
-      aria-label="Quick Ad video" controlsList={item.freePreview ? 'nodownload' : undefined}
+      aria-label="Quick Ad video" controlsList={!item.downloadable ? 'nodownload' : undefined}
       onError={() => setError(true)} onPlay={event => {
         host.current?.closest('.quick-ad-history-grid')?.querySelectorAll('video').forEach(video => {
           if (video !== event.currentTarget) video.pause();

@@ -198,7 +198,7 @@ test('unsupported accounts cannot submit Quick Ads', () => {
   expect(button('Start campaign').disabled).toBe(true);
 });
 
-test.each(['company', 'promoter'])('%s free preview stays protected after purchasing credits', async role => {
+test.each(['company', 'promoter'])('%s trial switches to the original after a verified purchase', async role => {
   act(() => root.unmount()); root = createRoot(container);
   axios.get.mockResolvedValue({ data: { success: true, quickAdCredits: 0, freePreviewAvailable: true } });
   await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'company-1', role } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
@@ -211,11 +211,14 @@ test.each(['company', 'promoter'])('%s free preview stays protected after purcha
   expect(button('Save video').disabled).toBe(true);
   expect(button('Start campaign').disabled).toBe(true);
   expect(button('Promote with creators').disabled).toBe(true);
-  expect(container.textContent).toContain('This free preview stays locked');
-  axios.get.mockResolvedValue({ data: { ...preview, quickAdCredits: 3 } });
+  expect(container.textContent).toContain('Buy any credit plan to unlock this video');
+  axios.get.mockResolvedValue({ data: { ...preview, downloadable: true, videoUrl, quickAdCredits: 3 } });
   await act(async () => button('Preview Again').click());
   expect(axios.post).toHaveBeenCalledTimes(1);
-  expect(button('Save video').disabled).toBe(true);
+  expect(button('Save video').disabled).toBe(false);
+  expect(container.querySelector('video').src).toBe(videoUrl);
+  expect(button('Start campaign').disabled).toBe(role !== 'company');
+  expect(container.textContent).not.toContain('Buy any credit plan to unlock this video');
   expect(container.textContent).toContain('3 credits available');
 });
 

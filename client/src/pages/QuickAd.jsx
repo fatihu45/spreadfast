@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
@@ -19,6 +19,7 @@ const styles = [
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
 export default function QuickAd() {
+  const location = useLocation();
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
   const canStartCampaign = user?.role === 'company';
@@ -52,7 +53,7 @@ export default function QuickAd() {
   const isFashionStyle = styleId === 'fashion_studio';
   const generating = phase === 'generating';
   const ready = phase === 'ready';
-  const downloadable = ready && result?.downloadable === true && !result?.freePreview;
+  const downloadable = ready && result?.downloadable === true;
   const outOfCredits = balance && !balance.freePreviewAvailable && balance.quickAdCredits < 1;
   const buyCredits = () => navigate('/quickads/credits', { state: { outOfCredits } });
   const stageSteps = [
@@ -140,6 +141,12 @@ export default function QuickAd() {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [canGenerate, token, pendingKey, phase]);
 
+  useEffect(() => {
+    if (location.hash === '#quick-ad-history-title' && historyStatus === 'loaded') {
+      document.getElementById('quick-ad-history-title')?.scrollIntoView?.({ block: 'start' });
+    }
+  }, [location.hash, historyStatus]);
+
   async function loadHistory() {
     if (!canGenerate || !token) return;
     setHistoryStatus('loading');
@@ -187,7 +194,7 @@ export default function QuickAd() {
   }
 
   async function downloadHistoryItem(item) {
-    if (!item.downloadable || item.freePreview || saving) return;
+    if (!item.downloadable || saving) return;
     setSaving(true);
     setHistoryActionError('');
     try {
@@ -409,7 +416,7 @@ export default function QuickAd() {
       </div>
       <Button variant="secondary" onClick={buyCredits}>Buy Credits</Button>
     </div>}
-    {balance?.freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Downloads remain locked for free previews.</p>}
+    {balance?.freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Buy any credit plan to unlock its download.</p>}
     {pendingKey && !generating && <Alert>Your last generation needs confirmation. <Button variant="secondary" disabled={saving} onClick={recover}>Check generation</Button></Alert>}
     <div className="quick-ad-layout">
       <div className="quick-ad-editor">
@@ -478,8 +485,8 @@ export default function QuickAd() {
         </div>
         <div className={'quick-ad-media' + (generating ? ' is-generating' : '') + (ready ? ' is-ready' : '')} aria-busy={generating}>
           {ready && videoUrl ? <video key={videoUrl} className="quick-ad-video" src={videoUrl}
-            poster={result?.commercialImage?.url || result?.imageUrl || product?.url} playsInline controls loop muted controlsList={result?.freePreview ? 'nodownload' : undefined} preload="metadata" aria-label="Your generated advert"
-            onError={() => setNotice(result?.freePreview ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
+            poster={result?.commercialImage?.url || result?.imageUrl || product?.url} playsInline controls loop muted controlsList={!downloadable ? 'nodownload' : undefined} preload="metadata" aria-label="Your generated advert"
+            onError={() => setNotice(!downloadable ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
             : previewImage ? <img className="quick-ad-stage-image" src={previewImage} alt={stageImage ? 'Commercial scene preview' : 'Selected product preview'}
               onError={() => { if (stageImage) setStageImage(''); }} />
               : <div className="quick-ad-placeholder"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>Your preview starts here</strong><p>Upload a product photo to see it in your creative workspace.</p></div>}
@@ -496,8 +503,8 @@ export default function QuickAd() {
         </ol>}
         <p className="quick-ad-result-status" role="status">{ready ? 'Your Quick Ad is ready. Tap play to preview it.' : generating ? 'Generation can take a few minutes. Keep this page open.' : 'Choose a photo and style to get started.'}</p>
         <div className="quick-ad-result-actions">
-          {ready && result?.freePreview && <><strong>Your free Quick Ad is ready.</strong><p>Purchase Quick Ads credits to download new paid ads and continue creating. This free preview stays locked.</p><Button onClick={buyCredits}>Buy Credits</Button><Button variant="secondary" disabled={saving} onClick={previewAgain}>Preview Again</Button></>}
-          <Button variant="secondary" fullWidth disabled={!downloadable || saving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
+          {ready && result?.freePreview && !downloadable && <><strong>Your free Quick Ad is ready.</strong><p>Buy any credit plan to unlock this video and create more ads.</p><Button onClick={buyCredits}>Buy Credits</Button><Button variant="secondary" disabled={saving} onClick={previewAgain}>Preview Again</Button></>}
+          <Button variant="secondary" fullWidth disabled={!downloadable || saving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview && !downloadable ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
           <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving} onClick={startCampaign}><UiIcon name="user" /> Promote with creators</Button>
           <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving} onClick={startCampaign}><UiIcon name="campaign" /> Start campaign</Button>
           {!canStartCampaign && ready && <p className="sf-small sf-muted">A company account is required to start a creator campaign.</p>}
@@ -528,7 +535,7 @@ export default function QuickAd() {
               </div>
               <div className="quick-ad-history-actions">
                 <Button size="sm" variant="secondary" disabled={item.status !== 'completed' || saving} onClick={() => openHistoryItem(item)}>Watch</Button>
-                {item.downloadable && !item.freePreview && <Button size="sm" variant="secondary" disabled={saving} onClick={() => downloadHistoryItem(item)}>Download</Button>}
+                {item.downloadable && <Button size="sm" variant="secondary" disabled={saving} onClick={() => downloadHistoryItem(item)}>Download</Button>}
                 <Button size="sm" variant="secondary" className="quick-ad-history-delete" disabled={item.status === 'pending' || !!deletingId} onClick={() => deleteHistoryItem(item)}>{deletingId === item.generationId ? 'Deleting...' : 'Delete'}</Button>
               </div>
             </article>

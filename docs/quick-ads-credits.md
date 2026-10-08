@@ -36,8 +36,8 @@ Under `/api/quick-ads`:
 - `GET /requests/:key`: recover an interrupted generation by its owner-scoped request key.
 - `GET /generations/:id`: own result metadata and renewed preview token.
 - `GET /generations/:id/preview?token=...`: scoped, five-minute watermarked preview stream.
-- `GET /generations/:id/download`: authenticated owner-only paid download.
-- `GET /generations/:id/export`: authenticated owner-only paid campaign handoff.
+- `GET /generations/:id/download`: authenticated owner-only paid or unlocked-trial download.
+- `GET /generations/:id/export`: authenticated owner-only paid or unlocked-trial campaign handoff.
 - `POST /credits/initialize`: authenticated Company or Promoter purchase, body `{ "planId": "starter" }`. The existing transaction stores the authenticated userId and buyerRole.
 - `GET /credits/verify/:reference`: owner-scoped Paystack verification.
 - `GET /transactions`: own most recent 50 Quick Ads purchases.
@@ -45,8 +45,8 @@ Under `/api/quick-ads`:
 ## Accounting and media
 
 New and existing accounts without credit fields start at zero and have one unused preview.
-The first successful preview sets `quickAdFreePreviewUsed`; it never spends a credit and stays
-locked permanently, including after purchasing credits. Failed generation leaves eligibility intact.
+The first successful preview sets `quickAdFreePreviewUsed`; it never spends a credit. Its original unlocks after the first verified Quick Ads credit purchase,
+using the server-owned lifetime purchase counter even when the remaining balance reaches zero. Failed generation leaves eligibility intact.
 
 An expiring per-account reservation prevents concurrent generations from spending the same credit.
 It does not debit money. After provider success and protected media storage, a MongoDB transaction
@@ -54,9 +54,9 @@ completes the generation and updates counters atomically. Paid success uses exac
 Replaying a completed request key returns its recorded result without another provider request/debit.
 The frontend stores an unresolved request key for recovery rather than silently submitting again.
 
-Generated videos are copied to authenticated Cloudinary storage. Free responses contain no original
+Generated videos are copied to authenticated Cloudinary storage. Locked trial responses contain no original
 provider or Cloudinary video URL. The backend streams only an eagerly generated watermarked derivative
-using a scoped expiring token, supports Safari byte ranges, and rejects preview download/export requests.
+using a scoped expiring token, supports Safari byte ranges, and rejects download/export requests until a verified purchase unlocks the trial.
 Playable browser previews can still be screen-recorded or their derivative captured; this is protection
 of the original and export permissions, not DRM or a promise that displayed pixels cannot be copied.
 
