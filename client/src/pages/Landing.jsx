@@ -280,6 +280,7 @@ export default function LandingPage() {
               <li><a href="https://wa.me/+2349071023617" target="_blank" rel="noopener noreferrer">WhatsApp support</a></li>
             </ul></div>
           </div>
+          <nav className="landing-policy-links" aria-label="Policies"><a href="/policies/terms-and-conditions.html">Terms and Conditions</a> <a href="/policies/privacy-policy.html">Privacy Policy</a> <a href="/policies/refund-and-credits-policy.html">Refund and Credits Policy</a> <a href="/policies/acceptable-use-policy.html">Acceptable Use Policy</a> <a href="/policies/cookie-policy.html">Cookie and Browser Storage Policy</a> <a href="/policies/disclaimer.html">AI and Advertising Disclaimer</a></nav>
           <p className="landing-copyright">© 2026 SpreadFast. All rights reserved.</p>
         </Container>
       </footer>

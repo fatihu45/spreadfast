@@ -7,25 +7,31 @@ export default function PolicyModal({ isOpen, policyType, onClose }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      loadPolicy();
-    }
-  }, [isOpen, policyType]);
-
-  const loadPolicy = async () => {
+    if (!isOpen) return;
+    const controller = new AbortController();
+    const loadPolicy = async () => {
     setLoading(true);
+    setContent('');
     try {
       const fileName = policyType === 'terms' ? 'terms-and-conditions.html' : 'privacy-policy.html';
-      const response = await fetch(`/policies/${fileName}`);
+      const response = await fetch(`/policies/${fileName}`, { signal: controller.signal });
+      if (!response.ok) throw new Error('Policy unavailable');
       const html = await response.text();
-      setContent(html);
+      const document = new DOMParser().parseFromString(html, 'text/html');
+      const policy = document.querySelector('[data-policy-content]');
+      if (!policy) throw new Error('Invalid policy response');
+      if (!controller.signal.aborted) setContent(policy.innerHTML);
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error('Error loading policy:', error);
       setContent('<p>Error loading policy. Please try again.</p>');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  };
+    };
+    loadPolicy();
+    return () => controller.abort();
+  }, [isOpen, policyType]);
 
   if (!isOpen) return null;
 

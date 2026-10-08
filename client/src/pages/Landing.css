@@ -254,3 +254,6 @@
   .sf-landing .landing-samples-heading h3 { font-size: 1.1rem; }
   .sf-landing .landing-samples-heading p { max-width: 200px; }
 }
+
+.landing-policy-links { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 24px; font-size: .875rem; }
+.landing-policy-links a { text-decoration: underline; text-underline-offset: 3px; }

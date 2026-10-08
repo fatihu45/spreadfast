@@ -134,6 +134,7 @@ export default function QuickAdCredits() {
       </article>)}
     </div>
     <p className="quick-ad-credit-note">Your first credit purchase unlocks your saved free trial at no extra credit cost. Paid credits create new ads you can download and use in campaigns. Failed generations do not use credits.</p>
+    <p className="quick-ad-credit-note">Before buying, read our <a href="/policies/terms-and-conditions.html" target="_blank" rel="noopener noreferrer">Terms</a> and <a href="/policies/refund-and-credits-policy.html" target="_blank" rel="noopener noreferrer">Refund and Credits Policy</a>.</p>
     {history.length > 0 && <section className="quick-ad-purchases" aria-label="Recent credit purchases">
       <h2>Recent purchases</h2>
       {history.map(item => <div className="quick-ad-purchase" key={item.reference}>
