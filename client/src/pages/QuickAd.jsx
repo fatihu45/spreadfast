@@ -182,17 +182,6 @@ export default function QuickAd() {
     } finally { setDeletingId(null); }
   }
 
-  async function openHistoryItem(item) {
-    setHistoryActionError('');
-    try {
-      const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}`), { headers: quickAdsAuth(token), timeout: 20000 });
-      showResult(data);
-      setNotice('');
-    } catch {
-      setHistoryActionError('Could not open that Quick Ad. Please try again.');
-    }
-  }
-
   async function downloadHistoryItem(item) {
     if (!item.downloadable || saving) return;
     setSaving(true);
@@ -527,6 +516,7 @@ export default function QuickAd() {
           {history.map(item => (
             <article key={item.generationId} className="quick-ad-history-card">
               <QuickAdHistoryVideo item={item} token={token} />
+              <div className="quick-ad-history-footer">
               <div className="quick-ad-history-copy">
                 <strong>{styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'}</strong>
                 <small>{(item.completedAt || item.createdAt) && !Number.isNaN(new Date(item.completedAt || item.createdAt).getTime())
@@ -534,9 +524,9 @@ export default function QuickAd() {
                 <span className={'quick-ad-history-status is-' + (item.status || 'unknown')}>{item.status === 'completed' ? 'Ready' : item.status === 'pending' ? 'Processing' : item.status || 'Status unavailable'}</span>
               </div>
               <div className="quick-ad-history-actions">
-                <Button size="sm" variant="secondary" disabled={item.status !== 'completed' || saving} onClick={() => openHistoryItem(item)}>Watch</Button>
-                {item.downloadable && <Button size="sm" variant="secondary" disabled={saving} onClick={() => downloadHistoryItem(item)}>Download</Button>}
-                <Button size="sm" variant="secondary" className="quick-ad-history-delete" disabled={item.status === 'pending' || !!deletingId} onClick={() => deleteHistoryItem(item)}>{deletingId === item.generationId ? 'Deleting...' : 'Delete'}</Button>
+                {item.downloadable && <Button size="sm" variant="secondary" aria-label="Download video" title={saving ? 'Saving video...' : 'Download video'} disabled={saving} onClick={() => downloadHistoryItem(item)}><UiIcon name="download" /></Button>}
+                <Button size="sm" variant="secondary" className="quick-ad-history-delete" aria-label={deletingId === item.generationId ? 'Deleting video...' : 'Delete video'} title="Delete video" disabled={item.status === 'pending' || !!deletingId} onClick={() => deleteHistoryItem(item)}><UiIcon name="trash" /></Button>
+              </div>
               </div>
             </article>
           ))}
