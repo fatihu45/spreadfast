@@ -43,16 +43,23 @@ async function storeVideo(cloudinary, videoUrl, generation, signal) {
   }
   return { publicId: uploaded.public_id, outputUrl, ...(previewUrl ? { previewUrl } : {}) };
 }
+// Keep trial provenance and credit accounting unchanged; verified lifetime purchases
+// grant access even after the customer spends their remaining balance.
+function canDownloadGeneration(generation, user) {
+  if (generation.status !== 'completed' || generation.deletedAt) return false;
+  if (generation.freePreview) return accountSummary(user).quickAdTotalCreditsPurchased > 0;
+  return generation.creditUsed === true && generation.downloadable === true;
+}
 function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
-    downloadable: generation.status === 'completed' && !generation.freePreview && generation.downloadable === true,
+    downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
   const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl;
   // Return only generated image previews, never source uploads or internal metadata.
   if (commercialImageUrl) result.imageUrl = commercialImageUrl;
   if (generation.status !== 'completed') return result;
-  if (generation.freePreview) {
+  if (generation.freePreview && !result.downloadable) {
     const token = jwt.sign({ generationId: generation.id, userId: user.id, tokenVersion: user.tokenVersion || 0 },
       previewSecret(), { algorithm: 'HS256', audience: 'quick-ad-preview', expiresIn: '5m' });
     result.previewPath = `/api/quick-ads/generations/${encodeURIComponent(generation.id)}/preview?token=${encodeURIComponent(token)}`;
@@ -67,9 +74,9 @@ function publicGeneration(generation, user) {
 function verifyPreviewToken(token) {
   return jwt.verify(token, previewSecret(), { algorithms: ['HS256'], audience: 'quick-ad-preview' });
 }
-function assertDownloadable(generation) {
-  if (generation.status !== 'completed' || generation.freePreview || !generation.creditUsed || !generation.downloadable) {
-    fail('QUICK_AD_DOWNLOAD_LOCKED', 'Free previews cannot be downloaded or exported. Purchase credits to create a downloadable ad.', 403);
+function assertDownloadable(generation, user) {
+  if (!canDownloadGeneration(generation, user)) {
+    fail('QUICK_AD_DOWNLOAD_LOCKED', 'Buy any Quick Ads credit plan to unlock this video and create more ads.', 403);
   }
 }
 async function streamVideo(req, res, url, download = false, http = axios) {
@@ -99,4 +106,4 @@ async function streamVideo(req, res, url, download = false, http = axios) {
     else if (!res.destroyed) res.destroy();
   }
 }
-module.exports = { storeVideo, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo, PREVIEW_TRANSFORMATION };
+module.exports = { canDownloadGeneration, storeVideo, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo, PREVIEW_TRANSFORMATION };

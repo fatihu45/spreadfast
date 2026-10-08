@@ -33,7 +33,7 @@ async function fixture(t, role = 'company') {
   const get = (path, id = 'owner') => fetch(base + path, { headers: id ? { Authorization: `Bearer ${jwt.sign({ id }, process.env.JWT_SECRET)}` } : {} });
   return { DB, user, get, base, streamed };
 }
-test('free originals and export stay locked after purchasing credits; other owners cannot access records', async t => {
+test('balance alone does not unlock free originals; other owners cannot access records', async t => {
   const f = await fixture(t);
   for (const action of ['download', 'export']) {
     assert.equal((await f.get(`/api/quick-ads/generations/free/${action}`)).status, 403);
@@ -163,4 +163,42 @@ for (const role of ['company', 'promoter']) test(`${role} can delete own history
   const list = await (await f.get('/api/quick-ads/generations')).json();
   assert.deepEqual(list.generations.map(row => row.generationId), ['pending']);
   assert.equal((await f.DB.User.findOne({ id: 'owner' })).quickAdCredits, 3);
+});
+
+for (const role of ['company', 'promoter']) test(`${role} verified purchase unlocks the existing trial permanently without consuming credits`, async t => {
+  const f = await fixture(t, role);
+  const { awardQuickAdCredits } = require('../services/quickAdPayments');
+  await f.DB.User.updateOne({ id: 'owner' }, { $set: { email: 'owner@example.test', quickAdCredits: 0 } });
+  const reference = 'qa_trial-unlock';
+  await f.DB.PaystackTransaction.create({ reference, userId: 'owner', email: 'owner@example.test', purpose: 'quick_ad_credits',
+    amount: 1700, credits: 1, planId: 'single', creditsApplied: false,
+    pricing: { version: 'quick-ads-v1', amount: 1700, credits: 1, planId: 'single' } });
+  assert.equal((await f.get('/api/quick-ads/generations/free/download')).status, 403);
+  const charge = { reference, status: 'success', amount: 170000, currency: 'NGN', customer: { email: 'owner@example.test' } };
+  await assert.rejects(awardQuickAdCredits(f.DB, { reference, charge: { ...charge, status: 'failed' } }));
+  assert.equal((await f.get('/api/quick-ads/generations/free/download')).status, 403);
+  await awardQuickAdCredits(f.DB, { reference, charge });
+  await awardQuickAdCredits(f.DB, { reference, charge });
+  for (const balance of [1, 0]) {
+    await f.DB.User.updateOne({ id: 'owner' }, { $set: { quickAdCredits: balance } });
+    const detail = await (await f.get('/api/quick-ads/generations/free')).json();
+    assert.equal(detail.downloadable, true);
+    assert.equal(detail.freePreview, true);
+    assert.equal(detail.creditUsed, false);
+    assert.equal(detail.previewPath, undefined);
+    assert.equal(detail.videoUrl, 'https://private.example/original.mp4');
+    const history = await (await f.get('/api/quick-ads/generations')).json();
+    assert.equal(history.generations.find(g => g.generationId === 'free').downloadable, true);
+    for (const action of ['download', 'export']) {
+      assert.equal((await f.get('/api/quick-ads/generations/free/' + action)).status, 200);
+      assert.equal((await f.get('/api/quick-ads/generations/free/' + action, 'other')).status, 404);
+    }
+    assert.equal((await f.DB.User.findOne({ id: 'owner' })).quickAdCredits, balance);
+  }
+  assert.ok(f.streamed.every(s => s.url === 'https://private.example/original.mp4'));
+  const stored = await f.DB.QuickAdGeneration.findOne({ id: 'free' });
+  assert.equal(stored.freePreview, true);
+  assert.equal(stored.creditUsed, false);
+  await f.DB.QuickAdGeneration.updateOne({ id: 'free' }, { $set: { deletedAt: new Date() } });
+  assert.equal((await f.get('/api/quick-ads/generations/free/download')).status, 404);
 });
