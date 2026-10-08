@@ -9,6 +9,7 @@ const samples = [
   ['embroidered-abaya', 'Embroidered abaya', 'Fashion'],
   ['noodles', 'Noodles', 'Food'],
   ['blue-kaftan', 'Blue kaftan', 'Fashion'],
+  ['blue-ruffled-dress', 'Blue ruffled dress', 'Fashion'],
   ['skincare', 'Skincare', 'Product'],
 ];
 
