@@ -1,4 +1,5 @@
 import React from 'react';
+import RouteMetadata from './seo/RouteMetadata';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Landing from './pages/Landing';
@@ -61,6 +62,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <RouteMetadata />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />

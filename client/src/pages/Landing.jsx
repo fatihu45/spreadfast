@@ -79,7 +79,7 @@ export default function LandingPage() {
         }
       }}>
         <Container className="landing-header-inner">
-          <Link to="/" aria-label="SpreadFast home" className="landing-logo"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /></Link>
+          <Link to="/" aria-label="SpreadFast home" className="landing-logo"><img className="landing-logo-image" src="/spreadfast-logo.webp" alt="SpreadFast" width="2172" height="724" /></Link>
           <Button ref={menuButton} variant="ghost" className="landing-menu-toggle"
             aria-expanded={menuOpen} aria-controls="landing-navigation"
             aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
@@ -151,7 +151,7 @@ export default function LandingPage() {
                 <div className="landing-quick-ads-flow">
                   <div className="landing-quick-ads-source">
                     <span className="landing-quick-ads-label">Your photo</span>
-                    <div className="landing-quick-ads-photo"><div><img src="/quick-ads-food-photo.png" alt="" width="1254" height="1254" loading="lazy" decoding="async" /></div></div>
+                    <div className="landing-quick-ads-photo"><div><img src="/quick-ads-food-photo.webp" alt="" width="1254" height="1254" loading="lazy" decoding="async" /></div></div>
                     <span className="landing-quick-ads-source-note"><UiIcon name="image" /> One product.</span>
                   </div>
                   <span className="landing-quick-ads-arrow"><UiIcon name="arrow" /></span>
@@ -265,7 +265,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <Container>
           <div className="landing-footer-grid">
-            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.png" alt="SpreadFast" width="2172" height="724" /><p>AI-powered advertising for businesses and creators.</p></div>
+            <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.webp" alt="SpreadFast" width="2172" height="724" /><p>AI-powered advertising for businesses and creators.</p></div>
             <div><h2>For Companies</h2><ul>
               <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
               <li><a href="#creators">Meet our creators</a></li>
