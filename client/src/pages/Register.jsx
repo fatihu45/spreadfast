@@ -45,7 +45,7 @@ export default function Register() {
     e.preventDefault();
 
       if (!agreedToTerms) {
-    setError('You must agree to the Terms & Conditions and Privacy Policy.');
+    setError('You must agree to the Terms & Conditions and acknowledge the Privacy Policy.');
     return;
     }
 
@@ -111,7 +111,7 @@ export default function Register() {
             {Object.entries({ tiktok: 'TikTok handle', instagram: 'Instagram handle', twitter: 'X (Twitter) handle', facebook: 'Facebook URL', youtube: 'YouTube channel URL' }).map(([platform, label]) => <FormField label={label} key={platform}><Input type="text" value={socialMedia[platform]} onChange={event => handleSocialMediaChange(platform, event.target.value)} /></FormField>)}
           </div></details>}
           <div className="sf-signup-consent"><input id="signup-consent" type="checkbox" checked={agreedToTerms} onChange={event => setAgreedToTerms(event.target.checked)} required />
-            <div><label htmlFor="signup-consent">I agree to the </label><button type="button" onClick={() => setOpenPolicy('terms')}>Terms &amp; Conditions</button> and <button type="button" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>.</div>
+            <div><label htmlFor="signup-consent">I agree to the </label><button type="button" onClick={() => setOpenPolicy('terms')}>Terms &amp; Conditions</button> and acknowledge the <button type="button" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>.</div>
           </div>
         </fieldset>}
         <Button type="submit" fullWidth disabled={loading}>{loading ? 'Creating account...' : step === 1 ? 'Continue' : 'Create account'}</Button>
