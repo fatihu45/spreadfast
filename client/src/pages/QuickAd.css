@@ -248,3 +248,20 @@
 .quick-ad-history-play svg { width: 24px; height: 24px; }
 .quick-ad-history-play:hover span { background: rgb(16 21 28 / .85); }
 .quick-ad-history-play:focus-visible { outline: 3px solid rgb(var(--sf-primary)); outline-offset: -3px; }
+
+.quick-ad-branding { margin-top: 12px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; }
+.quick-ad-branding summary { min-height: 44px; padding: 12px; cursor: pointer; font-size: .82rem; font-weight: 600; }
+.quick-ad-branding summary span { margin-left: 8px; padding: 3px 7px; border-radius: 20px; background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-muted)); font-size: .68rem; font-weight: 400; }
+.quick-ad-branding-body { display: grid; gap: 12px; padding: 0 12px 12px; min-width: 0; }
+.quick-ad-branding-choices { display: flex; gap: 6px; }
+.quick-ad-branding-choices button { flex: 1; min-height: 44px; padding: 8px; border: 1px solid rgb(var(--sf-border)); border-radius: 8px; background: #fff; font: inherit; font-size: .8rem; }
+.quick-ad-branding-choices button[aria-pressed="true"] { border-color: rgb(var(--sf-primary)); background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-primary-hover)); }
+.quick-ad-branding-name { display: grid; gap: 6px; font-size: .8rem; }
+.quick-ad-branding-name input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid rgb(var(--sf-border)); border-radius: 8px; padding: 10px; font: inherit; font-size: 16px; box-sizing: border-box; }
+.quick-ad-branding-logo { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.quick-ad-branding-logo img { width: 64px; height: 64px; object-fit: contain; border: 1px solid rgb(var(--sf-border)); border-radius: 8px; }
+.quick-ad-branding-body p { margin: 0; font-size: .74rem; line-height: 1.5; color: rgb(var(--sf-muted)); }
+.quick-ad-branding-edit { display: grid; gap: 10px; margin-bottom: 12px; }
+.quick-ad-branding-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-ad-branding button:disabled { opacity: .5; cursor: not-allowed; }
+.quick-ad-branding :focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 2px; }

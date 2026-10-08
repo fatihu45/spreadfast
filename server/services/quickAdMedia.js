@@ -1,3 +1,4 @@
+const { publicBranding } = require('./quickAdBranding');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { createHmac } = require('node:crypto');
@@ -53,6 +54,7 @@ function canDownloadGeneration(generation, user) {
 function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
+    branding: publicBranding(generation.branding),
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
   const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl;

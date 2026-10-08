@@ -1,6 +1,7 @@
 import React from 'react';
 
 const paths = {
+  edit: <><path d="m14 5 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z" /></>,
   play: <path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none" />,
   trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
   check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,

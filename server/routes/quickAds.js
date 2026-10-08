@@ -1,3 +1,5 @@
+const { readBranding, uploadBranding, renderBranding } = require('../services/quickAdBranding');
+const { PREVIEW_TRANSFORMATION } = require('../services/quickAdMedia');
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
@@ -209,11 +211,11 @@ function createQuickAdsRouter({
   pollIntervalMs = 2000, logger = console, protectVideo = storeVideo
 } = {}) {
   const router = express.Router();
-  router.use(createQuickAdMediaRouter({ authenticate }));
+  router.use(createQuickAdMediaRouter({ authenticate, cloudinaryClient }));
   const upload = multer({
     storage: multer.memoryStorage(),
     // Busboy emits its size-limit event at equality; allow exactly 8 MB.
-    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 2, fields: 3, fieldSize: 32 },
+    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 3, fields: 5, fieldSize: 256 },
     fileFilter: (req, file, callback) => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
         callback(Object.assign(new Error('Unsupported image'), { code: 'INVALID_IMAGE_TYPE' }));
@@ -222,7 +224,8 @@ function createQuickAdsRouter({
   }).fields([
     { name: 'image', maxCount: 1 },
     { name: 'frontImage', maxCount: 1 },
-    { name: 'backImage', maxCount: 1 }
+    { name: 'backImage', maxCount: 1 },
+    { name: 'brandingLogo', maxCount: 1 }
   ]);
 
   router.post('/generate', authenticate, quickAdAccountOnly, (req, res, next) => {
@@ -241,7 +244,7 @@ function createQuickAdsRouter({
     const singleImage = Array.isArray(files.image) ? files.image[0] : null;
     const frontImage = Array.isArray(files.frontImage) ? files.frontImage[0] : null;
     const backImage = Array.isArray(files.backImage) ? files.backImage[0] : null;
-    const unexpectedFields = Object.keys(req.body || {}).filter(key => !['style', 'image', 'frontImage', 'backImage'].includes(key));
+    const unexpectedFields = Object.keys(req.body || {}).filter(key => !['style', 'image', 'frontImage', 'backImage', 'brandingMode', 'businessName'].includes(key));
     if (unexpectedFields.length > 0) {
       return res.status(400).json({ success: false, message: 'Unexpected request fields were provided.' });
     }
@@ -264,6 +267,9 @@ function createQuickAdsRouter({
       if (imageFile.size > MAX_IMAGE_SIZE) return res.status(413).json({ success: false, message: 'Image must be 8 MB or smaller.' });
       if (!matchesImageType(imageFile)) return res.status(400).json({ success: false, message: 'The file must contain a valid JPG, PNG, or WEBP image.' });
     }
+    const logoFile = files.brandingLogo?.[0];
+    let branding;
+    try { branding = readBranding(req.body, logoFile); } catch (error) { return safeError(res, error); }
     const key = req.headers['idempotency-key'] || randomUUID();
     if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(key)) {
       return res.status(400).json({ success: false, message: 'Invalid generation request key.' });
@@ -303,6 +309,9 @@ function createQuickAdsRouter({
       const fal = await getFalClient();
       controller.signal.throwIfAborted();
       stage = 'upload';
+      branding = await uploadBranding(cloudinaryClient, branding, logoFile);
+      await DB.QuickAdGeneration.updateOne({ id: generation.id }, { $set: { branding } });
+      generation.branding = branding;
       const sourceFiles = isFashionStyle ? [frontImage, backImage] : [singleImage];
       const uploadedSourceUrls = [];
       for (const sourceFile of sourceFiles) {
@@ -430,7 +439,9 @@ function createQuickAdsRouter({
       const videoUrl = result?.data?.video?.url;
       if (!isHttpsUrl(videoUrl)) throw generationError('MISSING_VIDEO_URL');
       stage = 'media';
-      const media = await protectVideo(cloudinaryClient, videoUrl, generation, controller.signal);
+      let media = await protectVideo(cloudinaryClient, videoUrl, generation, controller.signal);
+      controller.signal.throwIfAborted();
+      if (branding.mode !== 'none') media = await renderBranding(cloudinaryClient, { ...generation, media }, branding, PREVIEW_TRANSFORMATION);
       controller.signal.throwIfAborted();
       stage = 'completion';
       generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media });

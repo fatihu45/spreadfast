@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import { quickAdsUrl, quickAdsAuth, generationVideoUrl, newGenerationKey, canUseQuickAds } from '../utils/quickAdsApi';
+import QuickAdBranding, { appendBranding } from '../components/QuickAdBranding';
 import QuickAdHistoryVideo from '../components/QuickAdHistoryVideo';
 import './QuickAd.css';
 import './QuickAdCredits.css';
@@ -24,6 +25,12 @@ export default function QuickAd() {
   const canGenerate = canUseQuickAds(user?.role);
   const canStartCampaign = user?.role === 'company';
   const navigate = useNavigate();
+  const [branding, setBranding] = useState({ mode: 'none' });
+  const [editingBranding, setEditingBranding] = useState(false);
+  const [editBranding, setEditBranding] = useState({ mode: 'none' });
+  const [brandingDirty, setBrandingDirty] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingError, setBrandingError] = useState('');
   const [product, setProduct] = useState(null);
   const [frontPhoto, setFrontPhoto] = useState(null);
   const [backPhoto, setBackPhoto] = useState(null);
@@ -94,6 +101,7 @@ export default function QuickAd() {
     try { if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); } catch { /* Current-page duplicate protection remains active. */ }
   }
   function showResult(data) {
+    setEditingBranding(false); setBrandingError('');
     setVideoUrl(generationVideoUrl(data)); setResult(data); setBalance(data); setPhase('ready'); setGenerationStage(data?.stage || 'completed');
     setStageImage(data?.commercialImage?.url || data?.imageUrl || ''); rememberKey('');
     loadHistory();
@@ -163,7 +171,7 @@ export default function QuickAd() {
   }
 
   async function deleteHistoryItem(item) {
-    if (deletingId || item.status === 'pending') return;
+    if (brandingSaving || deletingId || item.status === 'pending') return;
     if (!window.confirm('Delete this video from My Quick Ads? Credits will not be refunded. Videos already used in campaigns will remain available.')) return;
     setDeletingId(item.generationId);
     setHistoryActionError('');
@@ -245,7 +253,7 @@ export default function QuickAd() {
   }
 
   function selectPhoto(files) {
-    if (generating || !files?.length) return;
+    if (generating || brandingSaving || !files?.length) return;
     if (files.length !== 1) { setError('Please choose one product photo.'); return; }
     const file = files[0];
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -260,7 +268,7 @@ export default function QuickAd() {
   }
 
   function selectFashionPhoto(slot, files) {
-    if (generating || !files?.length) return;
+    if (generating || brandingSaving || !files?.length) return;
     if (files.length !== 1) { setError('Please choose exactly one outfit photo.'); return; }
     const file = files[0];
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -284,6 +292,33 @@ export default function QuickAd() {
     setError('');
   }
 
+  async function editHistoryBranding(item) {
+    if (saving || brandingSaving || generating || pendingKey || item.status !== 'completed') return;
+    setSaving(true); setHistoryActionError('');
+    try {
+      const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}`), { headers: quickAdsAuth(token), timeout: 20000 });
+      showResult(data); setEditBranding(data.branding || { mode: 'none' }); setBrandingDirty(false); setEditingBranding(true);
+      previewPanel.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    } catch { setHistoryActionError('Could not open this video. Please try again.'); }
+    finally { setSaving(false); }
+  }
+
+  async function saveBranding() {
+    if (!result?.generationId || brandingSaving) return;
+    const generationId = result.generationId;
+    setBrandingError('');
+    try {
+      const form = new FormData(); appendBranding(form, editBranding);
+      setBrandingSaving(true);
+      const { data } = await axios.patch(quickAdsUrl(`/generations/${encodeURIComponent(generationId)}/branding`), form,
+        { headers: quickAdsAuth(token), timeout: 180000 });
+      showResult(data);
+      setNotice('Branding updated. No generation credit was used.');
+    } catch (failure) {
+      setBrandingError(failure.response?.data?.message || (failure.response ? 'Could not update branding. Please try again.' : failure.message));
+    } finally { setBrandingSaving(false); }
+  }
+
   async function generate() {
     if (!canGenerate) return;
     if (generating || request.current || pendingKey || !balance) return;
@@ -297,6 +332,7 @@ export default function QuickAd() {
       setError('Please add a product photo first.');
       return;
     }
+    try { appendBranding(new FormData(), branding); } catch (failure) { setError(failure.message); return; }
     const controller = new AbortController();
     request.current = controller;
     setError(''); setNotice(''); setPhase('generating'); setGenerationStage('queued');
@@ -314,6 +350,7 @@ export default function QuickAd() {
         form.append('image', product.file);
       }
       form.append('style', styleId);
+      appendBranding(form, branding);
       const key = newGenerationKey(); rememberKey(key);
       const { data } = await axios.post(`${baseUrl}/api/quick-ads/generate`, form, {
         headers: { ...quickAdsAuth(token), 'Idempotency-Key': key },
@@ -418,10 +455,10 @@ export default function QuickAd() {
                 <div className="quick-ad-upload" onDragOver={event => { event.preventDefault(); if (!generating) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); selectFashionPhoto(slot, event.dataTransfer.files); }}>
                   {(slot === 'front' ? frontPhoto : backPhoto) ? <>
                     <img className="quick-ad-product" src={slot === 'front' ? frontPhoto.url : backPhoto.url} alt={slot === 'front' ? 'Front outfit photo' : 'Back outfit photo'} onError={() => { removeFashionPhoto(slot); setError('This image could not be opened. Please choose another photo.'); }} />
-                    <div className="quick-ad-file"><span>{slot === 'front' ? frontPhoto.name : backPhoto.name}</span><Button size="sm" variant="secondary" disabled={generating} onClick={() => removeFashionPhoto(slot)} aria-label={`Remove ${slot} outfit photo`}><UiIcon name="close" /> Remove</Button></div>
+                    <div className="quick-ad-file"><span>{slot === 'front' ? frontPhoto.name : backPhoto.name}</span><Button size="sm" variant="secondary" disabled={generating || brandingSaving} onClick={() => removeFashionPhoto(slot)} aria-label={`Remove ${slot} outfit photo`}><UiIcon name="close" /> Remove</Button></div>
                   </> : <div className="quick-ad-upload-copy"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>{slot === 'front' ? 'Front photo' : 'Back photo'}</strong><span>Choose a garment photo</span></div>}
                   <label className={'quick-ad-picker' + (generating ? ' is-disabled' : '')}>
-                    <input type="file" accept="image/jpeg,image/png,image/webp" disabled={generating}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" disabled={generating || brandingSaving}
                       aria-label={slot === 'front' ? 'Upload front outfit photo' : 'Upload back outfit photo'}
                       onChange={event => { selectFashionPhoto(slot, event.target.files); event.target.value = ''; }} />
                     <span>{(slot === 'front' ? frontPhoto : backPhoto) ? 'Change photo' : 'Choose photo'} <UiIcon name="plus" /></span>
@@ -436,21 +473,22 @@ export default function QuickAd() {
             onDrop={event => { event.preventDefault(); setDragging(false); selectPhoto(event.dataTransfer.files); }}>
             {product ? <>
               <img className="quick-ad-product" src={product.url} alt="Selected product" onError={() => { removePhoto(); setError('This image could not be opened. Please choose another photo.'); }} />
-              <div className="quick-ad-file"><span>{product.name}</span><Button size="sm" variant="secondary" disabled={generating} onClick={removePhoto} aria-label="Remove product photo"><UiIcon name="close" /> Remove</Button></div>
+              <div className="quick-ad-file"><span>{product.name}</span><Button size="sm" variant="secondary" disabled={generating || brandingSaving} onClick={removePhoto} aria-label="Remove product photo"><UiIcon name="close" /> Remove</Button></div>
             </> : <div className="quick-ad-upload-copy"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>Drop your product photo here</strong><span>or choose one from your device</span></div>}
             <label className={'quick-ad-picker' + (generating ? ' is-disabled' : '')}>
-              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={generating}
+              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={generating || brandingSaving}
                 aria-label={product ? 'Replace product photo' : 'Upload product photo'} aria-describedby="quick-ad-file-hint"
                 onChange={event => { selectPhoto(event.target.files); event.target.value = ''; }} />
               <span>{product ? 'Change photo' : 'Choose photo'} <UiIcon name="plus" /></span>
             </label>
             <p id="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB</p>
           </div>}
+          <QuickAdBranding value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
           {error && <Alert tone="error">{error}</Alert>}
         </section>
         <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
           <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose your style</h2><p>Find the feeling that fits your product.</p></div></div>
-          <fieldset className="quick-ad-templates" disabled={generating}>
+          <fieldset className="quick-ad-templates" disabled={generating || brandingSaving}>
             <legend className="sr-only">Ad style</legend>
             {styles.map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
               <input type="radio" name="quick-ad-style" value={style.id} checked={styleId === style.id} onChange={() => { setStyleId(style.id); reset(); }} />
@@ -461,7 +499,7 @@ export default function QuickAd() {
           </fieldset>
         </section>
         <div className="quick-ad-generate">
-          <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!hasRequiredPhotos && !outOfCredits) || generating || saving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
+          <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!hasRequiredPhotos && !outOfCredits) || generating || saving || brandingSaving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
             {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{outOfCredits ? 'Buy Credits' : balance?.freePreviewAvailable ? 'Create Free Preview' : 'Generate Quick Ad'} <UiIcon name="star" /></>}
           </Button>
           <p id="quick-ad-generation-note">{canGenerate ? 'Generation can take a few minutes. Keep this page open.' : 'A company or promoter account is required to generate Quick Ads.'}</p>
@@ -491,11 +529,24 @@ export default function QuickAd() {
           ))}
         </ol>}
         <p className="quick-ad-result-status" role="status">{ready ? 'Your Quick Ad is ready. Tap play to preview it.' : generating ? 'Generation can take a few minutes. Keep this page open.' : 'Choose a photo and style to get started.'}</p>
+        {ready && <div className="quick-ad-branding-edit">
+          {!editingBranding ? <Button variant="secondary" size="sm" disabled={saving || brandingSaving} onClick={() => {
+            setEditBranding(result?.branding || { mode: 'none' }); setBrandingDirty(false); setBrandingError(''); setEditingBranding(true);
+          }}>Edit branding</Button> : <>
+            <QuickAdBranding key={result.generationId} value={editBranding} onChange={value => { setEditBranding(value); setBrandingDirty(true); }} disabled={brandingSaving} expanded title="Video branding" />
+            <div className="quick-ad-branding-edit-actions">
+              <Button size="sm" disabled={brandingSaving || !brandingDirty} onClick={saveBranding}>{brandingSaving ? 'Applying branding...' : 'Save branding'}</Button>
+              <Button size="sm" variant="secondary" disabled={brandingSaving} onClick={() => setEditingBranding(false)}>Cancel</Button>
+            </div>
+            <p className="sf-small sf-muted">Updates this video without using a generation credit.</p>
+            {brandingError && <Alert tone="error">{brandingError}</Alert>}
+          </>}
+        </div>}
         <div className="quick-ad-result-actions">
           {ready && result?.freePreview && !downloadable && <><strong>Your free Quick Ad is ready.</strong><p>Buy any credit plan to unlock this video and create more ads.</p><Button onClick={buyCredits}>Buy Credits</Button><Button variant="secondary" disabled={saving} onClick={previewAgain}>Preview Again</Button></>}
-          <Button variant="secondary" fullWidth disabled={!downloadable || saving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview && !downloadable ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
-          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving} onClick={startCampaign}><UiIcon name="user" /> Promote with creators</Button>
-          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving} onClick={startCampaign}><UiIcon name="campaign" /> Start campaign</Button>
+          <Button variant="secondary" fullWidth disabled={!downloadable || saving || brandingSaving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview && !downloadable ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
+          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving || brandingSaving} onClick={startCampaign}><UiIcon name="user" /> Promote with creators</Button>
+          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving || brandingSaving} onClick={startCampaign}><UiIcon name="campaign" /> Start campaign</Button>
           {!canStartCampaign && ready && <p className="sf-small sf-muted">A company account is required to start a creator campaign.</p>}
         </div>
         {notice && <Alert>{notice}</Alert>}
@@ -515,7 +566,7 @@ export default function QuickAd() {
       {history.length > 0 && <div className="quick-ad-history-grid">
           {history.map(item => (
             <article key={item.generationId} className="quick-ad-history-card">
-              <QuickAdHistoryVideo item={item} token={token} />
+              <QuickAdHistoryVideo key={`${item.generationId}:${item.brandingRevision || 0}`} item={item} token={token} />
               <div className="quick-ad-history-footer">
               <div className="quick-ad-history-copy">
                 <strong>{styles.find(style => style.id === item.style)?.name || item.style || 'Quick Ad'}</strong>
@@ -524,8 +575,9 @@ export default function QuickAd() {
                 <span className={'quick-ad-history-status is-' + (item.status || 'unknown')}>{item.status === 'completed' ? 'Ready' : item.status === 'pending' ? 'Processing' : item.status || 'Status unavailable'}</span>
               </div>
               <div className="quick-ad-history-actions">
+                {item.status === 'completed' && <Button size="sm" variant="secondary" aria-label="Edit video branding" title="Edit branding" disabled={saving || brandingSaving || generating || !!pendingKey} onClick={() => editHistoryBranding(item)}><UiIcon name="edit" /></Button>}
                 {item.downloadable && <Button size="sm" variant="secondary" aria-label="Download video" title={saving ? 'Saving video...' : 'Download video'} disabled={saving} onClick={() => downloadHistoryItem(item)}><UiIcon name="download" /></Button>}
-                <Button size="sm" variant="secondary" className="quick-ad-history-delete" aria-label={deletingId === item.generationId ? 'Deleting video...' : 'Delete video'} title="Delete video" disabled={item.status === 'pending' || !!deletingId} onClick={() => deleteHistoryItem(item)}><UiIcon name="trash" /></Button>
+                <Button size="sm" variant="secondary" className="quick-ad-history-delete" aria-label={deletingId === item.generationId ? 'Deleting video...' : 'Delete video'} title="Delete video" disabled={item.status === 'pending' || !!deletingId || brandingSaving} onClick={() => deleteHistoryItem(item)}><UiIcon name="trash" /></Button>
               </div>
               </div>
             </article>
