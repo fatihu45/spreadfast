@@ -13,7 +13,7 @@ export default function LandingHeroVisual() {
         <div className="landing-visual-shape landing-visual-shape--back" />
         <div className="landing-visual-shape landing-visual-shape--front" />
         <div className="landing-phone">
-          <img src="/spreadfast-creator.png" width="1024" height="1536" alt="" decoding="async" />
+          <img src="/spreadfast-creator.webp" width="1024" height="1536" alt="" decoding="async" fetchPriority="high" />
           <div className="landing-phone-notch" />
           <span className="landing-phone-topline">Creator spotlight</span>
           <div className="landing-phone-caption">

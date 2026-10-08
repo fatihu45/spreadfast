@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Account URLs use noindex and existing authentication, not robots.txt secrecy.
+Sitemap: https://tryspreadfast.com/sitemap.xml

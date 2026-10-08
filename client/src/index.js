@@ -4,9 +4,15 @@ import App from './App';
 import './index.css';
 import './styles/design-system.css';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
+const element = (
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+const container = document.getElementById('root');
+if (window.location.pathname === '/' && container.dataset.prerendered === 'true') {
+  ReactDOM.hydrateRoot(container, element);
+} else {
+  ReactDOM.createRoot(container).render(element);
+}
