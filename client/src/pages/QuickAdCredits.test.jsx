@@ -29,6 +29,9 @@ afterEach(() => { act(() => root.unmount()); container.remove(); if (previousApi
 test.each(['company', 'promoter'])('%s loads backend prices and sends only plan ID', async role => {
   await render('/quickads/credits', role);
   expect(container.querySelectorAll('.quick-ad-plan')).toHaveLength(4);
+  expect(container.textContent).toContain('4 credits · 4 Quick Ads');
+  expect(container.textContent).toContain('8 credits · 8 Quick Ads');
+  expect(container.textContent).toContain('16 credits · 16 Quick Ads');
   expect(container.textContent).toContain('6 Quick Ads credits');
   axios.post.mockRejectedValue(new Error('provider detail'));
   await act(async () => button('Get Starter').click());
