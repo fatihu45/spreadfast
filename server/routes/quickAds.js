@@ -189,7 +189,7 @@ function isFalValidationError(error) {
 }
 
 // Allowlist diagnostic values; provider messages, bodies and headers may contain keys.
-function logFailure(logger, { stage, style, error, timedOut = false, disconnected = false, model = VIDEO_MODEL }) {
+function logFailure(logger, { stage, style, error, timedOut = false, disconnected = false, model }) {
   const status = error?.status ?? error?.statusCode ?? error?.http_code ?? error?.response?.status;
   const upstreamStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : undefined;
   const knownCodes = ['INVALID_IMAGE_URL', 'MISSING_REQUEST_ID', 'INVALID_QUEUE_STATUS', 'MISSING_VIDEO_URL',
@@ -198,9 +198,25 @@ function logFailure(logger, { stage, style, error, timedOut = false, disconnecte
     : knownCodes.includes(error?.code) ? error.code
     : upstreamStatus === 401 || upstreamStatus === 403 ? 'UPSTREAM_AUTHORIZATION_FAILED'
     : upstreamStatus === 429 ? 'UPSTREAM_RATE_LIMITED'
-    : upstreamStatus === 422 ? 'UPSTREAM_INPUT_REJECTED' : 'UPSTREAM_FAILURE';
+    : upstreamStatus === 400 || upstreamStatus === 422 ? 'UPSTREAM_INPUT_REJECTED'
+    : 'UPSTREAM_FAILURE';
+  const provider = ['protect_video', 'branding_render'].includes(stage) ? 'cloudinary'
+    : stage === 'creating_scene' ? 'fal_image' : ['creating_video', 'finalizing'].includes(stage) ? 'fal_video' : 'internal';
+  const resolvedModel = model || (provider === 'fal_image' ? COMMERCIAL_IMAGE_MODEL
+    : provider === 'fal_video' ? VIDEO_MODEL : provider === 'cloudinary' ? 'cloudinary' : 'internal');
+  // Keep useful diagnostics while preventing credentials or large provider payloads from entering logs.
+  let safeMessage = String(error?.message || '').replace(/(?:Bearer\s+|Key\s+)[^\s,;]+/gi, '[REDACTED]')
+    .replace(/(api[_-]?key|token|secret|authorization)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[REDACTED]')
+    .replace(/[\r\n\t]+/g, ' ').slice(0, 240);
+  for (const secret of [process.env.FAL_KEY, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET].filter(Boolean)) {
+    safeMessage = safeMessage.split(secret).join('[REDACTED]');
+  }
+  const errorCode = typeof error?.code === 'string' && /^[A-Z0-9_]{1,60}$/.test(error.code) ? error.code : undefined;
   try {
-    logger.error('[Quick Ads] Request failed', { stage, style, model, category, upstreamStatus });
+    logger.error('[Quick Ads] Request failed', {
+      stage, provider, style, model: resolvedModel, category, upstreamStatus,
+      ...(errorCode ? { errorCode } : {}), ...(safeMessage ? { errorMessage: safeMessage } : {})
+    });
   } catch { /* Logging must not prevent a safe API response. */ }
 }
 
@@ -438,17 +454,22 @@ function createQuickAdsRouter({
       controller.signal.throwIfAborted();
       const videoUrl = result?.data?.video?.url;
       if (!isHttpsUrl(videoUrl)) throw generationError('MISSING_VIDEO_URL');
-      stage = 'media';
+      stage = 'protect_video';
       let media = await protectVideo(cloudinaryClient, videoUrl, generation, controller.signal);
       controller.signal.throwIfAborted();
-      if (branding.mode !== 'none') media = await renderBranding(cloudinaryClient, { ...generation, media }, branding, PREVIEW_TRANSFORMATION);
-      controller.signal.throwIfAborted();
+      if (branding.mode !== 'none') {
+        stage = 'branding_render';
+        media = await renderBranding(cloudinaryClient, { ...generation, media }, branding, PREVIEW_TRANSFORMATION);
+        controller.signal.throwIfAborted();
+      }
       stage = 'completion';
       generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media });
       if (res.destroyed) return;
       return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
     } catch (error) {
-      logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed, model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL : VIDEO_MODEL });
+      logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed,
+        model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL
+          : ['creating_video', 'finalizing'].includes(stage) ? VIDEO_MODEL : undefined });
       if (generation?.status === 'pending') {
         try { await failGeneration(DB, { userId: req.user.id, id: generation.id, code: timedOut ? 'TIMEOUT' : 'GENERATION_FAILED' }); }
         catch { logFailure(logger, { stage: 'credit-cleanup', style, error: generationError('CREDIT_CLEANUP_FAILED'), model: VIDEO_MODEL }); }

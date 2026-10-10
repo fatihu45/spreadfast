@@ -376,7 +376,11 @@ test('logs safe HTTP diagnostics for failures at each provider stage', async t =
       assert.equal(result.body.code, 'IMAGE_PROVIDER_VALIDATION_ERROR');
       assert.equal(result.body.message, 'The commercial image generation request contained invalid parameters.');
     }
-    assert.deepEqual(f.logs, [['[Quick Ads] Request failed', { stage: 'creating_scene', style: 'food', model: 'fal-ai/nano-banana-2/edit', category, upstreamStatus: status }]]);
+    assert.deepEqual(f.logs, [['[Quick Ads] Request failed', {
+      stage: 'creating_scene', provider: 'fal_image', style: 'food', model: 'fal-ai/nano-banana-2/edit',
+      category, upstreamStatus: status, ...(error.code === TEST_KEY ? {} : { errorCode: error.code }),
+      errorMessage: '[REDACTED]'
+    }]]);
     assert.ok(!JSON.stringify({ result, logs: f.logs }).includes(TEST_KEY));
     assert.equal(f.calls.filter(c => c[0] === 'submit').length, 1);
   }
@@ -449,6 +453,10 @@ test('logo-render failure preserves credits and the same logo can succeed on a f
   assert.equal(account.quickAdCredits, 0);
   assert.equal(account.quickAdTotalCreditsUsed, 1);
   assert.equal(f.calls.filter(c => c[0] === 'branding').length, 2);
+  assert.equal(f.logs[0][1].stage, 'branding_render');
+  assert.equal(f.logs[0][1].provider, 'cloudinary');
+  assert.equal(f.logs[0][1].model, 'cloudinary');
+  assert.equal(f.logs[0][1].errorMessage, 'temporary logo render failure');
 });
 
 test('retrying a completed request with the same key never resubmits or deducts twice', async t => {
@@ -535,6 +543,10 @@ test('logo upload stays separate from AI product inputs and a retry does not re-
   const result = await f.send(body, undefined, 'branded-request-123');
   assert.equal(result.status, 200); assert.equal(result.body.branding.mode, 'logo');
   assert.match(result.body.branding.logoUrl, /image\/authenticated/);
+  const brandingCall = f.calls.find(c => c[0] === 'branding');
+  const logoOverlay = brandingCall[2].eager[0].transformation[0].overlay;
+  assert.equal(logoOverlay.type, 'authenticated');
+  assert.match(logoOverlay.public_id, /spreadfast:quick-ads:logos:/);
   assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
   const uploads = f.calls.filter(c => c[0] === 'upload');
   assert.equal(uploads.length, 2); assert.equal(uploads[0][1].type, 'authenticated');
