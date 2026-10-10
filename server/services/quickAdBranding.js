@@ -40,7 +40,7 @@ function brandingTransformation(branding) {
   // Cloudinary layer IDs use colons rather than slashes for folder separators.
   // Keep the authenticated layer type explicit so the private logo is not made public.
   const overlay = branding.mode === 'logo'
-    ? { public_id: branding.publicId.replace(/\\//g, ':'), type: 'authenticated' }
+    ? { public_id: branding.publicId.split('/').join(':'), type: 'authenticated' }
     : { font_family: 'Arial', font_size: 48, font_weight: 'bold', text: branding.name };
   return [
     { overlay, ...(branding.mode === 'name' ? { color: 'white', background: '#242424' } : {}) },
