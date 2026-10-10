@@ -362,12 +362,21 @@ export default function QuickAd() {
       showResult(data);
     } catch (failure) {
       if (!controller.signal.aborted) {
-        if ([400, 401, 403, 413].includes(failure.response?.status)) rememberKey('');
+        const status = failure.response?.status;
+        const timedOut = status === 504 || ['ECONNABORTED', 'ETIMEDOUT'].includes(failure?.code);
+        // Definitive server failures release the generation reservation. Clear the
+        // idempotency key so the user can retry with the same selected product/logo.
+        // Keep it on timeouts/network drops because the server may still be working.
+        if (!timedOut && [400, 401, 403, 413, 422, 502, 503].includes(status)) rememberKey('');
         if (failure.response?.data?.code === 'NO_QUICK_AD_CREDITS') { navigate('/quickads/credits', { state: { outOfCredits: true } }); }
-        const timedOut = failure?.response?.status === 504 || ['ECONNABORTED', 'ETIMEDOUT'].includes(failure?.code);
         setError(timedOut
-          ? 'Your advert is taking longer than expected and may still be processing. Please wait before trying again to avoid creating a duplicate advert.'
+          ? 'Your advert is taking longer than expected and may still be processing. Please check its status before trying again to avoid creating a duplicate advert.'
           : GENERATION_ERROR);
+        if (!timedOut && [400, 413, 422, 502, 503].includes(status)) {
+          setNotice(branding.mode === 'logo'
+            ? 'No credit was used. Your product photo and attached logo are still selected. Tap Generate Quick Ad to retry.'
+            : 'No credit was used. Your product photo is still selected. Tap Generate Quick Ad to retry.');
+        }
         setStageImage('');
         setPhase('idle');
       }

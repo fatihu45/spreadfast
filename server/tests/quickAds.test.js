@@ -40,12 +40,14 @@ async function fixture(t, options = {}) {
   const calls = [];
   const logs = [];
   let imageNumber = 0;
+  let brandingAttempts = 0;
   const cloudinaryClient = {
     config: () => options.noCloudinary ? {} : { cloud_name: 'test', api_key: 'test', api_secret: 'test' },
     url: id => `https://res.cloudinary.com/test/image/authenticated/${id}.png`,
     uploader: {
       explicit: async (id, settings) => {
         calls.push(['branding', id, settings]);
+        if (options.failBrandingOnce && brandingAttempts++ === 0) throw new Error('temporary logo render failure');
         return { eager: settings.eager.map((entry, index) => ({ secure_url: `https://res.cloudinary.com/test/video/authenticated/branded-${index}.mp4` })) };
       },
       upload_stream(uploadOptions, callback) {
@@ -422,6 +424,31 @@ test('failed media preparation or generation does not spend credits or preview e
     assert.equal(user.quickAdFreePreviewUsed, !freePreview);
     assert.equal(user.quickAdGenerationLock, null);
   }
+});
+
+test('logo-render failure preserves credits and the same logo can succeed on a fresh retry', async t => {
+  const f = await fixture(t, { credits: 1, failBrandingOnce: true });
+  const makeLogoForm = () => {
+    const body = form();
+    body.append('brandingMode', 'logo');
+    body.append('brandingLogo', new Blob([png], { type: 'image/png' }), 'logo.png');
+    return body;
+  };
+  const failed = await f.send(makeLogoForm(), undefined, 'logo-render-retry-1');
+  assert.equal(failed.status, 502);
+  let account = await f.DB.User.findOne({ id: 'business-1' });
+  assert.equal(account.quickAdCredits, 1);
+  assert.equal(account.quickAdTotalCreditsUsed || 0, 0);
+  assert.equal(account.quickAdGenerationLock, null);
+
+  const retried = await f.send(makeLogoForm(), undefined, 'logo-render-retry-2');
+  assert.equal(retried.status, 200);
+  assert.equal(retried.body.branding.mode, 'logo');
+  assert.equal(retried.body.creditUsed, true);
+  account = await f.DB.User.findOne({ id: 'business-1' });
+  assert.equal(account.quickAdCredits, 0);
+  assert.equal(account.quickAdTotalCreditsUsed, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'branding').length, 2);
 });
 
 test('retrying a completed request with the same key never resubmits or deducts twice', async t => {
