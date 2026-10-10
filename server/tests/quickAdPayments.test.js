@@ -18,8 +18,8 @@ test.before(() => { process.env.JWT_SECRET = 'test-only-login-secret'; });
 test.after(() => { if (previousSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previousSecret; });
 const user = { id: 'business', role: 'company', status: 'active', email: 'owner@example.test', quickAdCredits: 0 };
 const purchase = (reference = 'qa_test-reference') => ({ id: reference, reference, userId: user.id, email: user.email,
-  purpose: PURPOSE, planId: 'starter', amount: 5000, credits: 3, status: 'pending', creditsApplied: false,
-  pricing: { version: 'quick-ads-v1', planId: 'starter', amount: 5000, credits: 3 }, createdAt: new Date().toISOString() });
+  purpose: PURPOSE, planId: 'starter', amount: 5000, credits: 4, status: 'pending', creditsApplied: false,
+  pricing: { version: 'quick-ads-v1', planId: 'starter', amount: 5000, credits: 4 }, createdAt: new Date().toISOString() });
 const charge = reference => ({ reference, status: 'success', amount: 500000, currency: 'NGN', customer: { email: user.email } });
 
 test('the shared payment schema still validates legacy campaigns and supports credit purchases', () => {
@@ -41,7 +41,7 @@ test('duplicate and concurrent confirmations award credits exactly once', async 
   assert.equal(results.filter(r => !r.alreadyProcessed).length, 1);
   assert.ok(results.every(r => r.quickAdCredits === 3));
   const account = await DB.User.findOne({ id: user.id });
-  assert.equal(account.quickAdTotalCreditsPurchased, 3);
+  assert.equal(account.quickAdTotalCreditsPurchased, 4);
   assert.equal(account.quickAdFreePreviewUsed, undefined);
 });
 test('forged amounts, currency, references, owners, email and failed statuses never add credits', async () => {
@@ -131,7 +131,7 @@ test('checkout uses trusted plan amounts, reuses Paystack configuration, and rej
   assert.equal(f.calls[0].options.headers.Authorization, `Bearer ${config.secretKey}`);
   assert.ok(!JSON.stringify(initialized.body).includes(config.secretKey));
   const stored = await f.DB.PaystackTransaction.findOne({ reference: initialized.body.reference });
-  assert.equal(stored.credits, 3); assert.equal(stored.creditsApplied, false);
+  assert.equal(stored.credits, 4); assert.equal(stored.creditsApplied, false);
   assert.equal(stored.purpose, PURPOSE);
 });
 test('owned verification and signed webhook races award once and never create a campaign', async t => {
@@ -141,7 +141,7 @@ test('owned verification and signed webhook races award once and never create a 
     f.webhook({ event: 'charge.success', data: charge('qa_test-reference') })
   ]);
   assert.equal(verified.status, 200); assert.equal(hook.status, 200);
-  assert.equal((await f.DB.User.findOne({ id: user.id })).quickAdCredits, 3);
+  assert.equal((await f.DB.User.findOne({ id: user.id })).quickAdCredits, 4);
   assert.equal(f.campaigns(), 0);
   assert.equal((await f.request('/credits/verify/qa_test-reference')).body.alreadyProcessed, true);
   assert.equal((await f.request('/credits/verify/qa_test-reference', { id: 'other' })).status, 404);
@@ -178,7 +178,7 @@ test('promoter checkout records its authenticated owner and role; verification a
   const reference = initialized.body.reference;
   const stored = await f.DB.PaystackTransaction.findOne({ reference });
   assert.equal(stored.userId, 'creator'); assert.equal(stored.buyerRole, 'promoter');
-  assert.equal(stored.amount, 5000); assert.equal(stored.credits, 3);
+  assert.equal(stored.amount, 5000); assert.equal(stored.credits, 4);
   assert.equal(f.calls[0].body.metadata.buyerRole, 'promoter');
   assert.equal((await f.request('/credits/verify/' + reference)).status, 404);
   f.setCharge({ ...charge(reference), status: 'failed' });
