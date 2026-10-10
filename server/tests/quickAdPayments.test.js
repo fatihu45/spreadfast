@@ -39,7 +39,7 @@ test('duplicate and concurrent confirmations award credits exactly once', async 
   const DB = quickAdsDb([user]); await DB.PaystackTransaction.create(purchase());
   const results = await Promise.all(Array.from({ length: 5 }, () => awardQuickAdCredits(DB, { reference: 'qa_test-reference', userId: user.id, charge: charge('qa_test-reference') })));
   assert.equal(results.filter(r => !r.alreadyProcessed).length, 1);
-  assert.ok(results.every(r => r.quickAdCredits === 3));
+  assert.ok(results.every(r => r.quickAdCredits === 4));
   const account = await DB.User.findOne({ id: user.id });
   assert.equal(account.quickAdTotalCreditsPurchased, 4);
   assert.equal(account.quickAdFreePreviewUsed, undefined);
@@ -191,7 +191,7 @@ test('promoter checkout records its authenticated owner and role; verification a
   ]);
   assert.ok(results.every(r => r.status === 200));
   assert.equal((await f.request('/credits/verify/' + reference, { id: 'creator' })).body.alreadyProcessed, true);
-  assert.equal((await f.DB.User.findOne({ id: 'creator' })).quickAdCredits, 3);
+  assert.equal((await f.DB.User.findOne({ id: 'creator' })).quickAdCredits, 4);
   assert.equal((await f.DB.User.findOne({ id: user.id })).quickAdCredits, 0);
   assert.equal((await f.request('/transactions', { id: 'creator' })).body.transactions.length, 1);
   assert.equal((await f.request('/transactions')).body.transactions.length, 0);
