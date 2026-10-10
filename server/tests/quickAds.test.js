@@ -543,6 +543,10 @@ test('logo upload stays separate from AI product inputs and a retry does not re-
   const result = await f.send(body, undefined, 'branded-request-123');
   assert.equal(result.status, 200); assert.equal(result.body.branding.mode, 'logo');
   assert.match(result.body.branding.logoUrl, /image\/authenticated/);
+  const brandingCall = f.calls.find(c => c[0] === 'branding');
+  const logoOverlay = brandingCall[2].eager[0].transformation[0].overlay;
+  assert.equal(logoOverlay.type, 'authenticated');
+  assert.match(logoOverlay.public_id, /spreadfast:quick-ads:logos:/);
   assert.equal(f.calls.filter(c => c[0] === 'submit').length, 2);
   const uploads = f.calls.filter(c => c[0] === 'upload');
   assert.equal(uploads.length, 2); assert.equal(uploads[0][1].type, 'authenticated');
