@@ -205,10 +205,13 @@ function logFailure(logger, { stage, style, error, timedOut = false, disconnecte
   const resolvedModel = model || (provider === 'fal_image' ? COMMERCIAL_IMAGE_MODEL
     : provider === 'fal_video' ? VIDEO_MODEL : provider === 'cloudinary' ? 'cloudinary' : 'internal');
   // Keep useful diagnostics while preventing credentials or large provider payloads from entering logs.
-  const safeMessage = String(error?.message || '').replace(/(?:Bearer\\s+|Key\\s+)[^\\s,;]+/gi, '[REDACTED]')
+  let safeMessage = String(error?.message || '').replace(/(?:Bearer\\s+|Key\\s+)[^\\s,;]+/gi, '[REDACTED]')
     .replace(/(api[_-]?key|token|secret|authorization)(\\s*[:=]\\s*)[^\\s,;]+/gi, '$1$2[REDACTED]')
     .replace(/[\\r\\n\\t]+/g, ' ').slice(0, 240);
-  const errorCode = typeof error?.code === 'string' && /^[A-Z0-9_-]{1,60}$/i.test(error.code) ? error.code : undefined;
+  for (const secret of [process.env.FAL_KEY, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET].filter(Boolean)) {
+    safeMessage = safeMessage.split(secret).join('[REDACTED]');
+  }
+  const errorCode = typeof error?.code === 'string' && /^[A-Z0-9_]{1,60}$/.test(error.code) ? error.code : undefined;
   try {
     logger.error('[Quick Ads] Request failed', {
       stage, provider, style, model: resolvedModel, category, upstreamStatus,
