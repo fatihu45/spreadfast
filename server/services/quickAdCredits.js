@@ -59,7 +59,7 @@ async function beginGeneration(DB, { userId, key, style, model, leaseMs = 12 * 6
   });
 }
 
-async function finishGeneration(DB, { userId, id, imageUrl, media, now = Date.now() }) {
+async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatus, now = Date.now() }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
     if (!generation) fail('GENERATION_NOT_FOUND', 'Ad not found.', 404);
@@ -87,6 +87,7 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, now = Date.no
       imageUrl: imageUrl || generation.commercialImage?.url || generation.imageUrl,
       commercialImage: generation.commercialImage || { url: imageUrl || generation.imageUrl, model: generation.model },
       media,
+      ...(brandingStatus ? { brandingStatus } : {}),
       creditUsed: !free,
       downloadable: !free,
       completedAt: new Date(now)
