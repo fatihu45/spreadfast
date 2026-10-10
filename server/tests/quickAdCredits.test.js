@@ -12,7 +12,7 @@ const finish = (DB, generation, options = {}) => finishGeneration(DB, { userId: 
 test('plans contain the requested backend prices, with no client-specified values', () => {
   assert.equal(QUICK_AD_CREDIT_PRICE, 1700);
   assert.deepEqual(QUICK_AD_PLANS.map(p => [p.id, p.price, p.credits]), [
-    ['single', 1700, 1], ['starter', 5000, 3], ['growth', 10000, 6], ['business', 20000, 11]
+    ['single', 1700, 1], ['starter', 5000, 4], ['growth', 10000, 8], ['business', 20000, 16]
   ]);
 });
 test('one successful preview marks eligibility used without spending a paid credit', async () => {
