@@ -8,9 +8,9 @@ import QuickAdCredits from './QuickAdCredits';
 jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
 const plans = [
   { id: 'single', name: 'Try One', price: 1700, credits: 1, cta: 'Buy 1 Credit' },
-  { id: 'starter', name: 'Starter', price: 5000, credits: 3, cta: 'Get Starter', recommended: true },
-  { id: 'growth', name: 'Growth', price: 10000, credits: 6, cta: 'Get Growth' },
-  { id: 'business', name: 'Business', price: 20000, credits: 11, cta: 'Get Business' }
+  { id: 'starter', name: 'Starter', price: 5000, credits: 4, cta: 'Get Starter', recommended: true },
+  { id: 'growth', name: 'Growth', price: 10000, credits: 8, cta: 'Get Growth' },
+  { id: 'business', name: 'Business', price: 20000, credits: 16, cta: 'Get Business' }
 ];
 let root, container;
 const previousApi = process.env.REACT_APP_API_URL;
@@ -29,6 +29,9 @@ afterEach(() => { act(() => root.unmount()); container.remove(); if (previousApi
 test.each(['company', 'promoter'])('%s loads backend prices and sends only plan ID', async role => {
   await render('/quickads/credits', role);
   expect(container.querySelectorAll('.quick-ad-plan')).toHaveLength(4);
+  expect(container.textContent).toContain('4 credits · 4 Quick Ads');
+  expect(container.textContent).toContain('8 credits · 8 Quick Ads');
+  expect(container.textContent).toContain('16 credits · 16 Quick Ads');
   expect(container.textContent).toContain('6 Quick Ads credits');
   axios.post.mockRejectedValue(new Error('provider detail'));
   await act(async () => button('Get Starter').click());

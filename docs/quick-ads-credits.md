@@ -6,8 +6,9 @@ Prices, credit amounts, labels and recommended plan live in `server/config/quick
 The frontend retrieves this catalog and submits only `planId`. Existing pending purchases retain
 their saved price and credit amount when the catalog changes.
 
-The Business plan intentionally retains the requested ₦20,000 / 11 credits. It is more expensive
-per credit than buying individual ₦1,700 credits, so the UI does not claim a bulk discount.
+Current Quick Ads credit packages are ₦1,700 for 1 credit, ₦5,000 for 4 credits,
+₦10,000 for 8 credits, and ₦20,000 for 16 credits. Each credit covers one successful
+paid video generation. Bundle quantities are selected by the backend plan catalog.
 
 Reuse the existing configuration:
 
