@@ -55,6 +55,8 @@ function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
+    brandingStatus: generation.brandingStatus || (generation.branding?.mode && generation.branding.mode !== 'none' ? 'applied' : 'none'),
+    brandingRetryAvailable: generation.status === 'completed' && generation.brandingStatus === 'failed',
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
   const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl;
