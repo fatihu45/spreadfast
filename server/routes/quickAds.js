@@ -304,6 +304,8 @@ function createQuickAdsRouter({
     let timedOut = false;
     let requestId;
     let generation;
+    let recoverableMedia = null;
+    let nextCommercialImage = null;
     const DB = req.app.locals.db;
     let stage = 'setup';
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, generationTimeoutMs);
@@ -340,7 +342,6 @@ function createQuickAdsRouter({
       const [firstSourceUrl, secondSourceUrl] = uploadedSourceUrls;
       await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl: firstSourceUrl, stage: 'preparing_image' } });
       stage = 'creating_scene';
-      let nextCommercialImage = null;
       let fashionBackImage = null;
       if (isFashionStyle) {
         await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
@@ -456,20 +457,43 @@ function createQuickAdsRouter({
       if (!isHttpsUrl(videoUrl)) throw generationError('MISSING_VIDEO_URL');
       stage = 'protect_video';
       let media = await protectVideo(cloudinaryClient, videoUrl, generation, controller.signal);
+      // Persist the protected source before optional branding so a Cloudinary failure never
+      // discards a paid fal result or forces the user to generate the ad again.
+      recoverableMedia = { ...media, originalOutputUrl: media.outputUrl };
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+        media: recoverableMedia, imageUrl: nextCommercialImage.url,
+        brandingStatus: branding.mode === 'none' ? 'none' : 'pending', stage: 'finalizing'
+      } });
       controller.signal.throwIfAborted();
       if (branding.mode !== 'none') {
         stage = 'branding_render';
-        media = await renderBranding(cloudinaryClient, { ...generation, media }, branding, PREVIEW_TRANSFORMATION);
+        media = await renderBranding(cloudinaryClient, { ...generation, media: recoverableMedia }, branding, PREVIEW_TRANSFORMATION);
         controller.signal.throwIfAborted();
       }
       stage = 'completion';
-      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media });
+      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media,
+        brandingStatus: branding.mode === 'none' ? 'none' : 'applied' });
       if (res.destroyed) return;
       return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
     } catch (error) {
       logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed,
         model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL
           : ['creating_video', 'finalizing'].includes(stage) ? VIDEO_MODEL : undefined });
+      // The video and image already exist. Finish with the protected original and expose a
+      // branding-only retry, rather than allowing a full retry to submit more fal jobs.
+      if (stage === 'branding_render' && recoverableMedia && generation?.status === 'pending') {
+        try {
+          generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id,
+            imageUrl: nextCommercialImage?.url, media: recoverableMedia, brandingStatus: 'failed' });
+          if (res.destroyed) return;
+          const user = await DB.User.findOne({ id: req.user.id });
+          return res.set('Cache-Control', 'no-store').json({ ...publicGeneration(generation, user),
+            brandingRetryAvailable: true,
+            message: 'Your video is ready, but its logo or business name could not be added. Retry branding without generating or paying for the video again.' });
+        } catch (recoveryError) {
+          logFailure(logger, { stage: 'branding_recovery', style, error: recoveryError, model: VIDEO_MODEL });
+        }
+      }
       if (generation?.status === 'pending') {
         try { await failGeneration(DB, { userId: req.user.id, id: generation.id, code: timedOut ? 'TIMEOUT' : 'GENERATION_FAILED' }); }
         catch { logFailure(logger, { stage: 'credit-cleanup', style, error: generationError('CREDIT_CLEANUP_FAILED'), model: VIDEO_MODEL }); }
