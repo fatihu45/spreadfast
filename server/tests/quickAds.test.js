@@ -120,6 +120,13 @@ async function fixture(t, options = {}) {
         signal: AbortSignal.timeout(15000)
       });
       return { status: response.status, body: await response.json() };
+    },
+    async retryBranding(id, authorization = `Bearer ${token}`) {
+      const response = await fetch(base + `/api/quick-ads/generations/${id}/branding/retry`, {
+        method: 'POST', headers: { ...(authorization ? { Authorization: authorization } : {}) },
+        signal: AbortSignal.timeout(15000)
+      });
+      return { status: response.status, body: await response.json() };
     }
   };
 }
@@ -430,29 +437,33 @@ test('failed media preparation or generation does not spend credits or preview e
   }
 });
 
-test('logo-render failure preserves credits and the same logo can succeed on a fresh retry', async t => {
+test('logo-render failure keeps the generated video, charges once, and retries branding without fal calls', async t => {
   const f = await fixture(t, { credits: 1, failBrandingOnce: true });
-  const makeLogoForm = () => {
-    const body = form();
-    body.append('brandingMode', 'logo');
-    body.append('brandingLogo', new Blob([png], { type: 'image/png' }), 'logo.png');
-    return body;
-  };
-  const failed = await f.send(makeLogoForm(), undefined, 'logo-render-retry-1');
-  assert.equal(failed.status, 502);
+  const body = form();
+  body.append('brandingMode', 'logo');
+  body.append('brandingLogo', new Blob([png], { type: 'image/png' }), 'logo.png');
+  const first = await f.send(body, undefined, 'logo-render-retry-1');
+  assert.equal(first.status, 200);
+  assert.equal(first.body.branding.mode, 'logo');
+  assert.equal(first.body.brandingStatus, 'failed');
+  assert.equal(first.body.brandingRetryAvailable, true);
+  assert.equal(first.body.videoUrl, VIDEO_URL);
+  assert.match(first.body.message, /retry branding/i);
   let account = await f.DB.User.findOne({ id: 'business-1' });
-  assert.equal(account.quickAdCredits, 1);
-  assert.equal(account.quickAdTotalCreditsUsed || 0, 0);
+  assert.equal(account.quickAdCredits, 0);
+  assert.equal(account.quickAdTotalCreditsUsed, 1);
   assert.equal(account.quickAdGenerationLock, null);
-
-  const retried = await f.send(makeLogoForm(), undefined, 'logo-render-retry-2');
+  const falSubmits = f.calls.filter(c => c[0] === 'submit').length;
+  const retried = await f.retryBranding(first.body.generationId);
   assert.equal(retried.status, 200);
-  assert.equal(retried.body.branding.mode, 'logo');
-  assert.equal(retried.body.creditUsed, true);
+  assert.equal(retried.body.brandingStatus, 'applied');
+  assert.equal(retried.body.brandingRetryAvailable, false);
+  assert.match(retried.body.videoUrl, /branded-0\.mp4$/);
+  assert.equal(f.calls.filter(c => c[0] === 'submit').length, falSubmits);
+  assert.equal(f.calls.filter(c => c[0] === 'branding').length, 2);
   account = await f.DB.User.findOne({ id: 'business-1' });
   assert.equal(account.quickAdCredits, 0);
   assert.equal(account.quickAdTotalCreditsUsed, 1);
-  assert.equal(f.calls.filter(c => c[0] === 'branding').length, 2);
   assert.equal(f.logs[0][1].stage, 'branding_render');
   assert.equal(f.logs[0][1].provider, 'cloudinary');
   assert.equal(f.logs[0][1].model, 'cloudinary');

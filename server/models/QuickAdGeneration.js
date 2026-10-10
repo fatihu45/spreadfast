@@ -29,6 +29,7 @@ const schema = new mongoose.Schema({
   },
   branding: { mode: { type: String, enum: ['none', 'name', 'logo'], default: 'none' }, name: String, publicId: String, logoUrl: String },
   brandingRevision: Number,
+  brandingStatus: { type: String, enum: ['none', 'pending', 'applied', 'failed', 'retrying'], default: 'none' },
   media: { publicId: String, outputUrl: String, originalOutputUrl: String, previewUrl: String },
   expiresAt: { type: Date, required: true },
   completedAt: Date,

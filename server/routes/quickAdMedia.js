@@ -29,6 +29,40 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
     return generation;
   }
   const brandingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_LOGO_SIZE + 1, files: 1, fields: 2, fieldSize: 256 } }).single('brandingLogo');
+  router.post('/generations/:id/branding/retry', authenticate, quickAdAccountOnly, async (req, res) => {
+    let generation;
+    let claimed = false;
+    const DB = req.app.locals.db;
+    try {
+      generation = await owned(req);
+      if (generation.status !== 'completed') fail('GENERATION_IN_PROGRESS', 'Wait until your video is ready.', 409);
+      if (!generation.branding || generation.branding.mode === 'none') fail('INVALID_BRANDING', 'This video has no branding to retry.', 400);
+      if (generation.brandingStatus === 'applied') {
+        const user = await DB.User.findOne({ id: req.user.id });
+        return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, user));
+      }
+      if (!generation.media?.publicId || !(generation.media.originalOutputUrl || generation.media.outputUrl)) {
+        fail('BRANDING_SOURCE_MISSING', 'The original video is unavailable for branding recovery.', 409);
+      }
+      const claim = await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id,
+        status: 'completed', brandingStatus: 'failed', deletedAt: { $exists: false } }, { $set: { brandingStatus: 'retrying' } });
+      if (!claim.modifiedCount) fail('BRANDING_RETRY_IN_PROGRESS', 'Branding is already being retried. Refresh in a moment.', 409);
+      claimed = true;
+      const originalMedia = { ...generation.media, outputUrl: generation.media.originalOutputUrl || generation.media.outputUrl };
+      const snapshot = generation.toObject ? generation.toObject() : generation;
+      const media = await renderBranding(cloudinaryClient, { ...snapshot, media: originalMedia }, generation.branding, PREVIEW_TRANSFORMATION);
+      const updated = await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id,
+        status: 'completed', brandingStatus: 'retrying', deletedAt: { $exists: false } }, { $set: { media, brandingStatus: 'applied' } });
+      if (!updated.modifiedCount) fail('BRANDING_CHANGED', 'This video changed. Open it again and retry.', 409);
+      const saved = await DB.QuickAdGeneration.findOne({ id: generation.id, userId: req.user.id });
+      const user = await DB.User.findOne({ id: req.user.id });
+      return res.set('Cache-Control', 'no-store').json(publicGeneration(saved, user));
+    } catch (error) {
+      if (claimed && generation) await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id,
+        status: 'completed', brandingStatus: 'retrying' }, { $set: { brandingStatus: 'failed' } }).catch(() => {});
+      return safeError(res, error);
+    }
+  });
   router.patch('/generations/:id/branding', authenticate, quickAdAccountOnly, (req, res, next) => {
     brandingUpload(req, res, error => error ? res.status(400).json({ success: false, message: 'Choose a PNG, JPG, or WEBP logo up to 2 MB.' }) : next());
   }, async (req, res) => {
