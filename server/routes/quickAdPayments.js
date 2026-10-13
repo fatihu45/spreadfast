@@ -18,7 +18,13 @@ function createQuickAdPaymentsRouter({ paystackConfig, authenticate = authentica
       const plan = findQuickAdPlan(req.body.planId);
       if (!plan) fail('INVALID_PLAN', 'Choose a valid Quick Ads plan.', 400);
       if (!paystackConfig?.secretKey) fail('PAYMENTS_UNAVAILABLE', 'Payments are temporarily unavailable.', 503);
-      const callback = new URL('/quickads/credits', process.env.CLIENT_URL || (process.env.NODE_ENV === 'production' ? 'https://tryspreadfast.com' : 'http://localhost:3000'));
+      // Never send live customers back to a branch/preview deployment. The payment
+      // return URL is a public customer-facing route, so production always uses the
+      // canonical SpreadFast domain even if CLIENT_URL was misconfigured in Render.
+      const callbackBase = process.env.NODE_ENV === 'production'
+        ? 'https://tryspreadfast.com'
+        : (process.env.CLIENT_URL || 'http://localhost:3000');
+      const callback = new URL('/quickads/credits', callbackBase);
       if (!['https:', 'http:'].includes(callback.protocol)) throw new Error('Invalid callback configuration');
       const DB = req.app.locals.db;
       reference = `qa_${randomUUID()}`;

@@ -125,8 +125,15 @@ test('checkout uses trusted plan amounts, reuses Paystack configuration, and rej
   assert.equal(f.calls.length, 0);
   assert.equal((await f.request('/credits/initialize', { body: { planId: 'starter' }, id: 'admin' })).status, 403);
   assert.equal((await f.request('/credits/initialize', { body: { planId: 'starter' }, id: null })).status, 401);
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousClientUrl = process.env.CLIENT_URL;
+  process.env.NODE_ENV = 'production';
+  process.env.CLIENT_URL = 'https://spreadfast-git-feature-preview.vercel.app';
   const initialized = await f.request('/credits/initialize', { body: { planId: 'starter' } });
+  if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
+  if (previousClientUrl === undefined) delete process.env.CLIENT_URL; else process.env.CLIENT_URL = previousClientUrl;
   assert.equal(initialized.status, 200);
+  assert.equal(f.calls[0].body.callback_url, 'https://tryspreadfast.com/quickads/credits');
   assert.equal(f.calls[0].body.amount, 500000); assert.equal(f.calls[0].body.currency, 'NGN');
   assert.equal(f.calls[0].options.headers.Authorization, `Bearer ${config.secretKey}`);
   assert.ok(!JSON.stringify(initialized.body).includes(config.secretKey));
