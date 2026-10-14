@@ -61,8 +61,8 @@ function sanitizeVideoPrompt(prompt) {
 function sanitizeAdditionalInstructions(value) {
   if (typeof value !== 'string') return '';
   return value
-    .replace(/[\\u0000-\\u001F\\u007F]/g, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 500);
 }
@@ -71,7 +71,7 @@ function withAdditionalInstructions(prompt, instructions) {
   const safeInstructions = sanitizeAdditionalInstructions(instructions);
   if (!safeInstructions) return sanitizeVideoPrompt(prompt);
   const suffix = `CUSTOMER PRODUCT SPECIFICATIONS: ${safeInstructions}. Treat these as product-specific constraints. Preserve the actual uploaded product or garment and do not invent or alter details that are not visible in the source images.`;
-  const normalizedPrompt = String(prompt || '').replace(/\\s+/g, ' ').trim();
+  const normalizedPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
   const availableBaseLength = Math.max(0, 2200 - suffix.length - 1);
   return `${normalizedPrompt.slice(0, availableBaseLength)} ${suffix}`.trim();
 }
