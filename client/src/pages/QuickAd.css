@@ -265,3 +265,13 @@
 .quick-ad-branding-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick-ad-branding button:disabled { opacity: .5; cursor: not-allowed; }
 .quick-ad-branding :focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 2px; }
+
+
+.quick-ad-specifications { display: grid; gap: 7px; margin-top: 12px; padding: 12px; border: 1px solid rgb(var(--sf-border)); border-radius: 12px; background: #fff; min-width: 0; }
+.quick-ad-specifications > label { display: flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 600; }
+.quick-ad-specifications > label span { padding: 3px 7px; border-radius: 20px; background: rgb(var(--sf-primary-soft)); color: rgb(var(--sf-muted)); font-size: .68rem; font-weight: 400; }
+.quick-ad-specifications > p { margin: 0; color: rgb(var(--sf-muted)); font-size: .74rem; line-height: 1.5; }
+.quick-ad-specifications textarea { width: 100%; min-width: 0; box-sizing: border-box; resize: vertical; min-height: 82px; border: 1px solid rgb(var(--sf-border)); border-radius: 8px; padding: 10px; font: inherit; font-size: 16px; line-height: 1.5; color: rgb(var(--sf-ink)); background: #fff; }
+.quick-ad-specifications textarea:focus-visible { outline: 2px solid rgb(var(--sf-primary)); outline-offset: 2px; }
+.quick-ad-specifications textarea:disabled { opacity: .65; }
+.quick-ad-specifications-footer { display: flex; justify-content: space-between; gap: 10px; color: rgb(var(--sf-muted)); font-size: .68rem; }
