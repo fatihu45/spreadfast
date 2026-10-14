@@ -35,6 +35,7 @@ export default function QuickAd() {
   const [frontPhoto, setFrontPhoto] = useState(null);
   const [backPhoto, setBackPhoto] = useState(null);
   const [styleId, setStyleId] = useState('food');
+  const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -350,6 +351,7 @@ export default function QuickAd() {
         form.append('image', product.file);
       }
       form.append('style', styleId);
+      form.append('additionalInstructions', additionalInstructions);
       appendBranding(form, branding);
       const key = newGenerationKey(); rememberKey(key);
       const { data } = await axios.post(`${baseUrl}/api/quick-ads/generate`, form, {
@@ -493,6 +495,12 @@ export default function QuickAd() {
             <p id="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB</p>
           </div>}
           <QuickAdBranding value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
+          <div className="quick-ad-specifications">
+            <label htmlFor="quick-ad-additional-instructions">Additional instructions <span>Optional</span></label>
+            <p id="quick-ad-instructions-hint">Tell the AI what to preserve or pay attention to, such as exact fabric details, product features, colours, or styling. Your uploaded photos remain the source of truth.</p>
+            <textarea id="quick-ad-additional-instructions" value={additionalInstructions} onChange={event => setAdditionalInstructions(event.target.value.slice(0, 500))} maxLength={500} rows={3} placeholder="e.g. Keep the exact embroidery and button placement. Do not add pockets or change the sleeve shape." disabled={generating || !!pendingKey || brandingSaving} aria-describedby="quick-ad-instructions-hint quick-ad-instructions-count" />
+            <div className="quick-ad-specifications-footer"><span>Works with every ad style</span><span id="quick-ad-instructions-count">{additionalInstructions.length}/500</span></div>
+          </div>
           {error && <Alert tone="error">{error}</Alert>}
         </section>
         <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
