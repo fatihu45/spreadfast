@@ -58,18 +58,35 @@ function sanitizeVideoPrompt(prompt) {
     .slice(0, MAX_LENGTH);
 }
 
-function buildCommercialImagePrompt(style) {
-  return sanitizeVideoPrompt(`${COMMERCIAL_IMAGE_BASE_PROMPT} ${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio}`);
+function sanitizeAdditionalInstructions(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/[\\u0000-\\u001F\\u007F]/g, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
 }
 
-function buildFashionImagePrompt(view) {
+function withAdditionalInstructions(prompt, instructions) {
+  const safeInstructions = sanitizeAdditionalInstructions(instructions);
+  if (!safeInstructions) return sanitizeVideoPrompt(prompt);
+  return sanitizeVideoPrompt(`${prompt} CUSTOMER PRODUCT SPECIFICATIONS: ${safeInstructions}. Treat these as product-specific constraints. Preserve the actual uploaded product or garment and do not invent or alter details that are not visible in the source images.`);
+}
+
+function buildCommercialImagePrompt(style, instructions = '') {
+  return withAdditionalInstructions(`${COMMERCIAL_IMAGE_BASE_PROMPT} ${IMAGE_STYLE_PROMPTS[style] || IMAGE_STYLE_PROMPTS.studio}`, instructions);
+}
+
+function buildFashionImagePrompt(view, instructions = '') {
   const viewPrompt = FASHION_VIEW_PROMPTS[view] || FASHION_VIEW_PROMPTS.front;
-  return sanitizeVideoPrompt(`${FASHION_GARMENT_PROMPT} ${viewPrompt}`);
+  return withAdditionalInstructions(`${FASHION_GARMENT_PROMPT} ${viewPrompt}`, instructions);
 }
 
-function buildQuickAdPrompt(style) {
-  if (style === 'fashion_studio') return 'A premium 5-second invisible-mannequin fashion film. Start exactly on the supplied front-view image and finish exactly on the supplied back-view end frame. Show one complete outfit turning smoothly through a controlled 180-degree rotation from front to back, centred at a consistent scale with a fixed camera. Preserve the garment colour, fabric, embroidery, seams, silhouette and all outfit pieces. Maintain the clean white studio, soft lighting, hollow openings and natural fabric volume. No visible person, mannequin, hanger, extra garments, morphing, text or new decorations. End on a stable, clear back view.';
-  return `${QUICK_AD_BASE_PROMPT} ${VIDEO_STYLE_PROMPTS[style] || VIDEO_STYLE_PROMPTS.studio}`;
+function buildQuickAdPrompt(style, instructions = '') {
+  const prompt = style === 'fashion_studio'
+    ? 'A premium 5-second invisible-mannequin fashion film. Start exactly on the supplied front-view image and finish exactly on the supplied back-view end frame. Show one complete outfit turning smoothly through a controlled 180-degree rotation from front to back, centred at a consistent scale with a fixed camera. Preserve the garment colour, fabric, embroidery, seams, silhouette and all outfit pieces. Maintain the clean white studio, soft lighting, hollow openings and natural fabric volume. No visible person, mannequin, hanger, extra garments, morphing, text or new decorations. End on a stable, clear back view.'
+    : `${QUICK_AD_BASE_PROMPT} ${VIDEO_STYLE_PROMPTS[style] || VIDEO_STYLE_PROMPTS.studio}`;
+  return withAdditionalInstructions(prompt, instructions);
 }
 
 function supportsCommercialImageModel(model) {
@@ -260,13 +277,14 @@ function createQuickAdsRouter({
     const singleImage = Array.isArray(files.image) ? files.image[0] : null;
     const frontImage = Array.isArray(files.frontImage) ? files.frontImage[0] : null;
     const backImage = Array.isArray(files.backImage) ? files.backImage[0] : null;
-    const unexpectedFields = Object.keys(req.body || {}).filter(key => !['style', 'image', 'frontImage', 'backImage', 'brandingMode', 'businessName'].includes(key));
+    const unexpectedFields = Object.keys(req.body || {}).filter(key => !['style', 'image', 'frontImage', 'backImage', 'brandingMode', 'businessName', 'additionalInstructions'].includes(key));
     if (unexpectedFields.length > 0) {
       return res.status(400).json({ success: false, message: 'Unexpected request fields were provided.' });
     }
     if (typeof style !== 'string' || !Object.prototype.hasOwnProperty.call(PROMPTS, style)) {
       return res.status(400).json({ success: false, message: 'Style must be food, reveal, studio, social, or fashion_studio.' });
     }
+    const additionalInstructions = sanitizeAdditionalInstructions(req.body?.additionalInstructions);
     const isFashionStyle = style === 'fashion_studio';
     const hasOrdinaryImage = !!singleImage && !frontImage && !backImage;
     const hasFashionPair = !!frontImage && !!backImage && !singleImage;
@@ -347,7 +365,7 @@ function createQuickAdsRouter({
         await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
           sourceBackImageUrl: secondSourceUrl, stage: 'creating_scene'
         } });
-        const frontPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('front'));
+        const frontPrompt = buildFashionImagePrompt('front', additionalInstructions);
         const frontCommercial = await runCommercialImageGeneration({
           fal,
           model: COMMERCIAL_IMAGE_MODEL,
@@ -369,7 +387,7 @@ function createQuickAdsRouter({
           commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url,
           'fashionImages.front': nextCommercialImage
         } });
-        const backPrompt = sanitizeVideoPrompt(buildFashionImagePrompt('back'));
+        const backPrompt = buildFashionImagePrompt('back', additionalInstructions);
         const backCommercial = await runCommercialImageGeneration({
           fal,
           model: COMMERCIAL_IMAGE_MODEL,
@@ -397,7 +415,7 @@ function createQuickAdsRouter({
         } });
         requestId = backCommercial.requestId;
       } else {
-        const commercialPrompt = sanitizeVideoPrompt(buildCommercialImagePrompt(style));
+        const commercialPrompt = buildCommercialImagePrompt(style, additionalInstructions);
         const commercialQueue = await fal.queue.submit(COMMERCIAL_IMAGE_MODEL, {
           input: {
             prompt: commercialPrompt,
@@ -432,7 +450,7 @@ function createQuickAdsRouter({
         await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
       }
       stage = 'creating_video';
-      const safePrompt = sanitizeVideoPrompt(buildQuickAdPrompt(style));
+      const safePrompt = buildQuickAdPrompt(style, additionalInstructions);
       const queued = await fal.queue.submit(VIDEO_MODEL, {
         input: { image_url: nextCommercialImage.url,
           ...(isFashionStyle ? { tail_image_url: fashionBackImage.url } : {}),
