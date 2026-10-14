@@ -28,9 +28,10 @@ test('the installed fal SDK supports the dynamic server-side import', async () =
   assert.equal(typeof fal.queue.result, 'function');
 });
 
-function form({ style = 'food', bytes = png, type = 'image/png', field = 'image', extra = false } = {}) {
+function form({ style = 'food', bytes = png, type = 'image/png', field = 'image', extra = false, additionalInstructions } = {}) {
   const body = new FormData();
   if (style !== null) body.append('style', style);
+  if (additionalInstructions !== undefined) body.append('additionalInstructions', additionalInstructions);
   if (bytes !== null) body.append(field, new Blob([bytes], { type }), 'product.png');
   if (extra) body.append('image', new Blob([png], { type: 'image/png' }), 'second.png');
   return body;
@@ -186,6 +187,33 @@ for (const [style, firstLine] of Object.entries(firstLines)) {
   });
 }
 
+test('additional instructions are passed to image and video prompts for every standard style', async t => {
+  const instructions = 'Keep the exact blue label and do not add pockets.';
+  for (const style of Object.keys(firstLines)) {
+    const f = await fixture(t);
+    const result = await f.send(form({ style, additionalInstructions: instructions }));
+    assert.equal(result.status, 200, `${style} request should succeed`);
+    const imageSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === 'fal-ai/nano-banana-2/edit');
+    const videoSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === MODEL);
+    assert.ok(imageSubmit[2].input.prompt.includes(instructions), `${style} image prompt includes user specifications`);
+    assert.ok(videoSubmit[2].input.prompt.includes(instructions), `${style} video prompt includes user specifications`);
+    assert.ok(imageSubmit[2].input.prompt.length <= 2200);
+    assert.ok(videoSubmit[2].input.prompt.length <= 2200);
+  }
+});
+
+test('additional instructions are trimmed and capped at 500 characters', async t => {
+  const instructions = '  ' + 'x'.repeat(600) + '  ';
+  const f = await fixture(t);
+  const result = await f.send(form({ style: 'studio', additionalInstructions: instructions }));
+  assert.equal(result.status, 200);
+  const imageSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === 'fal-ai/nano-banana-2/edit');
+  const videoSubmit = f.calls.find(c => c[0] === 'submit' && c[1] === MODEL);
+  assert.ok(imageSubmit[2].input.prompt.includes('x'.repeat(500)));
+  assert.ok(!imageSubmit[2].input.prompt.includes('x'.repeat(501)));
+  assert.ok(videoSubmit[2].input.prompt.includes('x'.repeat(500)));
+});
+
 test('authentication and current business role are required before any upload', async t => {
   const f = await fixture(t);
   assert.equal((await f.send(form(), null)).status, 401);
@@ -287,6 +315,7 @@ test('fashion studio accepts front and back images and preserves the dual-photo 
   const back = new Blob([png], { type: 'image/png' });
   const body = new FormData();
   body.append('style', 'fashion_studio');
+  body.append('additionalInstructions', 'Preserve the exact embroidery; do not add pockets.');
   body.append('frontImage', front, 'front.png');
   body.append('backImage', back, 'back.png');
 
@@ -309,6 +338,8 @@ test('fashion studio accepts front and back images and preserves the dual-photo 
   assert.equal(videoSubmit[2].input.image_url, saved.fashionImages.front.url);
   assert.equal(videoSubmit[2].input.tail_image_url, saved.fashionImages.back.url);
   assert.match(videoSubmit[2].input.prompt, /180-degree rotation from front to back/);
+  assert.ok(videoSubmit[2].input.prompt.includes('Preserve the exact embroidery; do not add pockets.'));
+  assert.ok(imageSubmits.every(call => call[2].input.prompt.includes('Preserve the exact embroidery; do not add pockets.')));
   assert.equal(result.body.imageUrl, saved.fashionImages.front.url);
   assert.equal(result.body.quickAdCredits, 0);
   assert.equal(f.calls.filter(c => c[0] === 'submit').length, 3);
