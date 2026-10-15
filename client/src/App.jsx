@@ -85,7 +85,7 @@ function App() {
             path="/company"
             element={
               <ProtectedRoute>
-                <DashboardShell><CompanyDashboard /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -115,7 +115,7 @@ function App() {
             path="/promoter-dashboard"
             element={
               <ProtectedRoute>
-                <DashboardShell><PromotionDashboard /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -124,7 +124,7 @@ function App() {
             path="/available-campaigns"
             element={
               <ProtectedRoute>
-                <DashboardShell><AvailableCampaigns /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -133,7 +133,7 @@ function App() {
             path="/submit-proof"
             element={
               <ProtectedRoute>
-                <DashboardShell><SubmitProof /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
