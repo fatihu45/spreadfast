@@ -10,7 +10,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import CompanyDashboard from './pages/CompanyDashboard';
 import QuickAd from './pages/QuickAd';
-import AICommercials from './pages/AICommercials';
+import AICommercials from './pages/AICommercials.jsx';
 import QuickAdCredits from './pages/QuickAdCredits';
 import AdminDashboard from './pages/AdminDashboard';
 import Wallet from './pages/Wallet';
