@@ -9,6 +9,7 @@ export const APP_PATHS = [
   '/dashboard', '/company', '/wallet', '/company/quick-ads', '/promoter/quick-ads',
   '/quick-ad', '/quickads', '/quickads/credits', '/promoter-dashboard',
   '/available-campaigns', '/submit-proof', '/admin-portal', '/campaigns',
+  '/ai-commercials', '/my-ads',
 ];
 export function metadataForPath(pathname) {
   const path = pathname.replace(/\/+$/, '') || '/';
@@ -17,7 +18,7 @@ export function metadataForPath(pathname) {
     canonical: `${SITE_URL}/`, robots: 'index, follow, max-image-preview:large',
   } : {
     title: APP_PATHS.includes(path) ? 'Your Account | SpreadFast' : 'Page Not Found | SpreadFast',
-    description: 'Manage your SpreadFast account, video ads and creator campaigns.',
+    description: 'Manage your SpreadFast account, AI commercials and video ads.',
     canonical: null, robots: 'noindex, nofollow',
   };
 }
