@@ -54,6 +54,10 @@ async function createCreativePlan({ productName, brandName, contact, specificati
       messages: [{
         role: 'user',
         content: [
+          ...(imageUrl ? [{
+            type: 'image',
+            source: { type: 'url', url: imageUrl }
+          }] : []),
           {
             type: 'text',
             text: JSON.stringify({
