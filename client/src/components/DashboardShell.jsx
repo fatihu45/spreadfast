@@ -15,17 +15,15 @@ export default function DashboardShell({ children }) {
   const openProfile = () => profile.current?.showModal();
   const handleLogout = () => { logout(); navigate('/'); };
   const item = (id, label, to, icon, active) => ({ id, label, to, icon: <UiIcon name={icon} />, active });
-  const navigation = isBusiness ? [
-    item('overview', 'Overview', '/company', 'home', location.pathname === '/company' && !location.hash),
-    item('campaigns', 'Campaigns', '/company#company-campaigns', 'campaign', location.pathname === '/company' && location.hash === '#company-campaigns'),
-    item('create', 'Create Campaign', '/company#create-campaign', 'plus', location.pathname === '/company' && location.hash === '#create-campaign'),
-  ] : [
-    item('dashboard', 'Dashboard', '/promoter-dashboard', 'home', ['/dashboard', '/promoter-dashboard'].includes(location.pathname)),
-    item('campaigns', 'Campaigns', '/available-campaigns', 'campaign', ['/available-campaigns', '/submit-proof'].includes(location.pathname)),
+  const quickAdsPath = isBusiness ? '/company/quick-ads' : '/promoter/quick-ads';
+  const navigation = [
+    item('create-ads', 'Create Ads', '/ai-commercials', 'video', ['/ai-commercials'].includes(location.pathname)),
+    item('quick-ads', 'Quick Ads', quickAdsPath, 'star',
+      ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads'].includes(location.pathname.replace(/\\/+$/, ''))),
+    item('my-ads', 'My Ads', '/my-ads', 'image', location.pathname === '/my-ads'),
+    item('credits', 'Credits', '/quickads/credits', 'wallet', location.pathname === '/quickads/credits'),
   ];
-  if (!isBusiness) navigation.push(item('wallet', 'Wallet', '/wallet', 'wallet'));
-  navigation.unshift(item('quick-ads', 'Quick Ads', isBusiness ? '/company/quick-ads' : '/promoter/quick-ads', 'video',
-    ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads', '/quickads/credits'].includes(location.pathname.replace(/\/+$/, ''))));
+  if (!isBusiness) navigation.push(item('wallet', 'Wallet', '/wallet', 'wallet', location.pathname === '/wallet'));
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
     { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
