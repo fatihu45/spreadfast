@@ -217,6 +217,7 @@ function createAiCommercialsRouter({
       });
 
       stage = 'creative_plan';
+      await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'preparing_image' } });
       const plan = await createPlan({ productName, brandName, contact, specifications, style, imageUrl: sourceImageUrl, tier });
       if (!Array.isArray(plan?.scenes) || plan.scenes.length !== 3) throw new Error('The creative plan did not contain exactly three scenes.');
       const scenes = [];
@@ -253,6 +254,7 @@ function createAiCommercialsRouter({
         if (!sceneImage?.secure_url?.startsWith('https://')) throw new Error(`Scene ${index + 1} image could not be saved.`);
 
         stage = 'creating_video';
+        await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'creating_video' } });
         const spokenDirection = index === 0 && plan.voiceover
           ? `Spoken narration, follow this script as closely as possible: "${plan.voiceover.slice(0, 900)}".`
           : '';
