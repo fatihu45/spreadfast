@@ -23,6 +23,19 @@ function toFileSizeLabel(size) {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
+function stageLabel(stage) {
+  const labels = {
+    queued: 'Queued',
+    preparing_image: 'Planning your commercial',
+    creating_scene: 'Creating scene images',
+    creating_video: 'Animating scenes',
+    finalizing: 'Assembling final video',
+    completed: 'Completed',
+    failed: 'Failed'
+  };
+  return labels[stage] || 'Processing';
+}
+
 function validateImageFile(file, label = 'Image') {
   if (!file) return `${label} is required.`;
   const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -238,7 +251,7 @@ export default function AICommercials({ initialTab = 'create' }) {
               <div key={job.generationId || job.id} className="sf-commercials__history-item">
                 <div>
                   <strong>{job.title || job.productName || job.style || 'AI commercial'}</strong>
-                  <small>{job.status === 'completed' ? 'Completed' : job.status || 'Processing'} · {job.style || 'Brand campaign'}</small>
+                  <small>{stageLabel(job.stage || job.status)} · {job.style || 'Brand campaign'}</small>
                   {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
                 </div>
                 {job.videoUrl || job.previewPath
