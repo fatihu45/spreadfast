@@ -180,8 +180,9 @@ export default function AICommercials({ initialTab = 'create' }) {
       if (logoFile) formData.append('logo', logoFile);
 
       if (!submissionKeyRef.current) {
-        submissionKeyRef.current = globalThis.crypto?.randomUUID?.()
-          || `commercial-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        submissionKeyRef.current = (window.crypto && typeof window.crypto.randomUUID === 'function')
+          ? window.crypto.randomUUID()
+          : `commercial-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
       const response = await fetch(`${API_URL}/api/ai-commercials/generate`, {
         method: 'POST',
