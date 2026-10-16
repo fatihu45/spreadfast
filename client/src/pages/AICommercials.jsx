@@ -256,19 +256,32 @@ export default function AICommercials({ initialTab = 'create' }) {
               const isCompleted = rawStatus === 'completed' || rawStatus === 'complete';
               const isFailed = rawStatus === 'failed' || rawStatus === 'error';
               const videoUrl = job.videoUrl || (job.previewPath ? `${API_URL}${job.previewPath}` : '');
+              const createdAt = job.completedAt || job.createdAt || job.updatedAt;
+              const dateLabel = createdAt && !Number.isNaN(new Date(createdAt).getTime())
+                ? new Date(createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                : '';
               return (
                 <article key={job.generationId || job.id} className="sf-commercials__history-item">
+                  {isCompleted && videoUrl ? (
+                    <div className="sf-commercials__history-media">
+                      <video src={videoUrl} controls playsInline preload="metadata" aria-label={`${title} commercial video`} />
+                    </div>
+                  ) : (
+                    <div className={`sf-commercials__history-media sf-commercials__history-media--placeholder ${isFailed ? 'is-failed' : ''}`} aria-label={isFailed ? 'Generation failed' : 'Video is processing'}>
+                      <UiIcon name={isFailed ? 'alert-circle' : 'video'} />
+                      <span>{isFailed ? 'Generation failed' : 'Your video is processing'}</span>
+                    </div>
+                  )}
                   <div className="sf-commercials__history-copy">
                     <strong>{title}</strong>
                     <span className={`sf-commercials__job-status ${isCompleted ? 'is-completed' : isFailed ? 'is-failed' : 'is-processing'}`}>
                       <i aria-hidden="true" /> {stageLabel(job.stage || job.status)}
                     </span>
-                    <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}</small>
+                    <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}{dateLabel ? ` · ${dateLabel}` : ''}</small>
                     {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
+                    {isCompleted && videoUrl && <a className="sf-commercials__history-link" href={videoUrl} target="_blank" rel="noreferrer">Open video in new tab <UiIcon name="arrow-right" /></a>}
+                    {isCompleted && !videoUrl && <span className="sf-commercials__history-result">Video link unavailable</span>}
                   </div>
-                  {isCompleted && videoUrl
-                    ? <a className="sf-commercials__history-link" href={videoUrl} target="_blank" rel="noreferrer">Open video <UiIcon name="arrow-right" /></a>
-                    : <span className={`sf-commercials__history-result ${isFailed ? 'is-failed' : ''}`}>{isFailed ? 'Generation failed' : isCompleted ? 'Video link unavailable' : 'In progress'}</span>}
                 </article>
               );
             })}
