@@ -160,3 +160,25 @@ test('premium generations reserve and deduct seven credits only after a successf
   assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 3);
   assert.equal((await f.db.QuickAdGeneration.findOne({ id: result.generationId })).creditsUsed, 7);
 });
+
+
+test('replaying the same idempotency key returns the completed commercial without paying providers twice', async t => {
+  const f = await fixture(t);
+  const key = 'retry-safe-commercial-001';
+  const first = await fetch(`${f.base}/api/ai-commercials/generate`, {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: form()
+  });
+  const firstResult = await first.json();
+  assert.equal(first.status, 200);
+  const callsAfterFirst = f.calls.length;
+
+  const second = await fetch(`${f.base}/api/ai-commercials/generate`, {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: form()
+  });
+  const secondResult = await second.json();
+  assert.equal(second.status, 200);
+  assert.equal(secondResult.generationId, firstResult.generationId);
+  assert.equal(secondResult.reused, true);
+  assert.equal(f.calls.length, callsAfterFirst);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdFreePreviewUsed, true);
+});
