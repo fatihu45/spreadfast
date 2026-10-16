@@ -19,7 +19,7 @@ export default function DashboardShell({ children }) {
   const navigation = [
     item('create-ads', 'Create Ads', '/ai-commercials', 'video', ['/ai-commercials'].includes(location.pathname)),
     item('quick-ads', 'Quick Ads', quickAdsPath, 'star',
-      ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads'].includes(location.pathname.replace(/\\/+$/, ''))),
+      ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads'].includes(location.pathname.replace(/\/+$/, ''))),
     item('my-ads', 'My Ads', '/my-ads', 'image', location.pathname === '/my-ads'),
     item('credits', 'Credits', '/quickads/credits', 'wallet', location.pathname === '/quickads/credits'),
   ];

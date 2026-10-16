@@ -23,11 +23,15 @@ function accountSummary(user) {
 const plain = doc => doc?.toObject ? doc.toObject() : doc;
 
 // One expiring account lock reserves eligibility, not money. No credit is debited here.
-async function beginGeneration(DB, { userId, key, style, model, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
+async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
+  if (!Number.isSafeInteger(creditCost) || creditCost < 1) fail('INVALID_CREDIT_COST', 'This generation has an invalid credit cost.', 400);
   return DB.withTransaction(async tx => {
     const previous = await tx.QuickAdGeneration.findOne({ userId, idempotencyKey: key });
     if (previous) {
-      if (previous.style !== style) fail('GENERATION_KEY_CONFLICT', 'Use a new request for a different ad style.');
+      if (previous.style !== style || (previous.model && previous.model !== model) ||
+        (previous.creditCost !== undefined && previous.creditCost !== creditCost)) {
+        fail('GENERATION_KEY_CONFLICT', 'Use a new request for different generation settings.');
+      }
       if (previous.status === 'completed') return { generation: plain(previous), reused: true };
       if (previous.status === 'pending' && new Date(previous.expiresAt).getTime() <= now) {
         fail('GENERATION_EXPIRED', 'This generation timed out. Please start a new request.');
@@ -41,14 +45,14 @@ async function beginGeneration(DB, { userId, key, style, model, leaseMs = 12 * 6
     if (user.quickAdGenerationLock && new Date(user.quickAdGenerationLockExpiresAt).getTime() > now) {
       fail('GENERATION_IN_PROGRESS', 'An ad is already being created. Please wait.');
     }
-    if (!account.freePreviewAvailable && account.quickAdCredits < 1) {
+    if (!account.freePreviewAvailable && account.quickAdCredits < creditCost) {
       fail('NO_QUICK_AD_CREDITS', 'You need Quick Ads credits to generate another ad.', 403);
     }
     if (user.quickAdGenerationLock) {
       await tx.QuickAdGeneration.updateOne({ id: user.quickAdGenerationLock, status: 'pending' },
         { $set: { status: 'failed', failureCode: 'LEASE_EXPIRED' } });
     }
-    const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model,
+    const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model, creditCost,
       provider: 'fal', status: 'pending', stage: 'queued', freePreview: account.freePreviewAvailable,
       creditUsed: false, downloadable: false, expiresAt: new Date(now + leaseMs) };
     await tx.User.updateOne({ id: userId }, { $set: {
@@ -73,14 +77,16 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatu
       fail('MEDIA_NOT_READY', 'Your video could not be prepared. No credit was used.', 502);
     }
     const free = generation.freePreview;
-    if (free ? !account.freePreviewAvailable : account.quickAdCredits < 1) fail('CREDIT_CONFLICT', 'Your credit account changed. No credit was used.');
-    if (account.quickAdsGenerated >= Number.MAX_SAFE_INTEGER || (!free && account.quickAdTotalCreditsUsed >= Number.MAX_SAFE_INTEGER)) {
+    const creditCost = generation.creditCost === undefined ? 1 : generation.creditCost;
+    if (!Number.isSafeInteger(creditCost) || creditCost < 1) fail('INVALID_CREDIT_ACCOUNT', 'Your credit account needs support.', 503);
+    if (free ? !account.freePreviewAvailable : account.quickAdCredits < creditCost) fail('CREDIT_CONFLICT', 'Your credit account changed. No credit was used.');
+    if (account.quickAdsGenerated >= Number.MAX_SAFE_INTEGER || (!free && account.quickAdTotalCreditsUsed > Number.MAX_SAFE_INTEGER - creditCost)) {
       fail('INVALID_CREDIT_ACCOUNT', 'Your credit account needs support.', 503);
     }
     await tx.User.updateOne({ id: userId }, { $set: {
       quickAdGenerationLock: null, quickAdGenerationLockExpiresAt: null,
       ...(free ? { quickAdFreePreviewUsed: true } : {})
-    }, $inc: { quickAdsGenerated: 1, ...(!free ? { quickAdCredits: -1, quickAdTotalCreditsUsed: 1 } : {}) } });
+    }, $inc: { quickAdsGenerated: 1, ...(!free ? { quickAdCredits: -creditCost, quickAdTotalCreditsUsed: creditCost } : {}) } });
     const completed = {
       status: 'completed',
       stage: 'completed',
@@ -89,13 +95,14 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatu
       media,
       ...(brandingStatus ? { brandingStatus } : {}),
       creditUsed: !free,
+      ...(free ? {} : { creditsUsed: creditCost }),
       downloadable: !free,
       completedAt: new Date(now)
     };
     await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: completed });
     if (!free) {
-      const balance = account.quickAdCredits - 1;
-      const field = balance === 1 ? 'quickAdsLowCreditNotified' : balance === 0 ? 'quickAdsZeroCreditNotified' : null;
+      const balance = account.quickAdCredits - creditCost;
+      const field = balance <= 1 ? (balance === 0 ? 'quickAdsZeroCreditNotified' : 'quickAdsLowCreditNotified') : null;
       if (field && !user[field]) {
         await tx.User.updateOne({ id: userId }, { $set: { [field]: true } });
         await enqueueEmail(tx, balance === 1 ? 'quick_low' : 'quick_zero', id, user, { balance });

@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import './AICommercials.css';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const TIER_COST = { standard: 4, premium: 7 };
 const styles = [
   { id: 'cinematic', title: 'Cinematic', description: 'Bold lighting and premium camera movement', icon: 'star' },
   { id: 'showcase', title: 'Product showcase', description: 'Clear, detail-first product presentation', icon: 'image' },
@@ -11,7 +14,29 @@ const styles = [
   { id: 'promo', title: 'Promotional', description: 'Energetic visuals for offers and launches', icon: 'zap' },
 ];
 
+function toFileSizeLabel(size) {
+  if (!size || size <= 0) return '0 KB';
+  const units = ['B', 'KB', 'MB'];
+  let value = size;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
+}
+
+function validateImageFile(file, label = 'Image') {
+  if (!file) return `${label} is required.`;
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
+    return 'Only JPG, PNG, and WEBP images are supported.';
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    return `${label} must be smaller than 8 MB.`;
+  }
+  return '';
+}
+
 export default function AICommercials({ initialTab = 'create' }) {
+  const { token, user } = useContext(AuthContext);
   const [tab, setTab] = useState(initialTab);
   const [productName, setProductName] = useState('');
   const [brandName, setBrandName] = useState('');
@@ -20,63 +45,273 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [style, setStyle] = useState('cinematic');
   const [tier, setTier] = useState('standard');
   const [photo, setPhoto] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
   const [logo, setLogo] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
   const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('Idle');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
+  const [jobs, setJobs] = useState([]);
+
+  const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
+  const hasFreePreview = balance.freePreviewAvailable === true;
+  const canAfford = hasFreePreview || Number(balance.quickAdCredits || 0) >= requiredCredits;
+
+  async function loadCredits() {
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/credits`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not load credit balance.');
+      setBalance({
+        quickAdCredits: Number(data.quickAdCredits || 0),
+        requiredCredits: Number(data.requiredCredits || requiredCredits),
+        ...data
+      });
+    } catch (loadError) {
+      setError(loadError.message || 'We could not load your credits.');
+    }
+  }
+
+  async function loadHistory() {
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not read your ads.');
+      setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+    } catch (historyError) {
+      setError(historyError.message || 'Could not load your previous ads.');
+    }
+  }
+
+  useEffect(() => {
+    loadCredits();
+  }, [token, tier]);
+
+  useEffect(() => {
+    if (tab === 'history') loadHistory();
+  }, [tab, token]);
+
+  const handlePhotoChange = (input) => {
+    const file = input?.files?.[0] || null;
+    const validation = validateImageFile(file, 'Product photo');
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setPhotoFile(file);
+    setPhoto(URL.createObjectURL(file));
+    setError('');
+    setNotice('');
+  };
+
+  const handleLogoChange = (input) => {
+    const file = input?.files?.[0] || null;
+    const validation = validateImageFile(file, 'Logo');
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setLogoFile(file);
+    setLogo(URL.createObjectURL(file));
+    setError('');
+  };
+
+  const handleSubmit = async () => {
+    if (!token) {
+      setError('Please log in before generating a commercial.');
+      return;
+    }
+    if (!photoFile) {
+      setError('Upload a product photo before generating.');
+      return;
+    }
+    if (!productName.trim() || !brandName.trim()) {
+      setError('Product name and brand name are required.');
+      return;
+    }
+    if (!canAfford) {
+      setError(`You need at least ${requiredCredits} credits for this tier. Buy more credits to continue.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+    setNotice('');
+    setStatus('Preparing your brief');
+
+    try {
+      const formData = new FormData();
+      formData.append('productName', productName.trim());
+      formData.append('brandName', brandName.trim());
+      formData.append('contact', contact.trim());
+      formData.append('specifications', specifications.trim());
+      formData.append('style', style);
+      formData.append('tier', tier);
+      formData.append('productImage', photoFile);
+      if (logoFile) formData.append('logo', logoFile);
+
+      const response = await fetch(`${API_URL}/api/ai-commercials/generate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Commercial generation failed. Please try again.');
+      }
+
+      setStatus('Commercial ready');
+      setNotice('Your AI commercial is ready to review.');
+      setTab('history');
+      await loadCredits();
+      await loadHistory();
+      setError('');
+      setIsSubmitting(false);
+      return data;
+    } catch (submitError) {
+      setStatus('Retry needed');
+      setError(submitError.message || 'Commercial generation failed.');
+      setNotice('Please fix the issue and try again.');
+      setIsSubmitting(false);
+      return null;
+    }
+  };
+
+  const styleLabel = styles.find(item => item.id === style)?.title || 'Cinematic';
 
   return <main className="sf-commercials">
     <header className="sf-commercials__header">
-      <div><span className="sf-commercials__eyebrow">SPREADFAST AI STUDIO</span><h1>{tab === 'history' ? 'My Ads' : 'Create an AI commercial'}</h1>
-        <p>Turn a product photo into a polished, scene-by-scene video advert.</p></div>
-      <div className="sf-commercials__actions"><Link to="/company/quick-ads" className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link><Link to="/quickads/credits" className="sf-commercials__credit"><UiIcon name="wallet" /> Buy credits</Link></div>
+      <div>
+        <span className="sf-commercials__eyebrow">SPREADFAST AI STUDIO</span>
+        <h1>{tab === 'history' ? 'My Ads' : 'Create an AI commercial'}</h1>
+        <p>Turn a product photo into a polished, scene-by-scene video advert.</p>
+      </div>
+      <div className="sf-commercials__actions">
+        <Link to="/company/quick-ads" className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link>
+        <Link to="/quickads/credits" className="sf-commercials__credit"><UiIcon name="wallet" /> Buy credits</Link>
+      </div>
     </header>
+
     <div className="sf-commercials__tabs" role="tablist" aria-label="Ad workspace">
       <button type="button" role="tab" aria-selected={tab === 'create'} className={tab === 'create' ? 'is-active' : ''} onClick={() => setTab('create')}>Create commercial</button>
       <button type="button" role="tab" aria-selected={tab === 'history'} className={tab === 'history' ? 'is-active' : ''} onClick={() => setTab('history')}>My Ads</button>
     </div>
-    {tab === 'history' ? <Card className="sf-commercials__empty"><span className="sf-commercials__empty-icon"><UiIcon name="video" /></span><h2>Your ads will live here</h2><p>Completed AI commercials and Quick Ads will be available here as history integration is connected.</p><Button onClick={() => setTab('create')}>Create a commercial</Button></Card> : <>
-      <div className="sf-commercials__layout">
-        <div className="sf-commercials__form">
-          <section className="sf-commercials__panel">
-            <div className="sf-commercials__step"><span>1</span><div><h2>Product details</h2><p>Start with a clear image of the product you want to advertise.</p></div></div>
-            <label className="sf-commercials__upload">
-              {photo ? <><img src={photo} alt="Selected product preview" /><span className="sf-commercials__change">Change photo</span></> : <><span className="sf-commercials__upload-icon"><UiIcon name="image" /></span><strong>Upload product photo</strong><span>JPG, PNG or WEBP · Use a clear, well-lit image</span></>}
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { const file=e.target.files?.[0]; if(file){if(file.size>8*1024*1024){setNotice('Choose an image smaller than 8 MB.');return;}setPhoto(URL.createObjectURL(file));setNotice('');} }} />
-            </label>
-            <div className="sf-commercials__fields">
-              <label>Product name<input value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Signature leather bag" maxLength={100}/></label>
-              <label>Brand name<input value={brandName} onChange={e=>setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100}/></label>
-              <label>Contact / call to action<input value={contact} onChange={e=>setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120}/></label>
+
+    {tab === 'history' ? (
+      <Card className="sf-commercials__empty">
+        {jobs.length > 0 ? (
+          <div className="sf-commercials__history-list">
+            {jobs.map(job => (
+              <div key={job.generationId || job.id} className="sf-commercials__history-item">
+                <div>
+                  <strong>{job.title || job.productName || job.style || 'AI commercial'}</strong>
+                  <small>{job.status === 'completed' ? 'Completed' : job.status || 'Processing'} · {job.style || 'Brand campaign'}</small>
+                  {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
+                </div>
+                {job.videoUrl || job.previewPath
+                  ? <a href={job.videoUrl || `${API_URL}${job.previewPath}`} target="_blank" rel="noreferrer">{job.previewPath ? 'Preview video' : 'Open video'}</a>
+                  : <span>{job.status === 'failed' ? 'Failed' : 'Processing'}</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            <span className="sf-commercials__empty-icon"><UiIcon name="video" /></span>
+            <h2>Your ads will live here</h2>
+            <p>Completed AI commercials and Quick Ads will appear here once a generation is finished.</p>
+            <Button onClick={() => setTab('create')}>Create a commercial</Button>
+          </>
+        )}
+      </Card>
+    ) : (
+      <>
+        <div className="sf-commercials__layout">
+          <div className="sf-commercials__form">
+            <section className="sf-commercials__panel">
+              <div className="sf-commercials__step"><span>1</span><div><h2>Product details</h2><p>Start with a clear image of the product you want to advertise.</p></div></div>
+              <label className="sf-commercials__upload">
+                {photo ? <><img src={photo} alt="Selected product preview" /><span className="sf-commercials__change">Change photo</span></> : <><span className="sf-commercials__upload-icon"><UiIcon name="image" /></span><strong>Upload product photo</strong><span>JPG, PNG or WEBP · Use a clear, well-lit image</span></>}
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => handlePhotoChange(e.target)} />
+              </label>
+              <div className="sf-commercials__fields">
+                <label>Product name<input value={productName} onChange={e => setProductName(e.target.value)} placeholder="e.g. Signature leather bag" maxLength={100} /></label>
+                <label>Brand name<input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100} /></label>
+                <label>Contact / call to action<input value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120} /></label>
+              </div>
+              <div className="sf-commercials__spec">
+                <label htmlFor="commercial-specs">Product specifications <span>Optional</span></label>
+                <p id="commercial-specs-help">Tell the AI what must stay accurate. These details should guide every scene.</p>
+                <textarea id="commercial-specs" value={specifications} onChange={e => setSpecifications(e.target.value.slice(0,500))} maxLength={500} rows={4} placeholder="Preserve the exact colour, shape, fabric, stitching, labels and packaging. Do not invent or remove product details." aria-describedby="commercial-specs-help commercial-specs-count" />
+                <div className="sf-commercials__spec-footer"><span>Product accuracy first</span><span id="commercial-specs-count">{specifications.length}/500</span></div>
+              </div>
+              <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional brand mark for your final commercial.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => handleLogoChange(e.target)} /></label></div>
+            </section>
+
+            <section className="sf-commercials__panel">
+              <div className="sf-commercials__step"><span>2</span><div><h2>Choose your creative direction</h2><p>Set the mood for your commercial.</p></div></div>
+              <div className="sf-commercials__styles">{styles.map(item => <button type="button" key={item.id} onClick={() => setStyle(item.id)} className={'sf-commercials__style ' + (style === item.id ? 'is-selected' : '')}><span><UiIcon name={item.icon} /></span><strong>{item.title}</strong><small>{item.description}</small>{style === item.id && <b aria-label="Selected">✓</b>}</button>)}</div>
+            </section>
+
+            <section className="sf-commercials__panel">
+              <div className="sf-commercials__step"><span>3</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
+              <div className="sf-commercials__tiers">
+                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{hasFreePreview ? 'Free preview' : '4 credits'}</b></button>
+                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{hasFreePreview ? 'Free preview' : '7 credits'}</b></button>
+              </div>
+            </section>
+
+            {(notice || error) && <p className={error ? 'sf-commercials__notice sf-commercials__notice--error' : 'sf-commercials__notice'} role="status">{error || notice}</p>}
+            <div className="sf-commercials__status-bar">
+              <span className="sf-commercials__status-label">Status</span>
+              <strong>{status}</strong>
+              <small>{user?.role ? `Balance: ${balance.quickAdCredits || 0} credits` : 'Log in to view your credit balance'}</small>
             </div>
-            <div className="sf-commercials__spec">
-              <label htmlFor="commercial-specs">Product specifications <span>Optional</span></label>
-              <p id="commercial-specs-help">Tell the AI what must stay accurate. These details should guide every scene.</p>
-              <textarea id="commercial-specs" value={specifications} onChange={e=>setSpecifications(e.target.value.slice(0,500))} maxLength={500} rows={4} placeholder="Preserve the exact colour, shape, fabric, stitching, labels and packaging. Do not invent or remove product details." aria-describedby="commercial-specs-help commercial-specs-count"/>
-              <div className="sf-commercials__spec-footer"><span>Product accuracy first</span><span id="commercial-specs-count">{specifications.length}/500</span></div>
+
+            <Button fullWidth size="lg" disabled={isSubmitting || !canAfford} onClick={handleSubmit}>
+              <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${hasFreePreview ? 'free preview' : `${requiredCredits} credits`}`}
+            </Button>
+            {!canAfford && <p className="sf-commercials__footnote">You have {balance.quickAdCredits || 0} credits available. Buy more to generate this ad.</p>}
+            {hasFreePreview && <p className="sf-commercials__footnote">Your one free preview is available. Paid generations use the selected tier credits.</p>}
+            {!hasFreePreview && <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>}
+          </div>
+
+          <aside className="sf-commercials__preview">
+            <div className="sf-commercials__preview-top"><span>PREVIEW</span><span className="sf-commercials__live"><i/> Live setup</span></div>
+            <div className="sf-commercials__preview-stage">
+              {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a product photo to preview your creative setup.</p></div>}
+              <span className="sf-commercials__duration">Up to 24 sec commercial</span>
             </div>
-            <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional brand mark for your final commercial.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>setLogo(e.target.files?.[0] || null)}/></label></div>
-          </section>
-          <section className="sf-commercials__panel">
-            <div className="sf-commercials__step"><span>2</span><div><h2>Choose your creative direction</h2><p>Set the mood for your commercial.</p></div></div>
-            <div className="sf-commercials__styles">{styles.map(item=><button type="button" key={item.id} onClick={()=>setStyle(item.id)} className={'sf-commercials__style '+(style===item.id?'is-selected':'')}><span><UiIcon name={item.icon}/></span><strong>{item.title}</strong><small>{item.description}</small>{style===item.id&&<b aria-label="Selected">✓</b>}</button>)}</div>
-          </section>
-          <section className="sf-commercials__panel">
-            <div className="sf-commercials__step"><span>3</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
-            <div className="sf-commercials__tiers">
-              <button type="button" onClick={()=>setTier('standard')} className={tier==='standard'?'is-selected':''}><span className="sf-commercials__tier-check">{tier==='standard'?'✓':''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>4 credits</b></button>
-              <button type="button" onClick={()=>setTier('premium')} className={tier==='premium'?'is-selected':''}><span className="sf-commercials__tier-check">{tier==='premium'?'✓':''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>7 credits</b></button>
+            <div className="sf-commercials__preview-details">
+              <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
+              <div><span>BRAND</span><strong>{brandName || 'Your brand'}</strong></div>
+              <div><span>STYLE</span><strong>{styleLabel}</strong></div>
+              <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · ${hasFreePreview ? 'free preview' : '4 credits'}` : `Premium · ${hasFreePreview ? 'free preview' : '7 credits'}`}</strong></div>
             </div>
-          </section>
-          {notice&&<p className="sf-commercials__notice" role="status">{notice}</p>}
-          <Button fullWidth size="lg" onClick={()=>setNotice('The AI Commercials generation service is not connected yet. Your selected settings have not been submitted and no credits have been used.')}><UiIcon name="sparkles" /> Generate commercial · {tier==='standard'?'4':'7'} credits</Button>
-          <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed. Prices are shown on the credit purchase page.</p>
+            <div className="sf-commercials__scene-note">
+              <span><UiIcon name="sparkles" /></span>
+              <div>
+                <strong>Scene-by-scene creation</strong>
+                <p>Claude directs three scenes, Nano Banana creates the scene images, and Veo animates each before final assembly and branding.</p>
+              </div>
+            </div>
+            {logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
+            {photoFile && <small className="sf-commercials__file-meta">Product: {toFileSizeLabel(photoFile.size)}</small>}
+            {logoFile && <small className="sf-commercials__file-meta">Logo: {toFileSizeLabel(logoFile.size)}</small>}
+          </aside>
         </div>
-        <aside className="sf-commercials__preview">
-          <div className="sf-commercials__preview-top"><span>PREVIEW</span><span className="sf-commercials__live"><i/> Live setup</span></div>
-          <div className="sf-commercials__preview-stage">{photo?<img src={photo} alt="Product preview"/>:<div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a product photo to preview your creative setup.</p></div>}<span className="sf-commercials__duration">~30 sec commercial</span></div>
-          <div className="sf-commercials__preview-details"><div><span>PRODUCT</span><strong>{productName||'Your product'}</strong></div><div><span>BRAND</span><strong>{brandName||'Your brand'}</strong></div><div><span>STYLE</span><strong>{styles.find(s=>s.id===style)?.title}</strong></div><div><span>QUALITY</span><strong>{tier==='standard'?'Standard · 4 credits':'Premium · 7 credits'}</strong></div></div>
-          <div className="sf-commercials__scene-note"><span><UiIcon name="sparkles" /></span><div><strong>Scene-by-scene creation</strong><p>Your planned workflow: creative direction, product scene images, motion, then final assembly and branding.</p></div></div>
-        </aside>
-      </div>
-    </>}
+      </>
+    )}
   </main>;
 }

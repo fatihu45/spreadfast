@@ -58,9 +58,11 @@ async function renderBranding(client, generation, branding, previewTransformatio
   const media = generation.media;
   const originalOutputUrl = media.originalOutputUrl || media.outputUrl;
   const transform = brandingTransformation(branding);
+  const baseTransformation = Array.isArray(media.transformations) ? media.transformations : [];
+  const brandedTransformation = [...baseTransformation, ...transform, { video_codec: 'h264' }];
   const eager = [];
-  if (transform.length) eager.push({ transformation: [...transform, { video_codec: 'h264' }], format: 'mp4' });
-  if (generation.freePreview) eager.push({ transformation: [...transform, ...previewTransformation], format: 'mp4' });
+  if (transform.length || baseTransformation.length) eager.push({ transformation: brandedTransformation, format: 'mp4' });
+  if (generation.freePreview) eager.push({ transformation: [...baseTransformation, ...transform, ...previewTransformation], format: 'mp4' });
   if (!eager.length) return { ...media, originalOutputUrl, outputUrl: originalOutputUrl };
   const rendered = await client.uploader.explicit(media.publicId, { resource_type: 'video', type: 'authenticated',
     eager, eager_async: false, timeout: 120000 });
@@ -68,7 +70,7 @@ async function renderBranding(client, generation, branding, previewTransformatio
   if (urls.length !== eager.length || urls.some(url => typeof url !== 'string' || !url.startsWith('https://') || !url.includes('/video/authenticated/'))) {
     throw new Error('Branded video could not be prepared');
   }
-  return { ...media, originalOutputUrl, outputUrl: transform.length ? urls[0] : originalOutputUrl,
+  return { ...media, originalOutputUrl, outputUrl: transform.length || baseTransformation.length ? urls[0] : originalOutputUrl,
     ...(generation.freePreview ? { previewUrl: urls[urls.length - 1] } : {}) };
 }
 module.exports = { MAX_LOGO_SIZE, readBranding, uploadBranding, brandingTransformation, publicBranding, renderBranding };

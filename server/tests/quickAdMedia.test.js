@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const express = require('express');
 const { quickAdsDb } = require('./helpers/quickAdsDb');
 const { createQuickAdMediaRouter } = require('../routes/quickAdMedia');
-const { publicGeneration, storeVideo, streamVideo } = require('../services/quickAdMedia');
+const { publicGeneration, storeVideo, assembleVideos, streamVideo } = require('../services/quickAdMedia');
 const prior = process.env.JWT_SECRET;
 test.before(() => { process.env.JWT_SECRET = 'test-only-media-secret'; });
 test.after(() => { if (prior === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = prior; });
@@ -97,6 +97,32 @@ test('a stalled protected upload aborts promptly instead of keeping generation p
 test('missing protected derivative fails closed instead of displaying the original', async () => {
   const client = { uploader: { upload: async () => ({ public_id: 'ad', version: 1 }) }, url: () => 'https://private.example/original.mp4' };
   await assert.rejects(storeVideo(client, 'https://fal.example/video', { id: 'ad', freePreview: true }, new AbortController().signal), /preview was not prepared/);
+});
+
+test('commercial scenes are spliced in order and CTA output remains authenticated', async () => {
+  let uploaded;
+  const client = {
+    uploader: {
+      explicit: async (publicId, options) => {
+        uploaded = { publicId, options };
+        return { public_id: publicId, eager: [{ secure_url: 'https://res.cloudinary.com/test/video/authenticated/final.mp4' }] };
+      }
+    }
+  };
+  const clips = [
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-1' },
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-2' },
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-3' }
+  ];
+  const result = await assembleVideos(client, clips, 'ad', 'Visit brand.example');
+  assert.equal(uploaded.publicId, clips[0].publicId);
+  const transformations = uploaded.options.eager[0].transformation;
+  assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay.public_id), [
+    'video:spreadfast:quick-ads:videos:ad-scene-2',
+    'video:spreadfast:quick-ads:videos:ad-scene-3'
+  ]);
+  assert.ok(transformations.some(item => item.overlay?.text === 'Visit brand.example'));
+  assert.equal(result.outputUrl, 'https://res.cloudinary.com/test/video/authenticated/final.mp4');
 });
 
 test('interrupted generation recovery is owner-scoped and reports expired reservations safely', async t => {

@@ -41,6 +41,22 @@ test('paid generation deducts once only after success, including repeated comple
   assert.equal(account.quickAdCredits, 0); assert.equal(account.quickAdTotalCreditsUsed, 1); assert.equal(account.quickAdsGenerated, 1);
   await assert.rejects(begin(DB, 'attempt-2'), { code: 'NO_QUICK_AD_CREDITS', statusCode: 403 });
 });
+test('paid generation deducts its requested tier cost only after success', async () => {
+  const DB = quickAdsDb([{ ...user, quickAdCredits: 8, quickAdFreePreviewUsed: true }]);
+  const { generation } = await begin(DB, 'tier-standard', { creditCost: 4 });
+  assert.equal(generation.creditCost, 4);
+  const done = await finish(DB, generation);
+  assert.equal(done.creditsUsed, 4);
+  const account = accountSummary(await DB.User.findOne({ id: user.id }));
+  assert.equal(account.quickAdCredits, 4);
+  assert.equal(account.quickAdTotalCreditsUsed, 4);
+
+  await assert.rejects(
+    begin(DB, 'tier-premium', { creditCost: 7 }),
+    { code: 'NO_QUICK_AD_CREDITS', statusCode: 403 }
+  );
+  assert.equal((await DB.User.findOne({ id: user.id })).quickAdGenerationLock, null);
+});
 test('concurrent requests cannot reserve the same preview or paid credit twice', async () => {
   for (const initial of [{ ...user }, { ...user, quickAdFreePreviewUsed: true, quickAdCredits: 1 }]) {
     const DB = quickAdsDb([initial]);

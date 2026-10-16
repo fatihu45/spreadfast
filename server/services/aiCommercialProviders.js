@@ -1,8 +1,40 @@
+const { setTimeout: delay } = require('node:timers/promises');
+
 const DEFAULT_CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929';
+const IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'fal-ai/nano-banana-2/edit';
 const VEO_MODELS = Object.freeze({
-  standard: 'fal-ai/veo3.1/image-to-video',
-  premium: 'fal-ai/veo3.1/fast/image-to-video'
+  standard: 'fal-ai/veo3.1/fast/image-to-video',
+  premium: 'fal-ai/veo3.1/image-to-video'
 });
+
+function isHttpsUrl(value) {
+  if (typeof value !== 'string') return false;
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+}
+
+async function loadFalClient() {
+  const credentials = requiredEnv('FAL_KEY');
+  const { createFalClient } = await import('@fal-ai/client');
+  return createFalClient({ credentials });
+}
+
+async function runQueuedFalJob(fal, model, input, { signal, pollIntervalMs = 1500, onSubmitted } = {}) {
+  const queued = await fal.queue.submit(model, { input, ...(signal ? { abortSignal: signal } : {}) });
+  const requestId = queued?.request_id;
+  if (typeof requestId !== 'string' || !requestId.trim()) throw new Error('The AI provider did not return a request ID.');
+  if (onSubmitted) await onSubmitted(requestId);
+  while (true) {
+    if (signal?.aborted) signal.throwIfAborted();
+    const status = await fal.queue.status(model, { requestId, logs: false, ...(signal ? { abortSignal: signal } : {}) });
+    if (status?.status === 'COMPLETED') break;
+    if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) {
+      throw new Error(`The AI provider job ended with status ${String(status?.status || 'unknown')}.`);
+    }
+    await delay(pollIntervalMs, undefined, signal ? { signal } : {});
+  }
+  const result = await fal.queue.result(model, { requestId, ...(signal ? { abortSignal: signal } : {}) });
+  return { requestId, data: result?.data };
+}
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -87,7 +119,7 @@ async function createCreativePlan({ productName, brandName, contact, specificati
   if (!response.ok) {
     const error = new Error('Creative planning provider request failed.');
     error.code = 'CLAUDE_REQUEST_FAILED';
-    error.status = response.status === 429 ? 503 : 502;
+    error.statusCode = response.status === 429 ? 503 : 502;
     error.providerStatus = response.status;
     throw error;
   }
@@ -102,38 +134,52 @@ async function createCreativePlan({ productName, brandName, contact, specificati
     motionPrompt: String(scene.motionPrompt || '').slice(0, 1800),
     durationSeconds: Math.min(8, Math.max(6, Number(scene.durationSeconds) || 8))
   }));
+  plan.title = String(plan.title || `${brandName} ${productName} Commercial`).slice(0, 120);
+  plan.voiceover = String(plan.voiceover || '').slice(0, 1200);
+  plan.endCard = String(plan.endCard || '').slice(0, 300);
   return plan;
 }
 
-/**
- * Uses fal's existing server-side SDK and queue. Standard = Veo 3.1;
- * Premium = Veo 3.1 Fast (less expensive, faster generation).
- * The model endpoint returns a single clip (up to 8 seconds), not a finished
- * 30-second edit; scene stitching and final-card rendering are separate stages.
- */
-async function generateVeoClip({ imageUrl, prompt, tier = 'standard', onQueueUpdate }) {
-  const credentials = requiredEnv('FAL_KEY');
-  if (!VEO_MODELS[tier]) throw new Error('Unsupported AI Commercials quality tier.');
-  if (!/^https:\/\//i.test(String(imageUrl || ''))) throw new Error('A public HTTPS image URL is required.');
-
-  const { createFalClient } = await import('@fal-ai/client');
-  const fal = createFalClient({ credentials });
-  const result = await fal.subscribe(VEO_MODELS[tier], {
-    input: {
-      image_url: imageUrl,
-      prompt: String(prompt || '').slice(0, 1800),
-      aspect_ratio: '9:16',
-      duration: '8s',
-      generate_audio: false
-    },
-    logs: false,
-    onQueueUpdate
-  });
-  const videoUrl = result?.data?.video?.url;
-  if (!/^https:\/\//i.test(String(videoUrl || ''))) {
-    throw new Error('Veo returned no valid video URL.');
-  }
-  return { videoUrl, requestId: result.requestId || null, model: VEO_MODELS[tier] };
+async function generateNanoBananaImage({ imageUrl, prompt, fal: providedFal, signal, onSubmitted }) {
+  if (!isHttpsUrl(imageUrl)) throw new Error('A public HTTPS source image is required.');
+  const fal = providedFal || await loadFalClient();
+  const { requestId, data } = await runQueuedFalJob(fal, IMAGE_MODEL, {
+    prompt: String(prompt || '').slice(0, 2200),
+    image_urls: [imageUrl],
+    num_images: 1,
+    aspect_ratio: '9:16',
+    resolution: '1K',
+    output_format: 'png',
+    limit_generations: true
+  }, { signal, onSubmitted });
+  const generatedUrl = data?.images?.[0]?.url || data?.image?.url || data?.image_url || data?.url || data?.output?.url;
+  if (!isHttpsUrl(generatedUrl)) throw new Error('Nano Banana returned no valid scene image URL.');
+  return { imageUrl: generatedUrl, requestId, model: IMAGE_MODEL };
 }
 
-module.exports = { createCreativePlan, generateVeoClip, VEO_MODELS };
+/**
+ * Standard uses Veo Fast; Premium uses the full Veo endpoint. Each call returns
+ * one clip of up to 8 seconds, which the route assembles with the other scenes.
+ */
+async function generateVeoClip({ imageUrl, prompt, tier = 'standard', fal: providedFal, signal, onSubmitted, onQueueUpdate }) {
+  if (!VEO_MODELS[tier]) throw new Error('Unsupported AI Commercials quality tier.');
+  if (!isHttpsUrl(imageUrl)) throw new Error('A public HTTPS scene image URL is required.');
+  const fal = providedFal || await loadFalClient();
+  const { requestId, data } = await runQueuedFalJob(fal, VEO_MODELS[tier], {
+    image_url: imageUrl,
+    prompt: String(prompt || '').slice(0, 1800),
+    aspect_ratio: '9:16',
+    duration: '8s',
+    generate_audio: true
+  }, { signal, onSubmitted: async id => {
+    if (onSubmitted) await onSubmitted(id);
+    if (onQueueUpdate) await onQueueUpdate({ status: 'IN_PROGRESS', requestId: id });
+  } });
+  const videoUrl = data?.video?.url;
+  if (!isHttpsUrl(videoUrl)) {
+    throw new Error('Veo returned no valid video URL.');
+  }
+  return { videoUrl, requestId, model: VEO_MODELS[tier] };
+}
+
+module.exports = { createCreativePlan, generateNanoBananaImage, generateVeoClip, runQueuedFalJob, IMAGE_MODEL, VEO_MODELS };
