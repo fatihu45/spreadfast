@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
@@ -54,6 +54,8 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
   const [jobs, setJobs] = useState([]);
+  // Reuse the same key if the browser loses the response after the server accepted the job.
+  const submissionKeyRef = useRef(null);
 
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
   const hasFreePreview = balance.freePreviewAvailable === true;
@@ -98,7 +100,11 @@ export default function AICommercials({ initialTab = 'create' }) {
   }, [token, tier]);
 
   useEffect(() => {
-    if (tab === 'history') loadHistory();
+    if (tab !== 'history') return undefined;
+    loadHistory();
+    // Long-running AI jobs may finish after the initial page load; keep history fresh.
+    const timer = window.setInterval(() => loadHistory(), 5000);
+    return () => window.clearInterval(timer);
   }, [tab, token]);
 
   const handlePhotoChange = (input) => {
@@ -160,18 +166,33 @@ export default function AICommercials({ initialTab = 'create' }) {
       formData.append('productImage', photoFile);
       if (logoFile) formData.append('logo', logoFile);
 
+      if (!submissionKeyRef.current) {
+        submissionKeyRef.current = globalThis.crypto?.randomUUID?.()
+          || `commercial-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
       const response = await fetch(`${API_URL}/api/ai-commercials/generate`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Idempotency-Key': submissionKeyRef.current
+        },
         credentials: 'include',
         body: formData
       });
 
       const data = await response.json();
       if (!response.ok || !data.success) {
+        // A definite server response means this attempt ended; a network exception below
+        // deliberately keeps the key so a retry cannot accidentally start a second paid job.
+        submissionKeyRef.current = null;
+        if (response.status === 409) {
+          await loadHistory();
+          setTab('history');
+        }
         throw new Error(data.message || 'Commercial generation failed. Please try again.');
       }
 
+      submissionKeyRef.current = null;
       setStatus('Commercial ready');
       setNotice('Your AI commercial is ready to review.');
       setTab('history');
