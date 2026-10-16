@@ -44,6 +44,49 @@ async function storeVideo(cloudinary, videoUrl, generation, signal) {
   }
   return { publicId: uploaded.public_id, outputUrl, ...(previewUrl ? { previewUrl } : {}) };
 }
+function videoLayerId(publicId) {
+  return String(publicId).split('/').join(':');
+}
+async function assembleVideos(cloudinary, clips, generationId, endCardText = '') {
+  if (!Array.isArray(clips) || clips.length < 1 || clips.some(clip => !clip?.publicId)) {
+    throw new Error('All scene videos must be stored before assembly.');
+  }
+  const transformations = [];
+  for (const clip of clips.slice(1)) {
+    transformations.push(
+      { overlay: { public_id: `video:${videoLayerId(clip.publicId)}`, type: 'authenticated' }, flags: 'splice' },
+      { width: 720, height: 1280, crop: 'fill' },
+      { flags: 'layer_apply' }
+    );
+  }
+  if (endCardText) {
+    transformations.push(
+      { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 120) },
+        color: 'white', background: '#18231e' },
+      { width: 640, height: 180, crop: 'fit' },
+      { flags: 'layer_apply', gravity: 'south', y: 80 }
+    );
+  }
+  transformations.push({ video_codec: 'h264' });
+  const base = clips[0].publicId;
+  const result = await cloudinary.uploader.explicit(base, {
+    resource_type: 'video',
+    type: 'authenticated',
+    eager: [{ transformation: transformations, format: 'mp4' }],
+    eager_async: false,
+    timeout: 300000
+  });
+  const outputUrl = result?.eager?.[0]?.secure_url;
+  if (!result?.public_id || !outputUrl?.startsWith('https://') || !outputUrl.includes('/video/authenticated/')) {
+    throw new Error('The final commercial video could not be assembled as protected media.');
+  }
+  return {
+    publicId: base,
+    outputUrl,
+    originalOutputUrl: outputUrl,
+    transformations
+  };
+}
 // Keep trial provenance and credit accounting unchanged; verified lifetime purchases
 // grant access even after the customer spends their remaining balance.
 function canDownloadGeneration(generation, user) {
@@ -59,6 +102,21 @@ function publicGeneration(generation, user) {
     brandingRetryAvailable: generation.status === 'completed' && generation.brandingStatus === 'failed',
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
+  if (generation.provider === 'ai-commercials' && generation.commercialDetails) {
+    result.productName = generation.commercialDetails.productName;
+    result.brandName = generation.commercialDetails.brandName;
+    result.contact = generation.commercialDetails.contact;
+    result.tier = generation.commercialDetails.tier;
+    result.requiredCredits = generation.commercialDetails.requiredCredits;
+    result.title = generation.commercialDetails.title;
+    result.voiceover = generation.commercialDetails.voiceover;
+    result.endCard = generation.commercialDetails.endCard;
+    result.sceneImages = (generation.sceneAssets || []).map(scene => ({
+      imageUrl: scene.imageUrl,
+      purpose: scene.purpose,
+      durationSeconds: scene.durationSeconds
+    }));
+  }
   const commercialImageUrl = generation.commercialImage?.url || generation.imageUrl;
   // Return only generated image previews, never source uploads or internal metadata.
   if (commercialImageUrl) result.imageUrl = commercialImageUrl;
@@ -110,4 +168,4 @@ async function streamVideo(req, res, url, download = false, http = axios) {
     else if (!res.destroyed) res.destroy();
   }
 }
-module.exports = { canDownloadGeneration, storeVideo, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo, PREVIEW_TRANSFORMATION };
+module.exports = { canDownloadGeneration, storeVideo, assembleVideos, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo, PREVIEW_TRANSFORMATION };

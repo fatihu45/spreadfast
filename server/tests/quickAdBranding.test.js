@@ -91,3 +91,25 @@ test('missing authenticated derivatives fail closed', async () => {
   await assert.rejects(renderBranding({ uploader: { explicit: async () => ({ eager: [{ secure_url: 'https://example.com/public.mp4' }] }) } },
     { media: { publicId: 'ad', outputUrl: original } }, { mode: 'name', name: 'Shop' }, PREVIEW_TRANSFORMATION));
 });
+
+test('branding preserves scene concatenation transformations on the final commercial', async () => {
+  const sceneTransformations = [
+    { overlay: { public_id: 'video:scene-two', type: 'authenticated' }, flags: 'splice' },
+    { flags: 'layer_apply' }
+  ];
+  let settings;
+  const media = await renderBranding({
+    uploader: {
+      explicit: async (id, options) => {
+        settings = options;
+        return { eager: [{ secure_url: original.replace('original', 'branded') }] };
+      }
+    }
+  }, {
+    media: { publicId: 'scene-one', outputUrl: original, transformations: sceneTransformations }
+  }, { mode: 'name', name: 'Shop' }, PREVIEW_TRANSFORMATION);
+  assert.deepEqual(settings.eager[0].transformation.slice(0, sceneTransformations.length), sceneTransformations);
+  assert.ok(settings.eager[0].transformation.some(item => item.overlay?.text?.includes('Shop')));
+  assert.equal(media.outputUrl, original.replace('original', 'branded'));
+  assert.deepEqual(media.transformations, sceneTransformations);
+});

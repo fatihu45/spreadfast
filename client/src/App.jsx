@@ -10,6 +10,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import CompanyDashboard from './pages/CompanyDashboard';
 import QuickAd from './pages/QuickAd';
+import AICommercials from './pages/AICommercials.jsx';
 import QuickAdCredits from './pages/QuickAdCredits';
 import AdminDashboard from './pages/AdminDashboard';
 import Wallet from './pages/Wallet';
@@ -84,7 +85,7 @@ function App() {
             path="/company"
             element={
               <ProtectedRoute>
-                <DashboardShell><CompanyDashboard /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -106,13 +107,15 @@ function App() {
           {['/quick-ad', '/quickads'].map(path => <Route key={path} path={path} element={
             <ProtectedRoute><QuickAdRedirect /></ProtectedRoute>
           } />)}
+          <Route path="/ai-commercials" element={<ProtectedRoute><DashboardShell><AICommercials /></DashboardShell></ProtectedRoute>} />
+          <Route path="/my-ads" element={<ProtectedRoute><DashboardShell><AICommercials initialTab="history" /></DashboardShell></ProtectedRoute>} />
           <Route path="/quickads/credits" element={<ProtectedRoute><DashboardShell><QuickAdCredits /></DashboardShell></ProtectedRoute>} />
           
           <Route
             path="/promoter-dashboard"
             element={
               <ProtectedRoute>
-                <DashboardShell><PromotionDashboard /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -121,7 +124,7 @@ function App() {
             path="/available-campaigns"
             element={
               <ProtectedRoute>
-                <DashboardShell><AvailableCampaigns /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -130,7 +133,7 @@ function App() {
             path="/submit-proof"
             element={
               <ProtectedRoute>
-                <DashboardShell><SubmitProof /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -144,7 +147,11 @@ function App() {
               </AdminRoute>
             }
           />
-          <Route path="/campaigns" element={<Navigate to="/available-campaigns" replace />} />
+          <Route path="/campaigns" element={<ProtectedRoute><Navigate to="/ai-commercials" replace /></ProtectedRoute>} />
+          <Route path="/available-campaigns" element={<ProtectedRoute><Navigate to="/ai-commercials" replace /></ProtectedRoute>} />
+          <Route path="/submit-proof" element={<ProtectedRoute><Navigate to="/ai-commercials" replace /></ProtectedRoute>} />
+          <Route path="/company" element={<ProtectedRoute><Navigate to="/ai-commercials" replace /></ProtectedRoute>} />
+          <Route path="/promoter-dashboard" element={<ProtectedRoute><Navigate to="/ai-commercials" replace /></ProtectedRoute>} />
           <Route path="*" element={<main className="sf-page"><h1>Page not found</h1><p>This page may have moved.</p><Link to="/">Return to SpreadFast</Link></main>} />
         </Routes>
       </BrowserRouter>

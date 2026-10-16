@@ -23,7 +23,6 @@ export default function QuickAd() {
   const location = useLocation();
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
-  const canStartCampaign = user?.role === 'company';
   const navigate = useNavigate();
   const [branding, setBranding] = useState({ mode: 'none' });
   const [editingBranding, setEditingBranding] = useState(false);
@@ -387,15 +386,6 @@ export default function QuickAd() {
     }
   }
 
-  async function startCampaign() {
-    if (!canStartCampaign || !downloadable || download.current) return;
-    const controller = new AbortController(); download.current = controller; setSaving(true);
-    try {
-      const { data } = await axios.get(quickAdsUrl(`/generations/${result.generationId}/export`), { headers: quickAdsAuth(token), signal: controller.signal, timeout: 20000 });
-      if (!controller.signal.aborted && data.success) navigate('/company#create-campaign', { state: { quickAd: { videoUrl: data.videoUrl, imageUrl: data.imageUrl } } });
-    } catch { if (!controller.signal.aborted) setNotice('Could not prepare your ad for a campaign. Please try again.'); }
-    finally { if (download.current === controller) download.current = null; if (!controller.signal.aborted) setSaving(false); }
-  }
   async function previewAgain() {
     if (!result?.freePreview || download.current) return;
     const controller = new AbortController(); download.current = controller; setSaving(true);
@@ -562,9 +552,6 @@ export default function QuickAd() {
         <div className="quick-ad-result-actions">
           {ready && result?.freePreview && !downloadable && <><strong>Your free Quick Ad is ready.</strong><p>Buy any credit plan to unlock this video and create more ads.</p><Button onClick={buyCredits}>Buy Credits</Button><Button variant="secondary" disabled={saving} onClick={previewAgain}>Preview Again</Button></>}
           <Button variant="secondary" fullWidth disabled={!downloadable || saving || brandingSaving} onClick={saveVideo}><UiIcon name="download" /> {result?.freePreview && !downloadable ? 'Save video — Locked' : saving ? 'Saving video...' : 'Save video'}</Button>
-          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving || brandingSaving} onClick={startCampaign}><UiIcon name="user" /> Promote with creators</Button>
-          <Button variant="secondary" fullWidth disabled={!canStartCampaign || !downloadable || saving || brandingSaving} onClick={startCampaign}><UiIcon name="campaign" /> Start campaign</Button>
-          {!canStartCampaign && ready && <p className="sf-small sf-muted">A company account is required to start a creator campaign.</p>}
         </div>
         {notice && <Alert>{notice}</Alert>}
         {downloadable && videoUrl && <a className="quick-ad-open-video" href={videoUrl} target="_blank" rel="noopener noreferrer">Open video to watch or save</a>}
