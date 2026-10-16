@@ -245,6 +245,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
     {tab === 'history' ? (
       <Card className="sf-commercials__empty">
+        {(notice || error) && <p className={error ? "sf-commercials__notice sf-commercials__notice--error" : "sf-commercials__notice"} role="status">{error || notice}</p>}
         {jobs.length > 0 ? (
           <div className="sf-commercials__history-list">
             {jobs.map(job => (
