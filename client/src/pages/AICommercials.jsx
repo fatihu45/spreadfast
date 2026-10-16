@@ -249,18 +249,29 @@ export default function AICommercials({ initialTab = 'create' }) {
         {(notice || error) && <p className={error ? "sf-commercials__notice sf-commercials__notice--error" : "sf-commercials__notice"} role="status">{error || notice}</p>}
         {jobs.length > 0 ? (
           <div className="sf-commercials__history-list">
-            {jobs.map(job => (
-              <div key={job.generationId || job.id} className="sf-commercials__history-item">
-                <div>
-                  <strong>{job.title || job.productName || job.style || 'AI commercial'}</strong>
-                  <small>{stageLabel(job.stage || job.status)} · {job.style || 'Brand campaign'}</small>
-                  {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
-                </div>
-                {job.videoUrl || job.previewPath
-                  ? <a href={job.videoUrl || `${API_URL}${job.previewPath}`} target="_blank" rel="noreferrer">{job.previewPath ? 'Preview video' : 'Open video'}</a>
-                  : <span>{job.status === 'failed' ? 'Failed' : 'Processing'}</span>}
-              </div>
-            ))}
+            {jobs.map(job => {
+              const rawTitle = job.title || job.productName || job.style || 'AI commercial';
+              const title = String(rawTitle).replace(/[_-]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+              const rawStatus = String(job.status || job.stage || 'processing').toLowerCase();
+              const isCompleted = rawStatus === 'completed' || rawStatus === 'complete';
+              const isFailed = rawStatus === 'failed' || rawStatus === 'error';
+              const videoUrl = job.videoUrl || (job.previewPath ? `${API_URL}${job.previewPath}` : '');
+              return (
+                <article key={job.generationId || job.id} className="sf-commercials__history-item">
+                  <div className="sf-commercials__history-copy">
+                    <strong>{title}</strong>
+                    <span className={`sf-commercials__job-status ${isCompleted ? 'is-completed' : isFailed ? 'is-failed' : 'is-processing'}`}>
+                      <i aria-hidden="true" /> {stageLabel(job.stage || job.status)}
+                    </span>
+                    <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}</small>
+                    {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
+                  </div>
+                  {isCompleted && videoUrl
+                    ? <a className="sf-commercials__history-link" href={videoUrl} target="_blank" rel="noreferrer">Open video <UiIcon name="arrow-right" /></a>
+                    : <span className={`sf-commercials__history-result ${isFailed ? 'is-failed' : ''}`}>{isFailed ? 'Generation failed' : isCompleted ? 'Video link unavailable' : 'In progress'}</span>}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <>
