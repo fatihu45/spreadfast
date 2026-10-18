@@ -152,6 +152,45 @@ function createAiCommercialsRouter({
     }
   });
 
+  // Edit and delete only AI-commercial records owned by the authenticated user.
+  router.patch('/jobs/:id', async (req, res) => {
+    try {
+      const db = req.app.locals.db;
+      const productName = cleanText(req.body?.productName, 100);
+      const brandName = cleanText(req.body?.brandName, 100);
+      const contact = cleanText(req.body?.contact, 120);
+      const specifications = cleanText(req.body?.specifications, 500);
+      if (productName.length < 2 || !brandName) {
+        return res.status(400).json({ success: false, message: 'Product name and brand name are required.' });
+      }
+      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      if (!job) return res.status(404).json({ success: false, message: 'Ad not found.' });
+      if (job.status === 'pending') return res.status(409).json({ success: false, message: 'Wait for generation to finish before editing this ad.' });
+      const current = job.commercialDetails || {};
+      const updatedDetails = { ...current, productName, brandName, contact, specifications };
+      await db.QuickAdGeneration.updateOne(
+        { id: req.params.id, userId: req.user.id, provider: 'ai-commercials' },
+        { $set: { commercialDetails: updatedDetails } }
+      );
+      return res.json({ success: true, message: 'Ad details updated.' });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: 'Could not update this ad.' });
+    }
+  });
+
+  router.delete('/jobs/:id', async (req, res) => {
+    try {
+      const db = req.app.locals.db;
+      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      if (!job) return res.status(404).json({ success: false, message: 'Ad not found.' });
+      if (job.status === 'pending') return res.status(409).json({ success: false, message: 'Wait for generation to finish before deleting this ad.' });
+      await db.QuickAdGeneration.deleteOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      return res.json({ success: true });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: 'Could not delete this ad.' });
+    }
+  });
+
   router.post('/generate', parseUpload, async (req, res) => {
     const db = req.app.locals.db;
     const controller = new AbortController();
