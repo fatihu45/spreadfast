@@ -108,6 +108,52 @@ export default function AICommercials({ initialTab = 'create' }) {
     }
   }
 
+  async function editJob(job) {
+    const details = job.commercialDetails || {};
+    const productName = window.prompt('Product name', job.productName || details.productName || '');
+    if (productName === null) return;
+    const brandName = window.prompt('Brand name', job.brandName || details.brandName || '');
+    if (brandName === null) return;
+    const contact = window.prompt('Contact / call to action', details.contact || '');
+    if (contact === null) return;
+    const specifications = window.prompt('Product specifications', details.specifications || '');
+    if (specifications === null) return;
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ productName, brandName, contact, specifications })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not update this ad.');
+      setNotice('Ad details updated.');
+      setError('');
+      await loadHistory();
+    } catch (editError) {
+      setError(editError.message || 'Could not update this ad.');
+    }
+  }
+
+  async function deleteJob(job) {
+    const title = job.title || job.productName || 'this ad';
+    if (!window.confirm(`Delete "${title}" from My Ads? This cannot be undone.`)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not delete this ad.');
+      setJobs(current => current.filter(item => (item.generationId || item.id) !== (job.generationId || job.id)));
+      setNotice('Ad deleted.');
+      setError('');
+    } catch (deleteError) {
+      setError(deleteError.message || 'Could not delete this ad.');
+    }
+  }
+
   useEffect(() => {
     loadCredits();
   }, [token, tier]);
@@ -279,7 +325,13 @@ export default function AICommercials({ initialTab = 'create' }) {
                     </span>
                     <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}{dateLabel ? ` · ${dateLabel}` : ''}</small>
                     {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
-                    {isCompleted && videoUrl && <a className="sf-commercials__history-link" href={videoUrl} target="_blank" rel="noreferrer">Open video in new tab <UiIcon name="arrow-right" /></a>}
+                    <div className="sf-commercials__history-actions">
+                      {isCompleted && videoUrl
+                        ? <a className="sf-commercials__icon-button" href={videoUrl} download aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></a>
+                        : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
+                      <button type="button" className="sf-commercials__icon-button" onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
+                    </div>
                     {isCompleted && !videoUrl && <span className="sf-commercials__history-result">Video link unavailable</span>}
                   </div>
                 </article>

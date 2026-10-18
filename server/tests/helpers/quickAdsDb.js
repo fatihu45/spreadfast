@@ -47,6 +47,12 @@ function quickAdsDb(users = []) {
       if (!record.updatedAt) record.updatedAt = record.createdAt;
       state[name].push(record); return structuredClone(record);
     },
+    async deleteOne(query) {
+      const index = state[name].findIndex(row => matches(row, query));
+      if (index < 0) return { deletedCount: 0 };
+      state[name].splice(index, 1);
+      return { deletedCount: 1 };
+    },
     async updateOne(query, update) {
       const row = state[name].find(row => matches(row, query));
       if (!row) return { matchedCount: 0, modifiedCount: 0 };
