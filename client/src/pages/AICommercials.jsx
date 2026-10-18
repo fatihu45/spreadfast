@@ -332,7 +332,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                       <button type="button" className="sf-commercials__icon-button" onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
-                    {isCompleted && !videoUrl && <span className="sf-commercials__history-result">Video link unavailable</span>
+                    {isCompleted && !videoUrl && <span className="sf-commercials__history-result">Video link unavailable</span>}
                   </div>
                 </article>
               );
