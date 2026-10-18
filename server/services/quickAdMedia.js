@@ -106,6 +106,7 @@ function publicGeneration(generation, user) {
     result.productName = generation.commercialDetails.productName;
     result.brandName = generation.commercialDetails.brandName;
     result.contact = generation.commercialDetails.contact;
+    result.specifications = generation.commercialDetails.specifications;
     result.tier = generation.commercialDetails.tier;
     result.requiredCredits = generation.commercialDetails.requiredCredits;
     result.title = generation.commercialDetails.title;
