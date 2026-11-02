@@ -1,3 +1,4 @@
+const { canRetryFinalization } = require('./aiCommercialRecovery');
 const { publicBranding } = require('./quickAdBranding');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -60,11 +61,14 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
     );
   }
   if (endCardText) {
+    const durations = clips.map(clip => [4, 6, 8].includes(clip.durationSeconds) ? clip.durationSeconds : 8);
+    const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
     transformations.push(
       { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 120) },
         color: 'white', background: '#18231e' },
       { width: 640, height: 180, crop: 'fit' },
-      { flags: 'layer_apply', gravity: 'south', y: 80 }
+      { flags: 'layer_apply', gravity: 'south', y: 80,
+        start_offset: totalDuration - durations[durations.length - 1], end_offset: totalDuration }
     );
   }
   transformations.push({ video_codec: 'h264' });
@@ -96,9 +100,11 @@ function canDownloadGeneration(generation, user) {
 }
 function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+    createdAt: generation.createdAt, completedAt: generation.completedAt,
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
     brandingStatus: generation.brandingStatus || (generation.branding?.mode && generation.branding.mode !== 'none' ? 'applied' : 'none'),
+    finalizationRetryAvailable: canRetryFinalization(generation),
     brandingRetryAvailable: generation.status === 'completed' && generation.brandingStatus === 'failed',
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
@@ -170,3 +176,4 @@ async function streamVideo(req, res, url, download = false, http = axios) {
   }
 }
 module.exports = { canDownloadGeneration, storeVideo, assembleVideos, publicGeneration, verifyPreviewToken, assertDownloadable, streamVideo, PREVIEW_TRANSFORMATION };
+

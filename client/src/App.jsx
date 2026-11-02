@@ -13,7 +13,6 @@ import QuickAd from './pages/QuickAd';
 import AICommercials from './pages/AICommercials.jsx';
 import QuickAdCredits from './pages/QuickAdCredits';
 import AdminDashboard from './pages/AdminDashboard';
-import Wallet from './pages/Wallet';
 import PaymentCallback from './pages/PaymentCallback';
 import PromotionDashboard from './pages/PromotionDashboard';
 import AvailableCampaigns from './pages/AvailableCampaigns';
@@ -94,7 +93,7 @@ function App() {
             path="/wallet"
             element={
               <ProtectedRoute>
-                <DashboardShell><Wallet /></DashboardShell>
+                <Navigate to="/ai-commercials" replace />
               </ProtectedRoute>
             }
           />
@@ -160,3 +159,4 @@ function App() {
 }
 
 export default App;
+

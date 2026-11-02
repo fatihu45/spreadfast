@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { randomUUID } = require('node:crypto');
+const { claimFinalization } = require('../services/aiCommercialRecovery');
 const cloudinaryDefault = require('cloudinary').v2;
 const { authenticateToken } = require('../middleware/auth');
 const { quickAdAccountOnly } = require('../services/quickAdAccess');
@@ -130,6 +131,7 @@ function createAiCommercialsRouter({
       return res.json({
         success: true,
         ...summary,
+        freePreviewAvailable: false,
         requiredCredits: TIER_COST.standard,
         available: summary.quickAdCredits,
         tierCredits: TIER_COST
@@ -143,7 +145,7 @@ function createAiCommercialsRouter({
     try {
       const db = req.app.locals.db;
       const [rows, user] = await Promise.all([
-        db.QuickAdGeneration.find({ userId: req.user.id }).sort({ createdAt: -1 }).limit(50),
+        db.QuickAdGeneration.find({ userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(50),
         loadUserBalance(req)
       ]);
       return res.json({ success: true, jobs: rows.map(row => publicGeneration(row, user)) });
@@ -163,15 +165,16 @@ function createAiCommercialsRouter({
       if (productName.length < 2 || !brandName) {
         return res.status(400).json({ success: false, message: 'Product name and brand name are required.' });
       }
-      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } });
       if (!job) return res.status(404).json({ success: false, message: 'Ad not found.' });
       if (job.status === 'pending') return res.status(409).json({ success: false, message: 'Wait for generation to finish before editing this ad.' });
       const current = job.commercialDetails || {};
       const updatedDetails = { ...current, productName, brandName, contact, specifications };
-      await db.QuickAdGeneration.updateOne(
-        { id: req.params.id, userId: req.user.id, provider: 'ai-commercials' },
+      const updated = await db.QuickAdGeneration.updateOne(
+        { id: req.params.id, userId: req.user.id, provider: 'ai-commercials', status: job.status, deletedAt: { $exists: false } },
         { $set: { commercialDetails: updatedDetails } }
       );
+      if (!updated.matchedCount) return res.status(409).json({ success: false, message: 'This ad changed. Refresh and try again.' });
       return res.json({ success: true, message: 'Ad details updated.' });
     } catch (error) {
       return res.status(500).json({ success: false, message: 'Could not update this ad.' });
@@ -181,14 +184,67 @@ function createAiCommercialsRouter({
   router.delete('/jobs/:id', async (req, res) => {
     try {
       const db = req.app.locals.db;
-      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } });
       if (!job) return res.status(404).json({ success: false, message: 'Ad not found.' });
       if (job.status === 'pending') return res.status(409).json({ success: false, message: 'Wait for generation to finish before deleting this ad.' });
-      await db.QuickAdGeneration.deleteOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials' });
+      const deleted = await db.QuickAdGeneration.updateOne(
+        { id: req.params.id, userId: req.user.id, provider: 'ai-commercials', status: job.status, deletedAt: { $exists: false } },
+        { $set: { deletedAt: new Date() } }
+      );
+      if (!deleted.matchedCount) return res.status(409).json({ success: false, message: 'This ad changed. Refresh and try again.' });
       return res.json({ success: true });
     } catch (error) {
       return res.status(500).json({ success: false, message: 'Could not delete this ad.' });
     }
+  });
+
+  async function finalizeCommercial(db, generation, signal) {
+    const details = generation.commercialDetails || {};
+    const branding = generation.branding || { mode: 'none' };
+    let media = generation.media?.toObject ? generation.media.toObject() : generation.media;
+    signal.throwIfAborted();
+    if (!media?.publicId || !media.outputUrl) {
+      const assembled = await assemble(cloudinary,
+        generation.sceneAssets.map(scene => ({ publicId: scene.videoPublicId, durationSeconds: scene.durationSeconds })),
+        generation.id, details.endCard || details.contact || `${details.brandName} · ${details.productName}`);
+      signal.throwIfAborted();
+      media = await persistVideo(cloudinary, assembled.outputUrl, { id: generation.id, freePreview: false }, signal);
+      // Save the protected original before optional branding. A retry needs no fal calls.
+      media = { ...media, originalOutputUrl: media.outputUrl };
+      await db.QuickAdGeneration.updateOne({ id: generation.id, userId: generation.userId }, { $set: { media } });
+    }
+    if (branding.mode !== 'none' && generation.brandingStatus !== 'applied') {
+      media = await brandingRender(cloudinary, { ...generation, media, freePreview: false }, branding, PREVIEW_TRANSFORMATION);
+      signal.throwIfAborted();
+      await db.QuickAdGeneration.updateOne({ id: generation.id, userId: generation.userId }, {
+        $set: { media, brandingStatus: 'applied' }
+      });
+    }
+    signal.throwIfAborted();
+    return finishGeneration(db, { userId: generation.userId, id: generation.id,
+      imageUrl: generation.sceneAssets[0].imageUrl, media,
+      brandingStatus: branding.mode === 'none' ? 'none' : 'applied' });
+  }
+
+  router.post('/jobs/:id/retry', async (req, res) => {
+    const db = req.app.locals.db;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('Finalization timed out.')), MAX_GENERATION_MS);
+    let claimed;
+    try {
+      const reservation = await claimFinalization(db, { id: req.params.id, userId: req.user.id, leaseMs: MAX_GENERATION_MS + 60000 });
+      if (!reservation.reused) claimed = reservation.generation;
+      const completed = reservation.reused ? reservation.generation : await finalizeCommercial(db, claimed, controller.signal);
+      const user = await loadUserBalance(req);
+      return res.json({ ...publicGeneration(completed, user), reused: reservation.reused });
+    } catch (error) {
+      if (claimed) {
+        try { await failGeneration(db, { userId: req.user.id, id: claimed.id, code: 'ASSEMBLY_FAILED' }); }
+        catch { logger.error('[AI Commercials] Retry cleanup failed', { generationId: claimed.id }); }
+      }
+      return res.status(error.statusCode || 502).json({ success: false,
+        message: error.quickAdSafe ? error.message : 'Could not finish this commercial. Your saved scenes are safe; no credits were charged. Retry from My Ads.' });
+    } finally { clearTimeout(timer); }
   });
 
   router.post('/generate', parseUpload, async (req, res) => {
@@ -230,6 +286,8 @@ function createAiCommercialsRouter({
         style,
         model: `${IMAGE_MODEL}+${VEO_MODELS[tier]}`,
         creditCost: requiredCredits,
+        allowFreePreview: false,
+        provider: 'ai-commercials',
         leaseMs: MAX_GENERATION_MS + 60 * 1000
       });
       generation = reservation.generation;
@@ -257,10 +315,13 @@ function createAiCommercialsRouter({
 
       stage = 'creative_plan';
       await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'preparing_image' } });
-      const plan = await createPlan({ productName, brandName, contact, specifications, style, imageUrl: sourceImageUrl, tier });
+      const plan = await createPlan({ productName, brandName, contact, specifications, style, imageUrl: sourceImageUrl, tier, signal: controller.signal });
       if (!Array.isArray(plan?.scenes) || plan.scenes.length !== 3) throw new Error('The creative plan did not contain exactly three scenes.');
       const scenes = [];
-      const clips = [];
+      await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, {
+        $set: { commercialDetails: { productName, brandName, contact, specifications, tier, requiredCredits,
+          title: plan.title, voiceover: plan.voiceover, endCard: contact || `${brandName} · ${productName}` } }
+      });
 
       for (const [index, scene] of plan.scenes.entries()) {
         controller.signal.throwIfAborted();
@@ -294,12 +355,13 @@ function createAiCommercialsRouter({
 
         stage = 'creating_video';
         await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'creating_video' } });
-        const spokenDirection = index === 0 && plan.voiceover
-          ? `Spoken narration, follow this script as closely as possible: "${plan.voiceover.slice(0, 900)}".`
-          : '';
+        const spokenDirection = scene.narration
+          ? `Use a calm, warm, consistent narrator voice. Speak only this scene's script: ${JSON.stringify(scene.narration)}. No extra dialogue.`
+          : 'No spoken dialogue. Use subtle ambient sound only.';
         const video = await generateVideo({
           imageUrl: sceneImage.secure_url,
-          prompt: [scene.motionPrompt, spokenDirection].filter(Boolean).join('\n'),
+          prompt: [spokenDirection, scene.motionPrompt].filter(Boolean).join('\n'),
+          durationSeconds: scene.durationSeconds,
           tier,
           signal: controller.signal
         });
@@ -307,7 +369,6 @@ function createAiCommercialsRouter({
           id: `${generation.id}-scene-${index + 1}`,
           freePreview: false
         }, controller.signal);
-        clips.push(sceneMedia);
         scenes.push({
           imageUrl: sceneImage.secure_url,
           imagePublicId: sceneImage.public_id,
@@ -332,40 +393,9 @@ function createAiCommercialsRouter({
       }
 
       stage = 'finalizing';
-      const endCardText = contact || `${brandName} · ${productName}`;
-      const assembled = await assemble(cloudinary, clips, generation.id, endCardText);
-      const finalMedia = await persistVideo(cloudinary, assembled.outputUrl, {
-        id: generation.id,
-        freePreview: generation.freePreview
-      }, controller.signal);
-      if (uploadedLogo.mode !== 'none') {
-        const branded = await brandingRender(
-          cloudinary,
-          { ...generation, freePreview: generation.freePreview, media: finalMedia },
-          uploadedLogo,
-          PREVIEW_TRANSFORMATION
-        );
-        Object.assign(finalMedia, branded);
-      }
-      await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, {
-        $set: {
-          commercialDetails: {
-            productName, brandName, contact, specifications, tier, requiredCredits,
-            title: plan.title,
-            voiceover: plan.voiceover,
-            endCard: endCardText
-          },
-          brandingStatus: uploadedLogo.mode === 'none' ? 'none' : 'applied',
-          stage: 'finalizing'
-        }
-      });
-      const completed = await finishGeneration(db, {
-        userId: req.user.id,
-        id: generation.id,
-        imageUrl: scenes[0].imageUrl,
-        media: finalMedia,
-        brandingStatus: uploadedLogo.mode === 'none' ? 'none' : 'applied'
-      });
+      const saved = await db.QuickAdGeneration.findOne({ id: generation.id, userId: req.user.id });
+      const snapshot = saved.toObject ? saved.toObject() : saved;
+      const completed = await finalizeCommercial(db, snapshot, controller.signal);
       generation = completed;
       const latestUser = await db.User.findOne({ id: req.user.id });
       return res.json({
@@ -397,7 +427,9 @@ function createAiCommercialsRouter({
           ? 'AI commercial generation is not configured on the server.'
           : error.statusCode && error.statusCode < 500
             ? error.message
-            : 'The commercial could not be completed. No credits were charged; please try again.'
+            : stage === 'finalizing'
+              ? 'Your scenes were saved, but the final video could not be finished. No credits were charged. Open My Ads and retry finishing.'
+              : 'The commercial could not be completed. No credits were charged; please try again.'
       });
     } finally {
       clearTimeout(timer);
@@ -411,3 +443,4 @@ function createAiCommercialsRouter({
 
 module.exports = createAiCommercialsRouter();
 module.exports.createAiCommercialsRouter = createAiCommercialsRouter;
+

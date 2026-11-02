@@ -3,8 +3,8 @@ const { setTimeout: delay } = require('node:timers/promises');
 const DEFAULT_CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929';
 const IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'fal-ai/nano-banana-2/edit';
 const VEO_MODELS = Object.freeze({
-  standard: 'fal-ai/veo3.1/fast/image-to-video',
-  premium: 'fal-ai/veo3.1/image-to-video'
+  standard: process.env.COMMERCIAL_STANDARD_VIDEO_MODEL || 'fal-ai/veo3.1/fast/image-to-video',
+  premium: process.env.COMMERCIAL_PREMIUM_VIDEO_MODEL || 'fal-ai/veo3.1/image-to-video'
 });
 
 function isHttpsUrl(value) {
@@ -62,7 +62,7 @@ function parseJsonObject(text) {
  * Uses Anthropic's Messages API directly. Claude is not a fal-hosted model;
  * keep ANTHROPIC_API_KEY on the backend and configure it in Render.
  */
-async function createCreativePlan({ productName, brandName, contact, specifications, style, imageUrl, tier }) {
+async function createCreativePlan({ productName, brandName, contact, specifications, style, imageUrl, tier, signal }) {
   const apiKey = requiredEnv('ANTHROPIC_API_KEY');
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -80,8 +80,8 @@ async function createCreativePlan({ productName, brandName, contact, specificati
         'Return only valid JSON. Do not invent product features, materials, ingredients, claims, certifications, discounts, prices, or contact details.',
         'Keep the uploaded product visually faithful. Specifications are hard constraints; never add/remove physical details.',
         'Plan three short scenes for a commercial. Each scene must be feasible as one image-to-video clip of up to 8 seconds.',
-        'Output schema: {"title":string,"voiceover":string,"scenes":[{"purpose":string,"imagePrompt":string,"motionPrompt":string,"durationSeconds":number}],"endCard":string,"accuracyRules":[string]}',
-        'Use three scenes and 6-8 seconds per scene. Avoid readable text inside generated imagery; reserve text and logo for post-production.'
+        'Output schema: {"title":string,"voiceover":string,"scenes":[{"purpose":string,"imagePrompt":string,"motionPrompt":string,"durationSeconds":number,"narration":string}],"endCard":string,"accuracyRules":[string]}',
+        'Use exactly: a 6-second hook, an 8-second product showcase, and a 6-second call to action. Give each scene its own narration: at most 12, 16, and 12 words respectively. Use empty narration for intentional silence. Use one consistent warm voice. Avoid readable text inside generated imagery; reserve text and logo for post-production.'
       ].join(' '),
       messages: [{
         role: 'user',
@@ -112,7 +112,7 @@ async function createCreativePlan({ productName, brandName, contact, specificati
         ]
       }]
     }),
-    signal: AbortSignal.timeout(45000)
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(45000)]) : AbortSignal.timeout(45000)
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -128,16 +128,33 @@ async function createCreativePlan({ productName, brandName, contact, specificati
   if (!Array.isArray(plan.scenes) || plan.scenes.length !== 3) {
     throw new Error('Claude returned a creative plan with an invalid scene count.');
   }
-  plan.scenes = plan.scenes.map((scene, index) => ({
-    purpose: String(scene.purpose || `Scene ${index + 1}`).slice(0, 160),
-    imagePrompt: String(scene.imagePrompt || '').slice(0, 1800),
-    motionPrompt: String(scene.motionPrompt || '').slice(0, 1800),
-    durationSeconds: Math.min(8, Math.max(6, Number(scene.durationSeconds) || 8))
-  }));
+  plan.scenes = normalizeScenes(plan.scenes);
   plan.title = String(plan.title || `${brandName} ${productName} Commercial`).slice(0, 120);
-  plan.voiceover = String(plan.voiceover || '').slice(0, 1200);
+  plan.voiceover = plan.scenes.map(scene => scene.narration).filter(Boolean).join(' ');
   plan.endCard = String(plan.endCard || '').slice(0, 300);
   return plan;
+}
+
+function normalizeScenes(scenes) {
+  if (!Array.isArray(scenes) || scenes.length !== 3) throw new Error('Expected three commercial scenes.');
+  return scenes.map((scene, index) => {
+    if (!scene || typeof scene.imagePrompt !== 'string' || !scene.imagePrompt.trim() ||
+      typeof scene.motionPrompt !== 'string' || !scene.motionPrompt.trim()) {
+      throw new Error('Each scene needs image and motion directions.');
+    }
+    const durationSeconds = [6, 8, 6][index];
+    const narration = String(scene.narration || '').trim();
+    if (narration && narration.split(/\s+/u).length > durationSeconds * 2) {
+      throw new Error('Scene narration is too long for its duration.');
+    }
+    return {
+      purpose: String(scene.purpose || ['Hook', 'Product showcase', 'Call to action'][index]).slice(0, 160),
+      imagePrompt: scene.imagePrompt.trim().slice(0, 1500),
+      motionPrompt: scene.motionPrompt.trim().slice(0, 1200),
+      narration: narration.slice(0, 300),
+      durationSeconds
+    };
+  });
 }
 
 async function generateNanoBananaImage({ imageUrl, prompt, fal: providedFal, signal, onSubmitted }) {
@@ -161,7 +178,8 @@ async function generateNanoBananaImage({ imageUrl, prompt, fal: providedFal, sig
  * Standard uses Veo Fast; Premium uses the full Veo endpoint. Each call returns
  * one clip of up to 8 seconds, which the route assembles with the other scenes.
  */
-async function generateVeoClip({ imageUrl, prompt, tier = 'standard', fal: providedFal, signal, onSubmitted, onQueueUpdate }) {
+async function generateVeoClip({ imageUrl, prompt, tier = 'standard', durationSeconds = 8, fal: providedFal, signal, onSubmitted, onQueueUpdate }) {
+  if (![4, 6, 8].includes(durationSeconds)) throw new Error('Unsupported video duration.');
   if (!VEO_MODELS[tier]) throw new Error('Unsupported AI Commercials quality tier.');
   if (!isHttpsUrl(imageUrl)) throw new Error('A public HTTPS scene image URL is required.');
   const fal = providedFal || await loadFalClient();
@@ -169,7 +187,8 @@ async function generateVeoClip({ imageUrl, prompt, tier = 'standard', fal: provi
     image_url: imageUrl,
     prompt: String(prompt || '').slice(0, 1800),
     aspect_ratio: '9:16',
-    duration: '8s',
+    duration: `${durationSeconds}s`,
+    resolution: '720p',
     generate_audio: true
   }, { signal, onSubmitted: async id => {
     if (onSubmitted) await onSubmitted(id);
@@ -182,4 +201,5 @@ async function generateVeoClip({ imageUrl, prompt, tier = 'standard', fal: provi
   return { videoUrl, requestId, model: VEO_MODELS[tier] };
 }
 
-module.exports = { createCreativePlan, generateNanoBananaImage, generateVeoClip, runQueuedFalJob, IMAGE_MODEL, VEO_MODELS };
+module.exports = { normalizeScenes, createCreativePlan, generateNanoBananaImage, generateVeoClip, runQueuedFalJob, IMAGE_MODEL, VEO_MODELS };
+

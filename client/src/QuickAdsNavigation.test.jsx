@@ -40,17 +40,17 @@ afterEach(() => {
 });
 
 test.each([
-  ['company', '/company', '/company/quick-ads', 'Overview'],
-  ['promoter', '/promoter-dashboard', '/promoter/quick-ads', 'Dashboard'],
+  ['company', '/company', '/company/quick-ads', 'My Ads'],
+  ['promoter', '/promoter-dashboard', '/promoter/quick-ads', 'My Ads'],
 ])('%s navigation links reuse desktop and mobile styles and become active on click', (role, home, destination, next) => {
   render(home, role);
   expect(navs()).toHaveLength(2);
   for (const nav of navs()) {
     const link = quickLink(nav);
     expect(link.getAttribute('href')).toBe(destination);
-    expect(link.className).toBe('sf-navigation-link');
+    expect(link.classList.contains('sf-navigation-link')).toBe(true);
     expect(link.querySelector('.sf-icon')).not.toBeNull();
-    expect(link.closest('li').previousElementSibling).toBeNull();
+    expect(link.closest('li').previousElementSibling.textContent).toBe('Create Ads');
     expect(link.closest('li').nextElementSibling.textContent).toBe(next);
   }
   act(() => quickLink(navs()[1]).click());
@@ -101,12 +101,13 @@ test('legacy redirect waits for existing authentication loading to finish', () =
 test.each(['company', 'promoter'])('%s credits direct route retains dashboard navigation and refresh support', role => {
   render('/quickads/credits', role);
   expect(container.querySelector('h1').textContent).toBe('Quick Ads Credits');
-  expect(quickLink(navs()[0]).getAttribute('aria-current')).toBe('page');
+  expect(navs()[0].querySelector('[aria-current="page"]').textContent).toBe('Credits');
   expect(deployment.routes).toContainEqual({ src: '^/quickads/credits/?$', dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
 
-test.each([['company', '/company'], ['promoter', '/promoter-dashboard']])('legacy dashboard opens the working %s dashboard', (role, destination) => {
-  render('/dashboard', role);
+test.each([['company', '/dashboard'], ['promoter', '/dashboard'], ['promoter', '/wallet']])('legacy %s %s opens the AI studio', (role, path) => {
+  render(path, role);
+  const destination = '/ai-commercials';
   expect(window.location.pathname).toBe(destination);
   expect(container.textContent).not.toContain('Loading campaigns...');
 });
@@ -120,3 +121,4 @@ test('protected callback preserves its reference through the login guard', () =>
   expect(window.location.pathname).toBe('/login');
   expect(window.history.state.usr.from).toBe('/quickads/credits?reference=paid-test-123');
 });
+
