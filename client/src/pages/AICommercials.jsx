@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
@@ -23,27 +23,31 @@ function toFileSizeLabel(size) {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
-function stageLabel(stage) {
+export function stageLabel(stage, sceneIndex) {
+  if (['creating_scene', 'creating_video'].includes(stage)) return `Creating scene ${sceneIndex || 1} of 3`;
   const labels = {
-    queued: 'Queued',
+    queued: 'Understanding your product',
+    understanding: 'Understanding your product',
+    finishing: 'Adding finishing touches',
     preparing_image: 'Planning your commercial',
     creating_scene: 'Creating scene images',
     creating_video: 'Animating scenes',
-    finalizing: 'Assembling final video',
-    completed: 'Completed',
+    finalizing: 'Assembling your commercial',
+    completed: 'Your commercial is ready',
     failed: 'Failed'
   };
   return labels[stage] || 'Processing';
 }
 
-function validateImageFile(file, label = 'Image') {
+export function validateImageFile(file, label = 'Image') {
   if (!file) return `${label} is required.`;
   const allowed = ['image/jpeg', 'image/png', 'image/webp'];
   if (!allowed.includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
     return 'Only JPG, PNG, and WEBP images are supported.';
   }
-  if (file.size > 8 * 1024 * 1024) {
-    return `${label} must be smaller than 8 MB.`;
+  const limit = label === 'Logo' ? 2 : 8;
+  if (file.size > limit * 1024 * 1024) {
+    return `${label} must be ${limit} MB or smaller.`;
   }
   return '';
 }
@@ -74,7 +78,7 @@ export default function AICommercials({ initialTab = 'create' }) {
   const hasFreePreview = balance.freePreviewAvailable === true;
   const canAfford = hasFreePreview || Number(balance.quickAdCredits || 0) >= requiredCredits;
 
-  async function loadCredits() {
+  const loadCredits = useCallback(async () => {
     if (!token) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/credits`, {
@@ -91,9 +95,9 @@ export default function AICommercials({ initialTab = 'create' }) {
     } catch (loadError) {
       setError(loadError.message || 'We could not load your credits.');
     }
-  }
+  }, [token, requiredCredits]);
 
-  async function loadHistory() {
+  const loadHistory = useCallback(async () => {
     if (!token) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
@@ -102,10 +106,44 @@ export default function AICommercials({ initialTab = 'create' }) {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not read your ads.');
-      setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      const rows = Array.isArray(data.jobs) ? data.jobs : [];
+      setJobs(rows);
+      const active = rows.find(job => job.status === 'pending');
+      if (active) setStatus(stageLabel(active.stage, active.sceneIndex));
     } catch (historyError) {
       setError(historyError.message || 'Could not load your previous ads.');
     }
+  }, [token]);
+
+  async function downloadJob(job) {
+    try {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId)}/download`, {
+        headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Download unavailable. Check your access and try again.');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'spreadfast-commercial.mp4';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) { setError(error.message); }
+  }
+
+  async function retryJob(job) {
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId)}/retry`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, Prefer: 'respond-async' }, credentials: 'include'
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Recovery unavailable.');
+      setNotice('Recovering saved progress. Completed scenes will be reused.');
+      setError('');
+      await loadHistory();
+    } catch (error) { setError(error.message); }
   }
 
   async function editJob(job) {
@@ -114,9 +152,9 @@ export default function AICommercials({ initialTab = 'create' }) {
     if (productName === null) return;
     const brandName = window.prompt('Brand name', job.brandName || details.brandName || '');
     if (brandName === null) return;
-    const contact = window.prompt('Contact / call to action', details.contact || '');
+    const contact = window.prompt('Contact / call to action', job.contact || details.contact || '');
     if (contact === null) return;
-    const specifications = window.prompt('Product specifications', details.specifications || '');
+    const specifications = window.prompt('Product specifications', job.specifications || details.specifications || '');
     if (specifications === null) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
@@ -127,7 +165,7 @@ export default function AICommercials({ initialTab = 'create' }) {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not update this ad.');
-      setNotice('Ad details updated.');
+      setNotice('History details updated. The finished video is unchanged.');
       setError('');
       await loadHistory();
     } catch (editError) {
@@ -156,15 +194,18 @@ export default function AICommercials({ initialTab = 'create' }) {
 
   useEffect(() => {
     loadCredits();
-  }, [token, tier]);
+  }, [loadCredits]);
 
   useEffect(() => {
-    if (tab !== 'history') return undefined;
+    if (tab !== 'history' && !isSubmitting) return undefined;
     loadHistory();
     // Long-running AI jobs may finish after the initial page load; keep history fresh.
     const timer = window.setInterval(() => loadHistory(), 5000);
     return () => window.clearInterval(timer);
-  }, [tab, token]);
+  }, [tab, loadHistory, isSubmitting]);
+
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo); }, [photo]);
+  useEffect(() => () => { if (logo) URL.revokeObjectURL(logo); }, [logo]);
 
   const handlePhotoChange = (input) => {
     const file = input?.files?.[0] || null;
@@ -200,8 +241,8 @@ export default function AICommercials({ initialTab = 'create' }) {
       setError('Upload a product photo before generating.');
       return;
     }
-    if (!productName.trim() || !brandName.trim()) {
-      setError('Product name and brand name are required.');
+    if (productName.trim().length < 2) {
+      setError('Enter a product name of at least 2 characters.');
       return;
     }
     if (!canAfford) {
@@ -234,7 +275,8 @@ export default function AICommercials({ initialTab = 'create' }) {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
-          'Idempotency-Key': submissionKeyRef.current
+          'Idempotency-Key': submissionKeyRef.current,
+          Prefer: 'respond-async'
         },
         credentials: 'include',
         body: formData
@@ -253,8 +295,8 @@ export default function AICommercials({ initialTab = 'create' }) {
       }
 
       submissionKeyRef.current = null;
-      setStatus('Commercial ready');
-      setNotice('Your AI commercial is ready to review.');
+      setStatus(response.status === 202 ? 'Understanding your product' : 'Your commercial is ready');
+      setNotice(response.status === 202 ? 'Your commercial is processing. You can return to My Ads to check its progress.' : 'Your commercial is ready.');
       setTab('history');
       await loadCredits();
       await loadHistory();
@@ -321,16 +363,18 @@ export default function AICommercials({ initialTab = 'create' }) {
                   <div className="sf-commercials__history-copy">
                     <strong>{title}</strong>
                     <span className={`sf-commercials__job-status ${isCompleted ? 'is-completed' : isFailed ? 'is-failed' : 'is-processing'}`}>
-                      <i aria-hidden="true" /> {stageLabel(job.stage || job.status)}
+                      <i aria-hidden="true" /> {stageLabel(job.stage || job.status, job.sceneIndex)}
                     </span>
                     <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}{dateLabel ? ` · ${dateLabel}` : ''}</small>
-                    {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
+                    {job.durationSeconds > 0 && <small>{Number(job.durationSeconds).toFixed(1)} seconds</small>}
+                    {job.recoveryAvailable && <Button onClick={() => retryJob(job)}>Recover saved progress</Button>}
+                    {isCompleted && !job.downloadable && <small>Buy credits to unlock downloads.</small>}
                     <div className="sf-commercials__history-actions">
-                      {isCompleted && videoUrl
-                        ? <a className="sf-commercials__icon-button" href={videoUrl} download aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></a>
+                      {isCompleted && job.downloadable
+                        ? <button type="button" className="sf-commercials__icon-button" onClick={() => downloadJob(job)} aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></button>
                         : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
-                      <button type="button" className="sf-commercials__icon-button" onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
-                      <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
+                      <button type="button" className="sf-commercials__icon-button" disabled={job.status === 'pending'} onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={job.status === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
                     {isCompleted && !videoUrl ? (
                       <span className="sf-commercials__history-result">Video link unavailable</span>
@@ -344,7 +388,7 @@ export default function AICommercials({ initialTab = 'create' }) {
           <>
             <span className="sf-commercials__empty-icon"><UiIcon name="video" /></span>
             <h2>Your ads will live here</h2>
-            <p>Completed AI commercials and Quick Ads will appear here once a generation is finished.</p>
+            <p>AI commercials will appear here once a generation is finished.</p>
             <Button onClick={() => setTab('create')}>Create a commercial</Button>
           </>
         )}
@@ -361,8 +405,8 @@ export default function AICommercials({ initialTab = 'create' }) {
               </label>
               <div className="sf-commercials__fields">
                 <label>Product name<input value={productName} onChange={e => setProductName(e.target.value)} placeholder="e.g. Signature leather bag" maxLength={100} /></label>
-                <label>Brand name<input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100} /></label>
-                <label>Contact / call to action<input value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120} /></label>
+                <label>Brand name (optional)<input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100} /></label>
+                <label>Call to action (optional)<input value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120} /></label>
               </div>
               <div className="sf-commercials__spec">
                 <label htmlFor="commercial-specs">Product specifications <span>Optional</span></label>
@@ -370,7 +414,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                 <textarea id="commercial-specs" value={specifications} onChange={e => setSpecifications(e.target.value.slice(0,500))} maxLength={500} rows={4} placeholder="Preserve the exact colour, shape, fabric, stitching, labels and packaging. Do not invent or remove product details." aria-describedby="commercial-specs-help commercial-specs-count" />
                 <div className="sf-commercials__spec-footer"><span>Product accuracy first</span><span id="commercial-specs-count">{specifications.length}/500</span></div>
               </div>
-              <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional brand mark for your final commercial.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => handleLogoChange(e.target)} /></label></div>
+              <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional · PNG, JPG or WEBP, up to 2 MB.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => handleLogoChange(e.target)} /></label></div>
             </section>
 
             <section className="sf-commercials__panel">
@@ -405,7 +449,7 @@ export default function AICommercials({ initialTab = 'create' }) {
             <div className="sf-commercials__preview-top"><span>PREVIEW</span><span className="sf-commercials__live"><i/> Live setup</span></div>
             <div className="sf-commercials__preview-stage">
               {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a product photo to preview your creative setup.</p></div>}
-              <span className="sf-commercials__duration">Up to 24 sec commercial</span>
+              <span className="sf-commercials__duration">21 sec · 3 coordinated scenes</span>
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
@@ -417,7 +461,7 @@ export default function AICommercials({ initialTab = 'create' }) {
               <span><UiIcon name="sparkles" /></span>
               <div>
                 <strong>Scene-by-scene creation</strong>
-                <p>Claude directs three scenes, Nano Banana creates the scene images, and Veo animates each before final assembly and branding.</p>
+                <p>One visual story: an engaging introduction, a detailed product showcase, and a premium closing. Your product stays at the center.</p>
               </div>
             </div>
             {logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}

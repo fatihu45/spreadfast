@@ -42,29 +42,32 @@ async function storeVideo(cloudinary, videoUrl, generation, signal) {
   if (generation.freePreview && (!previewUrl || !previewUrl.includes('/video/authenticated/'))) {
     throw new Error('Protected preview was not prepared');
   }
-  return { publicId: uploaded.public_id, outputUrl, ...(previewUrl ? { previewUrl } : {}) };
+  return { publicId: uploaded.public_id, outputUrl, ...(Number.isFinite(uploaded.duration) ? { durationSeconds: uploaded.duration } : {}), ...(previewUrl ? { previewUrl } : {}) };
 }
 function videoLayerId(publicId) {
   return String(publicId).split('/').join(':');
 }
 async function assembleVideos(cloudinary, clips, generationId, endCardText = '') {
-  if (!Array.isArray(clips) || clips.length < 1 || clips.some(clip => !clip?.publicId)) {
+  if (!Array.isArray(clips) || clips.length !== 3 || clips.some(clip => !clip?.publicId)) {
     throw new Error('All scene videos must be stored before assembly.');
   }
-  const transformations = [];
-  for (const clip of clips.slice(1)) {
+  const durations = [6, 8, 7];
+  const normalize = index => ({ width: 720, height: 1280, crop: 'pad', background: 'black', fps: 24,
+    start_offset: 0, duration: durations[index], audio_codec: 'none' });
+  const transformations = [normalize(0)];
+  for (const [offset, clip] of clips.slice(1).entries()) {
     transformations.push(
-      { overlay: { public_id: `video:${videoLayerId(clip.publicId)}`, type: 'authenticated' }, flags: 'splice' },
-      { width: 720, height: 1280, crop: 'fill' },
+      { overlay: { resource_type: 'video', public_id: videoLayerId(clip.publicId), type: 'authenticated' }, flags: 'splice' },
+      normalize(offset + 1),
       { flags: 'layer_apply' }
     );
   }
   if (endCardText) {
     transformations.push(
-      { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 120) },
+      { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 223) },
         color: 'white', background: '#18231e' },
       { width: 640, height: 180, crop: 'fit' },
-      { flags: 'layer_apply', gravity: 'south', y: 80 }
+      { flags: 'layer_apply', gravity: 'south', y: 80, start_offset: 14, end_offset: 21 }
     );
   }
   transformations.push({ video_codec: 'h264' });
@@ -96,6 +99,10 @@ function canDownloadGeneration(generation, user) {
 }
 function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+    createdAt: generation.createdAt, completedAt: generation.completedAt,
+    durationSeconds: generation.durationSeconds || generation.media?.durationSeconds,
+    sceneIndex: generation.sceneIndex,
+    recoveryAvailable: generation.provider === 'ai-commercials' && !generation.deletedAt && Boolean(generation.sourceImageUrl) && (generation.recoveryCount || 0) < 2 && (generation.status === 'failed' || (generation.status === 'pending' && new Date(generation.expiresAt).getTime() <= Date.now())),
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
     brandingStatus: generation.brandingStatus || (generation.branding?.mode && generation.branding.mode !== 'none' ? 'applied' : 'none'),
