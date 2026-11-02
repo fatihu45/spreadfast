@@ -16,7 +16,7 @@ function costSettings(env) {
     && Number.isFinite(usd * exchange) ? usd * exchange : null;
 }
 
-function calculateQuickAdAnalytics({ users, purchases, generations }, env = process.env) {
+function calculateQuickAdAnalytics({ users, purchases, generations }, env = process.env, now = Date.now()) {
   const byReference = new Map();
   for (const row of purchases) {
     if (row.purpose !== PURPOSE) continue;
@@ -41,7 +41,10 @@ function calculateQuickAdAnalytics({ users, purchases, generations }, env = proc
   const totalCreditsSold = paid.reduce((sum, row) => sum + row.credits, 0);
   if (!Number.isSafeInteger(revenueKobo) || !Number.isSafeInteger(totalCreditsSold)) throw new Error('Analytics totals exceed safe precision');
   const totalRevenue = revenueKobo / 100;
-  const unitCost = costSettings(env);
+  const totalCreditsUsed = used.reduce((sum, g) => sum + (whole(g.creditsUsed) || whole(g.creditCost) || 1), 0);
+  const isCommercial = g => g.provider === 'ai-commercials' || ['cinematic', 'showcase', 'lifestyle', 'promo'].includes(g.style);
+  // A flat Quick Ad cost cannot estimate multi-scene commercial costs.
+  const unitCost = generations.some(isCommercial) ? null : costSettings(env);
   const estimatedGenerationCost = unitCost === null ? null : round(completed.length * unitCost);
   if (estimatedGenerationCost !== null && !Number.isSafeInteger(Math.round(estimatedGenerationCost * 100))) throw new Error('Invalid cost estimate');
   const estimatedGrossProfit = estimatedGenerationCost === null ? null : round(totalRevenue - estimatedGenerationCost);
@@ -74,8 +77,48 @@ function calculateQuickAdAnalytics({ users, purchases, generations }, env = proc
     status: settled(row) ? 'completed' : row.status === 'completed' ? 'unverified' : row.status || 'unknown',
     paymentDate: settled(row) ? row.verifiedAt : null, createdAt: row.createdAt || null
   }));
-  return { success: true, analytics: { totalRevenue, totalCreditsSold, totalCreditsUsed: used.length,
-    creditsRemaining: totalCreditsSold - used.length, totalQuickAdsGenerated: completed.length,
+  const since = now - 30 * 24 * 60 * 60 * 1000;
+  const recent = value => timestamp(value) >= since && timestamp(value) <= now;
+  const accounts = users.filter(u => canUseQuickAds(u.role) && (!env.ADMIN_EMAIL || u.email !== env.ADMIN_EMAIL));
+  const accountIds = new Set(accounts.map(u => u.id));
+  const buyers = new Map();
+  for (const row of paid) {
+    const buyer = buyers.get(row.userId) || { userId: row.userId, name: userMap.get(row.userId)?.name || 'Deleted or unavailable account', purchases: 0, revenue: 0 };
+    buyer.purchases += 1;
+    buyer.revenue = round(buyer.revenue + row.amount);
+    buyers.set(row.userId, buyer);
+  }
+  const paidAccounts = [...buyers.keys()].filter(id => accountIds.has(id)).length;
+  const rate = (n, d) => d ? round(n / d * 100) : null;
+  const generationRows = [...new Map(generations.map(g => [g.id, g])).values()];
+  const productStats = ['Quick Ad', 'Fashion Studio', 'AI Commercial'].map(product => {
+    const rows = generationRows.filter(g => (isCommercial(g) ? 'AI Commercial' : g.style === 'fashion_studio' ? 'Fashion Studio' : 'Quick Ad') === product);
+    const successful = rows.filter(g => g.status === 'completed');
+    const failed = rows.filter(g => g.status === 'failed').length;
+    return { product, completed: successful.length, failed, pending: rows.filter(g => g.status === 'pending').length,
+      successRate: rate(successful.length, successful.length + failed),
+      creditsUsed: successful.filter(g => g.creditUsed === true && g.freePreview === false).reduce((sum, g) => sum + (whole(g.creditsUsed) || whole(g.creditCost) || 1), 0) };
+  });
+  const growth = {
+    accounts: accounts.length,
+    newAccounts30d: accounts.filter(u => recent(u.createdAt)).length,
+    payingCustomers: buyers.size,
+    repeatCustomers: [...buyers.values()].filter(b => b.purchases > 1).length,
+    paidConversion: rate(paidAccounts, accounts.length),
+    activeGenerators30d: new Set(completed.filter(g => recent(g.completedAt)).map(g => g.userId)).size,
+    revenue30d: round(paid.filter(p => recent(p.verifiedAt)).reduce((sum, p) => sum + p.amount, 0)),
+    averageOrderValue: paid.length ? round(totalRevenue / paid.length) : null,
+    freePreviews: completed.filter(g => g.freePreview === true).length,
+    pendingPayments: payments.filter(p => p.status === 'pending').length,
+    failedPayments: payments.filter(p => p.status === 'failed').length,
+    failedGenerations: generationRows.filter(g => g.status === 'failed').length,
+    pendingGenerations: generationRows.filter(g => g.status === 'pending').length,
+    expiredGenerations: generationRows.filter(g => g.status === 'pending' && timestamp(g.expiresAt) > 0 && timestamp(g.expiresAt) < now).length,
+    brandingFailures: completed.filter(g => g.brandingStatus === 'failed').length,
+    availableCredits: accounts.reduce((sum, u) => sum + whole(u.quickAdCredits), 0)
+  };
+  return { success: true, growth, productStats, topCustomers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10), asOf: new Date(now).toISOString(), analytics: { totalRevenue, totalCreditsSold, totalCreditsUsed,
+    creditsRemaining: totalCreditsSold - totalCreditsUsed, totalQuickAdsGenerated: completed.length,
     estimatedGenerationCost, estimatedGrossProfit, estimatedGrossMargin }, estimatesAvailable: unitCost !== null,
     transactions, usage, transactionLimit: 50 };
 }
@@ -85,7 +128,7 @@ async function getQuickAdAnalytics(DB, env = process.env) {
   const records = await DB.withTransaction(async tx => ({
     users: await tx.User.find({}, { id: 1, name: 1, email: 1, role: 1, quickAdCredits: 1, createdAt: 1 }),
     purchases: await tx.PaystackTransaction.find({ purpose: PURPOSE }, { id: 1, userId: 1, buyerRole: 1, email: 1, reference: 1, purpose: 1, planId: 1, amount: 1, credits: 1, creditsApplied: 1, status: 1, verifiedAt: 1, createdAt: 1 }),
-    generations: await tx.QuickAdGeneration.find({ status: 'completed' }, { id: 1, userId: 1, status: 1, creditUsed: 1, freePreview: 1, completedAt: 1 })
+    generations: await tx.QuickAdGeneration.find({}, { id: 1, userId: 1, status: 1, style: 1, provider: 1, creditUsed: 1, creditsUsed: 1, creditCost: 1, freePreview: 1, completedAt: 1, expiresAt: 1, brandingStatus: 1 })
   }));
   return calculateQuickAdAnalytics(records, env);
 }

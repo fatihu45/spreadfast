@@ -106,3 +106,41 @@ test('endpoint reuses current admin authentication, exposes no private media and
   app.locals.db.withTransaction = async () => { throw new Error('private database details'); };
   const failed = await get('admin'); assert.equal(failed.status, 503); assert.ok(!(await failed.text()).includes('private database details'));
 });
+
+test('commercial credits, product health and founder metrics use the ledgers rather than video count', () => {
+  const input = records();
+  input.users.push({ id: 'admin', role: 'company', email: 'admin@test', quickAdCredits: 500 });
+  input.generations.push(
+    { ...generation, id: 'commercial', provider: 'ai-commercials', creditsUsed: 7, creditCost: 7, deletedAt: '2026-09-29' },
+    { ...generation, id: 'fashion', style: 'fashion_studio', creditCost: 1 },
+    { ...generation, id: 'expired', style: 'cinematic', status: 'pending', expiresAt: '2026-09-29' },
+    { ...generation, id: 'branding', freePreview: true, creditUsed: false, brandingStatus: 'failed' }
+  );
+  const result = calculateQuickAdAnalytics(input, { ...env, ADMIN_EMAIL: 'admin@test' }, Date.parse('2026-09-30'));
+  assert.equal(result.analytics.totalCreditsUsed, 9);
+  assert.equal(result.analytics.creditsRemaining, -5);
+  assert.equal(result.analytics.estimatedGrossProfit, null);
+  assert.equal(result.growth.accounts, 1);
+  assert.equal(result.growth.payingCustomers, 1);
+  assert.equal(result.growth.repeatCustomers, 1);
+  assert.equal(result.growth.paidConversion, 100);
+  assert.equal(result.growth.activeGenerators30d, 2);
+  assert.equal(result.growth.revenue30d, 6700);
+  assert.equal(result.growth.averageOrderValue, 3350);
+  assert.equal(result.growth.expiredGenerations, 1);
+  assert.equal(result.growth.brandingFailures, 1);
+  assert.equal(result.growth.pendingPayments, 1);
+  assert.deepEqual(result.productStats.find(p => p.product === 'AI Commercial'), { product: 'AI Commercial', completed: 1, failed: 0, pending: 1, successRate: 100, creditsUsed: 7 });
+  assert.equal(result.topCustomers[0].revenue, 6700);
+});
+test('empty and historical datasets distinguish unavailable rates from zero activity', () => {
+  const empty = calculateQuickAdAnalytics({ users: [], purchases: [], generations: [] }, {}, Date.parse('2026-11-02'));
+  assert.equal(empty.growth.paidConversion, null);
+  assert.equal(empty.growth.averageOrderValue, null);
+  assert.equal(empty.productStats[0].successRate, null);
+  const historic = calculateQuickAdAnalytics(records(), {}, Date.parse('2026-11-02'));
+  assert.equal(historic.growth.revenue30d, 0);
+  assert.equal(historic.growth.activeGenerators30d, 0);
+  assert.equal(historic.growth.payingCustomers, 1);
+  assert.equal(historic.growth.accounts, 1);
+});

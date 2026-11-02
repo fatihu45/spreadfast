@@ -1,7 +1,7 @@
 import { getAuthDestination } from '../utils/authDestination';
 import UiIcon from '../components/ui/UiIcon';
 import React, { useContext, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MegaphoneIcon, PeopleIcon, ShareIcon } from './Icons';
 import { Button, Container } from '../components/ui';
@@ -13,60 +13,17 @@ import './Landing.css';
 
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
-  const navigate = useNavigate();
   const [openFaq, setOpenFaq] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
 
-  const handleCreateCampaign = () => {
-    if (user?.role === 'company') {
-      navigate('/company');
-    } else if (user) {
-      // User is logged in but not a company
-      alert('Only companies can create campaigns. Please login as a company.');
-    } else {
-      // Not logged in, redirect to register as company
-      navigate('/register?role=company');
-    }
-  };
-
-  const handleJoinAsPromoter = () => {
-    if (user?.role === 'promoter') {
-      navigate('/dashboard');
-    } else if (user) {
-      // User is logged in but not a promoter
-      alert('Please login as a promoter to join campaigns.');
-    } else {
-      // Not logged in, redirect to register as promoter
-      navigate('/register?role=promoter');
-    }
-  };
-
   const faqs = [
-    {
-      q: 'How is engagement verified?',
-      a: 'Every promoter submission is tracked and checked against the campaign requirements before it counts toward payout. No automated bots or fake engagement is counted — only real, verifiable interactions.',
-    },
-    {
-      q: "What if a promoter doesn't deliver?",
-      a: "Businesses only pay for verified results. If a promoter's submission doesn't meet the campaign requirements, it simply doesn't count toward their share of the payout — there's no upfront risk to the business.",
-    },
-    {
-      q: 'How much does it cost to run a campaign?',
-      a: 'Campaigns cost ₦20,000 per creator. Choose the number of creators that fits your campaign.',
-    },
-    {
-      q: 'How much does Quick Ads cost?',
-      a: 'Quick Ads starts at ₦1,700 for one video generation, with larger credit packages available.',
-    },
-    {
-      q: 'How do promoters get paid?',
-      a: 'Promoters earn a share of the campaign pool based on their percentage of total group engagement. Withdrawals are processed through Paystack, with a minimum withdrawal of ₦1,000.',
-    },
-    {
-      q: 'What platforms can I promote on?',
-      a: 'Instagram, TikTok, X (Twitter), and WhatsApp are all supported for campaign promotion.',
-    },
+    { q: 'What can I create with SpreadFast?', a: 'Create short product videos with Quick Ad, rotating outfit videos with Fashion Studio, and multi-scene ads with AI Commercial. Upload your product photos and choose the format that fits your business.' },
+    { q: 'How does Fashion Studio work?', a: 'Choose Fashion Studio inside Quick Ad and upload clear front and back photos of your outfit. SpreadFast creates an invisible-mannequin video. Add optional specifications to describe details that should stay consistent.' },
+    { q: 'How much does it cost?', a: 'Buy 1 credit for ₦1,700, 4 for ₦5,000, 8 for ₦10,000, or 16 for ₦20,000. Quick Ad uses 1 credit. AI Commercial shows the credits required for your selected tier before generation.' },
+    { q: 'Do I need editing experience?', a: 'No. Upload clear product photos, choose a style, and add your product details. SpreadFast handles the video generation. Review the result before publishing, because AI can change product details.' },
+    { q: 'Can I add my brand?', a: 'Yes. Use the branding options in the workspace to add your brand name or logo. Check the preview to make sure the final ad represents your business accurately.' },
+    { q: 'Where can I use my video?', a: 'Download eligible completed ads and share them on Instagram, TikTok, WhatsApp, or other channels. Free previews may require a credit purchase to unlock downloads. Generation time varies by product and demand.' },
   ];
 
   return (
@@ -91,8 +48,8 @@ export default function LandingPage() {
           <nav id="landing-navigation" aria-label="Main navigation"
             className={'landing-navigation' + (menuOpen ? ' is-open' : '')}>
             <div className="landing-section-links">
-              <a href="#businesses" onClick={() => setMenuOpen(false)}>For Businesses</a>
-              <a href="#creators" onClick={() => setMenuOpen(false)}>For Creators</a>
+              <a href="#products" onClick={() => setMenuOpen(false)}>Products</a>
+              <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <a href="#faq" onClick={() => setMenuOpen(false)}>FAQ</a>
             </div>
@@ -118,18 +75,17 @@ export default function LandingPage() {
           <Container className="landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-eyebrow"><span aria-hidden="true" />AI-powered advertising</p>
-              <h1 id="landing-title">Get more customers.<br className="landing-title-break" /> Grow your Business.</h1>
+              <h1 id="landing-title">AI Advertising.<br className="landing-title-break" /> Made <span className="landing-title-accent">Simple.</span></h1>
               <p className="landing-hero-description">
-                Create AI-powered video ads, launch creator campaigns, and reach more customers — all from one platform.
+                Turn product photos into stunning video adverts — with no editing skills. Made for businesses ready to stand out.
               </p>
               <div className="landing-hero-actions">
                 <Link to="/quick-ad" className="sf-control sf-button sf-button--primary"><UiIcon name="video" /> Create a Quick Ad</Link>
-                <Button size="lg" variant="secondary" onClick={handleCreateCampaign}>Start a Campaign <span aria-hidden="true"><UiIcon name="external" /></span></Button>
-                <Button size="lg" variant="secondary" onClick={handleJoinAsPromoter}>Earn with SpreadFast</Button>
+                <Link to="/ai-commercials" className="sf-control sf-button sf-button--secondary">Create an AI Commercial <UiIcon name="arrow" /></Link>
               </div>
               <div className="landing-trust" aria-label="Why SpreadFast">
-                <span><strong>Real people</strong><small>Authentic content</small></span>
-                <span><strong>Local reach</strong><small>Built for Nigeria</small></span>
+                <span><strong>Your product</strong><small>Made for the spotlight</small></span>
+                <span><strong>Pay in naira</strong><small>Buy credits as you need</small></span>
                 <span><strong>Secure payments</strong><small>Powered by Paystack</small></span>
               </div>
             </div>
@@ -137,13 +93,13 @@ export default function LandingPage() {
           </Container>
         </section>
 
-        <section className="landing-quick-ads" aria-labelledby="landing-quick-ads-title">
+        <section id="products" className="landing-quick-ads" aria-labelledby="landing-quick-ads-title">
           <Container>
             <div className="landing-quick-ads-card">
               <div className="landing-quick-ads-copy">
                 <p className="landing-quick-ads-eyebrow"><span>Quick Ads</span> AI-generated short video advertising</p>
                 <h2 id="landing-quick-ads-title">Turn one photo into an ad.</h2>
-                <p className="landing-quick-ads-description">Upload your product photo and create a short AI-powered video ad in seconds.</p>
+                <p className="landing-quick-ads-description">Upload your product photo, choose a style, and generate a short video for your next post.</p>
                 <Link to="/quick-ad" className="sf-control sf-button sf-button--primary">Create a Quick Ad <UiIcon name="arrow" /></Link>
                 <p className="landing-quick-ads-support">No editing. No prompts. No design experience needed.</p>
               </div>
@@ -168,33 +124,40 @@ export default function LandingPage() {
               </figure>
             </div>
             <LandingVideoCarousel />
+            <div className="landing-fashion-feature">
+              <img src="/fashion-studio-kaftan.png" alt="Navy kaftan showing the type of outfit you can showcase with Fashion Studio" width="1024" height="1536" loading="lazy" />
+              <div><p className="landing-eyebrow">Fashion Studio · inside Quick Ad</p><h2>Your collection. In motion.</h2>
+                <p>Turn front and back outfit photos into a rotating invisible-mannequin video. Add specifications to guide the details, then preview before sharing.</p>
+                <Link to="/quick-ad" className="sf-control sf-button sf-button--secondary">Explore Fashion Studio <UiIcon name="arrow" /></Link>
+              </div>
+            </div>
           </Container>
         </section>
 
-        <section className="landing-how" aria-labelledby="how-title">
+        <section id="how-it-works" className="landing-how" aria-labelledby="how-title">
           <Container>
             <div className="landing-section-heading">
-              <p className="landing-eyebrow">Quick Ads + Creator Campaigns</p>
+              <p className="landing-eyebrow">From photo to finished ad</p>
               <h2 id="how-title">How SpreadFast Works</h2>
-              <p>Create AI-powered ads or launch creator campaigns from one platform.</p>
+              <p>A simple workflow. More room for your ideas.</p>
             </div>
             <ol className="landing-steps">
-              <li id="businesses">
+              <li>
                 <span className="landing-step-icon" aria-hidden="true"><MegaphoneIcon color="currentColor" size={28} /></span>
-                <h3>1. Create</h3>
-                <p>Turn your product photo into an AI-powered video ad with Quick Ads.</p>
+                <h3>1. Upload</h3>
+                <p>Start with clear product photos. Add your brand and the details that matter.</p>
                 <span className="landing-step-arrow" aria-hidden="true">⟶</span>
               </li>
-              <li id="creators">
+              <li>
                 <span className="landing-step-icon" aria-hidden="true"><ShareIcon color="currentColor" size={28} /></span>
-                <h3>2. Promote</h3>
-                <p>Launch a campaign and work with creators who can put your brand in front of real audiences.</p>
+                <h3>2. Create</h3>
+                <p>Choose Quick Ad, Fashion Studio, or AI Commercial. Review the credit cost and generate.</p>
                 <span className="landing-step-arrow" aria-hidden="true">⟶</span>
               </li>
               <li>
                 <span className="landing-step-icon" aria-hidden="true"><PeopleIcon color="currentColor" size={28} /></span>
-                <h3>3. Grow</h3>
-                <p>Reach more customers through AI-created content and authentic creator promotion.</p>
+                <h3>3. Share</h3>
+                <p>Preview your ad, download the finished video, and share it with your customers.</p>
               </li>
             </ol>
           </Container>
@@ -204,7 +167,7 @@ export default function LandingPage() {
           <Container>
             <div className="landing-section-heading">
               <h2 id="pricing-title">A simple way to get started.</h2>
-              <p>Two ways to advertise. Choose what works for your business.</p>
+              <p>One credit balance for your AI ads. No subscription required.</p>
             </div>
             <div className="landing-pricing-grid">
               <article className="landing-price-card">
@@ -217,12 +180,12 @@ export default function LandingPage() {
                 <Link to="/quickads/credits" className="landing-text-link">View Quick Ads pricing</Link>
               </article>
               <article className="landing-price-card">
-                <p className="landing-eyebrow">Creator Campaigns</p>
-                <h3>Get your brand out there.</h3>
-                <p className="landing-price">₦20,000 <span>per creator</span></p>
-                <p>Promote your brand through creators and their audiences.</p>
-                <ul><li>Work with verified creators</li><li>Launch campaigns in minutes</li><li>Reach customers with authentic content</li></ul>
-                <Button variant="secondary" onClick={handleCreateCampaign}>Create a Campaign</Button>
+                <p className="landing-eyebrow">AI Commercial</p>
+                <h3>Give your product a story.</h3>
+                <p className="landing-price">Three scenes.<span> One commercial.</span></p>
+                <p>Move from a product introduction to a showcase and a closing message.</p>
+                <ul><li>AI-planned scenes</li><li>Your product and brand details</li><li>Credit cost shown before generation</li></ul>
+                <Link to="/ai-commercials" className="sf-control sf-button sf-button--secondary">Create an AI Commercial</Link>
               </article>
             </div>
           </Container>
@@ -253,10 +216,10 @@ export default function LandingPage() {
 
         <section className="landing-community">
           <Container className="landing-community-inner">
-            <div><h2>Better together.</h2><p>For Creators: Create content, join brand campaigns, and earn with SpreadFast.</p></div>
+            <div><h2>Your next ad starts with a photo.</h2><p>Join other businesses exploring a simpler way to create video adverts.</p></div>
             <a href="https://chat.whatsapp.com/LQey4iZk9Hn2RSEg8DcLvr?mode=gi_t"
               target="_blank" rel="noopener noreferrer" className="sf-control sf-button sf-button--secondary">
-              Join our WhatsApp creator community <span aria-hidden="true"><UiIcon name="external" /></span>
+              Join our WhatsApp community <span aria-hidden="true"><UiIcon name="external" /></span>
             </a>
           </Container>
         </section>
@@ -266,14 +229,14 @@ export default function LandingPage() {
         <Container>
           <div className="landing-footer-grid">
             <div className="landing-footer-brand"><img className="landing-logo-image" src="/spreadfast-logo.webp" alt="SpreadFast" width="2172" height="724" /><p>AI-powered advertising for businesses and creators.</p></div>
-            <div><h2>For Companies</h2><ul>
-              <li><button type="button" onClick={handleCreateCampaign}>Create Campaign</button></li>
-              <li><a href="#creators">Meet our creators</a></li>
+            <div><h2>Create</h2><ul>
+              <li><Link to="/quick-ad">Quick Ad &amp; Fashion Studio</Link></li>
+              <li><Link to="/ai-commercials">AI Commercial</Link></li>
               <li><a href="#pricing">Pricing</a></li>
             </ul></div>
-            <div><h2>For Promoters</h2><ul>
-              <li><button type="button" onClick={handleJoinAsPromoter}>Find Campaigns</button></li>
-              <li><a href="#creators">How to Earn</a></li>
+            <div><h2>Explore</h2><ul>
+              <li><Link to="/my-ads">My Ads</Link></li>
+              <li><a href="#how-it-works">How it works</a></li>
               <li><a href="#faq">FAQ</a></li>
             </ul></div>
             <div><h2>Connect</h2><ul>
