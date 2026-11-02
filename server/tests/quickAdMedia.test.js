@@ -118,10 +118,17 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
   assert.equal(uploaded.publicId, clips[0].publicId);
   const transformations = uploaded.options.eager[0].transformation;
   assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay.public_id), [
-    'video:spreadfast:quick-ads:videos:ad-scene-2',
-    'video:spreadfast:quick-ads:videos:ad-scene-3'
+    'spreadfast:quick-ads:videos:ad-scene-2',
+    'spreadfast:quick-ads:videos:ad-scene-3'
   ]);
   assert.ok(transformations.some(item => item.overlay?.text === 'Visit brand.example'));
+  assert.deepEqual(transformations.filter(t => t.duration).map(t => t.duration), [6, 8, 7]);
+  assert.equal(transformations[0].width, 720);
+  assert.equal(transformations[0].height, 1280);
+  assert.ok(transformations.some(t => t.start_offset === 14 && t.end_offset === 21));
+  const url = require('cloudinary').v2.url('base', { cloud_name: 'test', resource_type: 'video', transformation: transformations });
+  assert.ok(url.includes('l_video:authenticated:spreadfast:quick-ads:videos:ad-scene-2'));
+  assert.ok(!url.includes('l_authenticated:video:'));
   assert.equal(result.outputUrl, 'https://res.cloudinary.com/test/video/authenticated/final.mp4');
 });
 

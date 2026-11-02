@@ -23,11 +23,13 @@ function accountSummary(user) {
 const plain = doc => doc?.toObject ? doc.toObject() : doc;
 
 // One expiring account lock reserves eligibility, not money. No credit is debited here.
-async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
+async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, fingerprint, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
   if (!Number.isSafeInteger(creditCost) || creditCost < 1) fail('INVALID_CREDIT_COST', 'This generation has an invalid credit cost.', 400);
   return DB.withTransaction(async tx => {
     const previous = await tx.QuickAdGeneration.findOne({ userId, idempotencyKey: key });
     if (previous) {
+      if (previous.deletedAt) fail('GENERATION_DELETED', 'This ad was deleted. Use a new request key.');
+      if (fingerprint && previous.fingerprint && fingerprint !== previous.fingerprint) fail('GENERATION_KEY_CONFLICT', 'This request key belongs to a different product or brief.');
       if (previous.style !== style || (previous.model && previous.model !== model) ||
         (previous.creditCost !== undefined && previous.creditCost !== creditCost)) {
         fail('GENERATION_KEY_CONFLICT', 'Use a new request for different generation settings.');
@@ -52,7 +54,7 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
       await tx.QuickAdGeneration.updateOne({ id: user.quickAdGenerationLock, status: 'pending' },
         { $set: { status: 'failed', failureCode: 'LEASE_EXPIRED' } });
     }
-    const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model, creditCost,
+    const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model, creditCost, ...(fingerprint ? { fingerprint } : {}),
       provider: 'fal', status: 'pending', stage: 'queued', freePreview: account.freePreviewAvailable,
       creditUsed: false, downloadable: false, expiresAt: new Date(now + leaseMs) };
     await tx.User.updateOne({ id: userId }, { $set: {
@@ -63,10 +65,11 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
   });
 }
 
-async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatus, now = Date.now() }) {
+async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatus, runToken, now = Date.now() }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
     if (!generation) fail('GENERATION_NOT_FOUND', 'Ad not found.', 404);
+    if (runToken && generation.runToken !== runToken) fail('GENERATION_EXPIRED', 'This worker no longer owns the generation.');
     if (generation.status === 'completed') return plain(generation);
     const user = await tx.User.findOne({ id: userId });
     const account = accountSummary(user);
@@ -112,10 +115,10 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatu
   });
 }
 
-async function failGeneration(DB, { userId, id, code = 'GENERATION_FAILED' }) {
+async function failGeneration(DB, { userId, id, runToken, code = 'GENERATION_FAILED' }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
-    if (!generation || generation.status !== 'pending') return;
+    if (!generation || generation.status !== 'pending' || (runToken && generation.runToken !== runToken)) return;
     await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: { status: 'failed', stage: 'failed', failureCode: code } });
     const user = await tx.User.findOne({ id: userId });
     if (user?.quickAdGenerationLock === id) await tx.User.updateOne({ id: userId }, {
