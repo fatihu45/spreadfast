@@ -110,9 +110,9 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
     }
   };
   const clips = [
-    { publicId: 'spreadfast/quick-ads/videos/ad-scene-1' },
-    { publicId: 'spreadfast/quick-ads/videos/ad-scene-2' },
-    { publicId: 'spreadfast/quick-ads/videos/ad-scene-3' }
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-1', durationSeconds: 6 },
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-2', durationSeconds: 8 },
+    { publicId: 'spreadfast/quick-ads/videos/ad-scene-3', durationSeconds: 6 }
   ];
   const result = await assembleVideos(client, clips, 'ad', 'Visit brand.example');
   assert.equal(uploaded.publicId, clips[0].publicId);
@@ -122,6 +122,9 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
     'video:spreadfast:quick-ads:videos:ad-scene-3'
   ]);
   assert.ok(transformations.some(item => item.overlay?.text === 'Visit brand.example'));
+  const endCard = transformations.find(item => item.gravity === 'south');
+  assert.equal(endCard.start_offset, 14);
+  assert.equal(endCard.end_offset, 20);
   assert.equal(result.outputUrl, 'https://res.cloudinary.com/test/video/authenticated/final.mp4');
 });
 
@@ -228,3 +231,4 @@ for (const role of ['company', 'promoter']) test(`${role} verified purchase unlo
   await f.DB.QuickAdGeneration.updateOne({ id: 'free' }, { $set: { deletedAt: new Date() } });
   assert.equal((await f.get('/api/quick-ads/generations/free/download')).status, 404);
 });
+

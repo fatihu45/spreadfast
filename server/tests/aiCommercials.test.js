@@ -53,7 +53,8 @@ async function fixture(t, options = {}) {
         purpose: `Scene ${index}`,
         imagePrompt: `Set up scene ${index}`,
         motionPrompt: `Move camera for scene ${index}`,
-        durationSeconds: 8
+        durationSeconds: [6, 8, 6][index - 1],
+        narration: `Narration for scene ${index}`
       }))
     }),
     generateImage: async input => {
@@ -62,7 +63,7 @@ async function fixture(t, options = {}) {
       return { imageUrl: imageDataUrl, requestId: `image-${calls.length}` };
     },
     generateVideo: async input => {
-      calls.push(['video', input.prompt]);
+      calls.push(['video', input.prompt, input.durationSeconds]);
       if (options.failVideoAt === calls.filter(call => call[0] === 'video').length) throw new Error('Video generation failed');
       return { videoUrl: `https://fal.example/scene-${calls.length}.mp4`, requestId: `video-${calls.length}` };
     },
@@ -80,10 +81,17 @@ async function fixture(t, options = {}) {
         transformations: []
       };
     },
+    brandingUpload: async () => ({ mode: 'logo', publicId: 'brand-logo' }),
+    brandingRender: async (client, generation) => {
+      calls.push(['branding']);
+      if (options.failBranding) throw new Error('Branding failed');
+      return { ...generation.media, outputUrl: 'https://res.cloudinary.com/test/video/authenticated/branded.mp4' };
+    },
     logger: { error: (...args) => logs.push(args) }
   });
   const app = express();
   app.locals.db = db;
+  app.use(express.json());
   app.use('/api/ai-commercials', router);
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -103,20 +111,21 @@ function form({ tier = 'standard' } = {}) {
   return data;
 }
 
-test('generates three scene images and clips, assembles them, stores history, and uses a free preview without credits', async t => {
+test('generates three scene images and clips, assembles them, stores history, and charges standard credits while preserving the Quick Ad preview', async t => {
   const f = await fixture(t);
   const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
   const result = await response.json();
   assert.equal(response.status, 200);
   assert.equal(result.success, true);
-  assert.equal(result.freePreview, true);
-  assert.equal(result.previewPath.startsWith('/api/quick-ads/generations/'), true);
+  assert.equal(result.freePreview, false);
+  assert.equal(result.previewPath, undefined);
+  assert.equal(result.downloadable, true);
   assert.equal(f.calls.filter(call => call[0] === 'image').length, 3);
   assert.equal(f.calls.filter(call => call[0] === 'video').length, 3);
   assert.deepEqual(f.calls.find(call => call[0] === 'assemble').slice(1), [3, 'shop.example']);
   const account = await f.db.User.findOne({ id: 'owner' });
-  assert.equal(account.quickAdCredits, 10);
-  assert.equal(account.quickAdFreePreviewUsed, true);
+  assert.equal(account.quickAdCredits, 6);
+  assert.equal(account.quickAdFreePreviewUsed, false);
   const job = await f.db.QuickAdGeneration.findOne({ id: result.generationId });
   assert.equal(job.sceneAssets.length, 3);
   assert.equal(job.commercialDetails.voiceover, 'Meet the new product.');
@@ -180,5 +189,104 @@ test('replaying the same idempotency key returns the completed commercial withou
   assert.equal(secondResult.generationId, firstResult.generationId);
   assert.equal(secondResult.reused, true);
   assert.equal(f.calls.length, callsAfterFirst);
-  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdFreePreviewUsed, true);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdFreePreviewUsed, false);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+});
+
+
+test('unused Quick Ad trial cannot bypass commercial payment at either tier', async t => {
+  for (const tier of ['standard', 'premium']) {
+    const f = await fixture(t);
+    await f.db.User.updateOne({ id: 'owner' }, { $set: { quickAdCredits: 0 } });
+    const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form({ tier }) });
+    assert.equal(response.status, 403);
+    assert.equal(f.calls.length, 0);
+    const credits = await fetch(`${f.base}/api/ai-commercials/credits`).then(r => r.json());
+    assert.equal(credits.freePreviewAvailable, false);
+  }
+});
+
+test('history excludes Quick Ads and deleted commercials; deletion preserves retry and billing records', async t => {
+  const f = await fixture(t);
+  const headers = { 'Idempotency-Key': 'delete-replay' };
+  const result = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers, body: form() }).then(r => r.json());
+  await f.db.QuickAdGeneration.create({ id: 'quick', userId: 'owner', provider: 'fal' });
+  await f.db.QuickAdGeneration.create({ id: 'other', userId: 'someone-else', provider: 'ai-commercials' });
+  let history = await fetch(`${f.base}/api/ai-commercials/jobs`).then(r => r.json());
+  assert.equal(history.jobs.length, 1);
+  assert.ok(history.jobs[0].createdAt);
+  const deleted = await fetch(`${f.base}/api/ai-commercials/jobs/${result.generationId}`, { method: 'DELETE' });
+  assert.equal(deleted.status, 200);
+  const stored = await f.db.QuickAdGeneration.findOne({ id: result.generationId });
+  assert.ok(stored.deletedAt);
+  assert.equal(stored.creditsUsed, 4);
+  history = await fetch(`${f.base}/api/ai-commercials/jobs`).then(r => r.json());
+  assert.equal(history.jobs.length, 0);
+  const count = f.calls.length;
+  const replay = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers, body: form() });
+  assert.equal(replay.status, 410);
+  assert.equal(f.calls.length, count);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/other`, { method: 'DELETE' })).status, 404);
+});
+
+test('failed assembly retries saved scenes with no extra AI calls and charges exactly once', async t => {
+  const options = { failAssembly: true };
+  const f = await fixture(t, options);
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const history = await fetch(`${f.base}/api/ai-commercials/jobs`).then(r => r.json());
+  const job = history.jobs[0];
+  assert.equal(job.finalizationRetryAvailable, true);
+  assert.equal(job.requiredCredits, 4);
+  options.failAssembly = false;
+  const retry = () => fetch(`${f.base}/api/ai-commercials/jobs/${job.generationId}/retry`, { method: 'POST' });
+  const responses = await Promise.all([retry(), retry()]);
+  assert.ok(responses.some(r => r.status === 200));
+  assert.ok(responses.every(r => [200, 409].includes(r.status)));
+  assert.equal(f.calls.filter(c => c[0] === 'image').length, 3);
+  assert.equal(f.calls.filter(c => c[0] === 'video').length, 3);
+  assert.equal(f.calls.filter(c => c[0] === 'assemble').length, 2);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+  assert.equal((await retry()).status, 200);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+});
+
+test('logo failure keeps the protected original; retry skips assembly and preserves credits until success', async t => {
+  const options = { failBranding: true };
+  const f = await fixture(t, options);
+  const data = form();
+  data.append('logo', new Blob([image], { type: 'image/png' }), 'logo.png');
+  const result = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: data });
+  assert.equal(result.status, 502);
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  assert.ok(job.media.originalOutputUrl);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+  const retry = () => fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' });
+  assert.equal((await retry()).status, 502);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+  options.failBranding = false;
+  assert.equal((await retry()).status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'assemble').length, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'video').length, 3);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+});
+
+test('retry enforces ownership, sufficient credits, and deletion', async t => {
+  const f = await fixture(t, { failAssembly: true });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  await f.db.User.updateOne({ id: 'owner' }, { $set: { quickAdCredits: 0 } });
+  const retry = id => fetch(`${f.base}/api/ai-commercials/jobs/${id}/retry`, { method: 'POST' });
+  assert.equal((await retry(job.id)).status, 403);
+  assert.equal(f.calls.filter(c => c[0] === 'assemble').length, 1);
+  assert.equal((await retry('foreign')).status, 404);
+  await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}`, { method: 'DELETE' });
+  assert.equal((await retry(job.id)).status, 404);
+});
+
+test('each scene receives its own narration and duration', async t => {
+  const f = await fixture(t);
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const clips = f.calls.filter(c => c[0] === 'video');
+  assert.deepEqual(clips.map(c => c[2]), [6, 8, 6]);
+  clips.forEach((clip, index) => assert.ok(clip[1].includes(`Narration for scene ${index + 1}`)));
 });

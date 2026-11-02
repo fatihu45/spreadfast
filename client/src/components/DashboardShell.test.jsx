@@ -23,26 +23,25 @@ function render(role, path) {
     </AuthContext.Provider>
   </MemoryRouter>));
 }
-test('creator navigation preserves existing routes and proof query parameters', () => {
+test('creator navigation shows AI tools while preserving a legacy URL', () => {
   render('promoter', '/submit-proof?campaignId=42');
   expect(host.querySelector('output').textContent).toBe('/submit-proof?campaignId=42');
   for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) {
-    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/promoter/quick-ads', '/promoter-dashboard', '/available-campaigns', '/wallet']);
-    expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Campaigns');
+    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/ai-commercials', '/promoter/quick-ads', '/my-ads', '/quickads/credits', '/wallet']);
+    expect(nav.querySelector('[aria-current="page"]')).toBeNull();
     expect(nav.querySelector('button').textContent).toBe('Profile');
   }
   expect(host.querySelector('h1').textContent).toBe('Existing content');
 });
-test('business sections navigate within company route with one active item', () => {
+test('business navigation opens My Ads with one active item', () => {
   render('company', '/company');
   expect(host.querySelector('a[href="/wallet"]')).toBeNull();
   const nav = host.querySelector('.sf-sidebar nav');
-  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Quick Ads', 'Overview', 'Campaigns', 'Create Campaign']);
-  act(() => [...nav.querySelectorAll('a')].find(a => a.textContent === 'Create Campaign').click());
-  expect(host.querySelector('output').textContent).toBe('/company#create-campaign');
+  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Create Ads', 'Quick Ads', 'My Ads', 'Credits']);
+  act(() => [...nav.querySelectorAll('a')].find(a => a.textContent === 'My Ads').click());
+  expect(host.querySelector('output').textContent).toBe('/my-ads');
   expect(nav.querySelectorAll('[aria-current="page"]').length).toBe(1);
-  expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Create Campaign');
-  expect(document.activeElement.id).toBe('create-campaign');
+  expect(nav.querySelector('[aria-current="page"]').textContent).toBe('My Ads');
 });
 test('profile shows existing account data without navigation and settings remain disabled', () => {
   render('promoter', '/wallet');
@@ -60,3 +59,4 @@ test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('logout in %s invokes e
   act(() => [...host.querySelector(selector).querySelectorAll('button')].find(b => b.textContent === 'Log out').click());
   expect(logout).toHaveBeenCalledTimes(1); expect(host.querySelector('output').textContent).toBe('/');
 });
+

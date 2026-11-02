@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
+import { quickAdsHome } from '../utils/quickAdsApi';
 import './AICommercials.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -67,12 +68,13 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
   const [jobs, setJobs] = useState([]);
+  const [retryingId, setRetryingId] = useState(null);
   // Reuse the same key if the browser loses the response after the server accepted the job.
   const submissionKeyRef = useRef(null);
+  const historyRequestRef = useRef(0);
 
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
-  const hasFreePreview = balance.freePreviewAvailable === true;
-  const canAfford = hasFreePreview || Number(balance.quickAdCredits || 0) >= requiredCredits;
+  const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
 
   async function loadCredits() {
     if (!token) return;
@@ -95,6 +97,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
   async function loadHistory() {
     if (!token) return;
+    const request = ++historyRequestRef.current;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -102,11 +105,47 @@ export default function AICommercials({ initialTab = 'create' }) {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not read your ads.');
-      setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      if (request === historyRequestRef.current) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
     } catch (historyError) {
       setError(historyError.message || 'Could not load your previous ads.');
     }
   }
+
+  async function retryFinalization(job) {
+    setRetryingId(job.generationId);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId)}/retry`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not finish this commercial.');
+      setNotice('Your commercial is ready. Saved scenes were reused.');
+      await loadCredits();
+    } catch (retryError) { setError(retryError.message); }
+    finally { setRetryingId(null); await loadHistory(); }
+  }
+
+  async function downloadJob(job) {
+    try {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId)}/download`, {
+        headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Could not download this ad. Please try again.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'spreadfast-commercial.mp4';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (downloadError) { setError(downloadError.message); }
+  }
+
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo); }, [photo]);
+  useEffect(() => () => { if (logo) URL.revokeObjectURL(logo); }, [logo]);
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
 
   async function editJob(job) {
     const details = job.commercialDetails || {};
@@ -114,9 +153,9 @@ export default function AICommercials({ initialTab = 'create' }) {
     if (productName === null) return;
     const brandName = window.prompt('Brand name', job.brandName || details.brandName || '');
     if (brandName === null) return;
-    const contact = window.prompt('Contact / call to action', details.contact || '');
+    const contact = window.prompt('Contact / call to action', job.contact || details.contact || '');
     if (contact === null) return;
-    const specifications = window.prompt('Product specifications', details.specifications || '');
+    const specifications = window.prompt('Product specifications', job.specifications || details.specifications || '');
     if (specifications === null) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
@@ -127,7 +166,7 @@ export default function AICommercials({ initialTab = 'create' }) {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not update this ad.');
-      setNotice('Ad details updated.');
+      setNotice('Saved details updated. The existing video is unchanged.');
       setError('');
       await loadHistory();
     } catch (editError) {
@@ -146,6 +185,7 @@ export default function AICommercials({ initialTab = 'create' }) {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not delete this ad.');
+      historyRequestRef.current += 1;
       setJobs(current => current.filter(item => (item.generationId || item.id) !== (job.generationId || job.id)));
       setNotice('Ad deleted.');
       setError('');
@@ -181,7 +221,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
   const handleLogoChange = (input) => {
     const file = input?.files?.[0] || null;
-    const validation = validateImageFile(file, 'Logo');
+    const validation = file?.size > 2 * 1024 * 1024 ? 'Logo must be 2 MB or smaller.' : validateImageFile(file, 'Logo');
     if (validation) {
       setError(validation);
       return;
@@ -280,7 +320,7 @@ export default function AICommercials({ initialTab = 'create' }) {
         <p>Turn a product photo into a polished, scene-by-scene video advert.</p>
       </div>
       <div className="sf-commercials__actions">
-        <Link to="/company/quick-ads" className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link>
+        <Link to={quickAdsHome(user?.role)} className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link>
         <Link to="/quickads/credits" className="sf-commercials__credit"><UiIcon name="wallet" /> Buy credits</Link>
       </div>
     </header>
@@ -326,12 +366,16 @@ export default function AICommercials({ initialTab = 'create' }) {
                     <small>{String(job.style || 'Brand campaign').replace(/[_-]+/g, ' ')}{dateLabel ? ` · ${dateLabel}` : ''}</small>
                     {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
                     <div className="sf-commercials__history-actions">
-                      {isCompleted && videoUrl
-                        ? <a className="sf-commercials__icon-button" href={videoUrl} download aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></a>
+                      {isCompleted && job.downloadable
+                        ? <button type="button" className="sf-commercials__icon-button" onClick={() => downloadJob(job)} aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></button>
                         : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
-                      <button type="button" className="sf-commercials__icon-button" onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
-                      <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
+                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
+                    {job.finalizationRetryAvailable && <button type="button" disabled={!!retryingId} onClick={() => retryFinalization(job)}>
+                      {retryingId === job.generationId ? 'Finishing...' : 'Retry finishing'}
+                    </button>}
+                    {job.finalizationRetryAvailable && <small>Reuses saved scenes. {job.requiredCredits || 4} credits are charged only when the video is finished.</small>}
                     {isCompleted && !videoUrl ? (
                       <span className="sf-commercials__history-result">Video link unavailable</span>
                     ) : null}
@@ -344,7 +388,7 @@ export default function AICommercials({ initialTab = 'create' }) {
           <>
             <span className="sf-commercials__empty-icon"><UiIcon name="video" /></span>
             <h2>Your ads will live here</h2>
-            <p>Completed AI commercials and Quick Ads will appear here once a generation is finished.</p>
+            <p>Your AI commercials appear here. Find Quick Ads in the Quick Ads workspace.</p>
             <Button onClick={() => setTab('create')}>Create a commercial</Button>
           </>
         )}
@@ -381,8 +425,8 @@ export default function AICommercials({ initialTab = 'create' }) {
             <section className="sf-commercials__panel">
               <div className="sf-commercials__step"><span>3</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
               <div className="sf-commercials__tiers">
-                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{hasFreePreview ? 'Free preview' : '4 credits'}</b></button>
-                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{hasFreePreview ? 'Free preview' : '7 credits'}</b></button>
+                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>4 credits</b></button>
+                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>7 credits</b></button>
               </div>
             </section>
 
@@ -394,24 +438,23 @@ export default function AICommercials({ initialTab = 'create' }) {
             </div>
 
             <Button fullWidth size="lg" disabled={isSubmitting || !canAfford} onClick={handleSubmit}>
-              <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${hasFreePreview ? 'free preview' : `${requiredCredits} credits`}`}
+              <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${requiredCredits} credits`}
             </Button>
             {!canAfford && <p className="sf-commercials__footnote">You have {balance.quickAdCredits || 0} credits available. Buy more to generate this ad.</p>}
-            {hasFreePreview && <p className="sf-commercials__footnote">Your one free preview is available. Paid generations use the selected tier credits.</p>}
-            {!hasFreePreview && <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>}
+            <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>
           </div>
 
           <aside className="sf-commercials__preview">
             <div className="sf-commercials__preview-top"><span>PREVIEW</span><span className="sf-commercials__live"><i/> Live setup</span></div>
             <div className="sf-commercials__preview-stage">
               {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a product photo to preview your creative setup.</p></div>}
-              <span className="sf-commercials__duration">Up to 24 sec commercial</span>
+              <span className="sf-commercials__duration">20 sec commercial · 3 scenes</span>
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
               <div><span>BRAND</span><strong>{brandName || 'Your brand'}</strong></div>
               <div><span>STYLE</span><strong>{styleLabel}</strong></div>
-              <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · ${hasFreePreview ? 'free preview' : '4 credits'}` : `Premium · ${hasFreePreview ? 'free preview' : '7 credits'}`}</strong></div>
+              <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · 4 credits` : `Premium · 7 credits`}</strong></div>
             </div>
             <div className="sf-commercials__scene-note">
               <span><UiIcon name="sparkles" /></span>
@@ -429,3 +472,4 @@ export default function AICommercials({ initialTab = 'create' }) {
     )}
   </main>;
 }
+

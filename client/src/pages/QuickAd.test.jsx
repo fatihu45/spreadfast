@@ -78,8 +78,8 @@ test('sends authenticated multipart once and renders an inline playable result',
   expect(video.loop).toBe(true);
   expect(video.playsInline).toBe(true);
   expect(button('Save video').disabled).toBe(false);
-  expect(button('Promote with creators').disabled).toBe(false);
-  expect(button('Start campaign').disabled).toBe(false);
+  expect(button('Promote with creators')).toBeUndefined();
+  expect(button('Start campaign')).toBeUndefined();
   act(() => Simulate.change(container.querySelector('input[value="studio"]')));
   expect(container.querySelector('video')).toBeNull();
   expect(button('Save video').disabled).toBe(true);
@@ -194,8 +194,8 @@ test('unsupported accounts cannot submit Quick Ads', () => {
   expect(button('Generate Quick Ad').disabled).toBe(true);
   click(button('Generate Quick Ad'));
   expect(axios.post).not.toHaveBeenCalled();
-  expect(button('Promote with creators').disabled).toBe(true);
-  expect(button('Start campaign').disabled).toBe(true);
+  expect(button('Promote with creators')).toBeUndefined();
+  expect(button('Start campaign')).toBeUndefined();
 });
 
 test.each(['company', 'promoter'])('%s trial switches to the original after a verified purchase', async role => {
@@ -209,15 +209,15 @@ test.each(['company', 'promoter'])('%s trial switches to the original after a ve
   expect(container.querySelector('video').getAttribute('src')).toBe('https://api.example' + preview.previewPath);
   expect(container.querySelector('.quick-ad-open-video')).toBeNull();
   expect(button('Save video').disabled).toBe(true);
-  expect(button('Start campaign').disabled).toBe(true);
-  expect(button('Promote with creators').disabled).toBe(true);
+  expect(button('Start campaign')).toBeUndefined();
+  expect(button('Promote with creators')).toBeUndefined();
   expect(container.textContent).toContain('Buy any credit plan to unlock this video');
   axios.get.mockResolvedValue({ data: { ...preview, downloadable: true, videoUrl, quickAdCredits: 3 } });
   await act(async () => button('Preview Again').click());
   expect(axios.post).toHaveBeenCalledTimes(1);
   expect(button('Save video').disabled).toBe(false);
   expect(container.querySelector('video').src).toBe(videoUrl);
-  expect(button('Start campaign').disabled).toBe(role !== 'company');
+  expect(button('Start campaign')).toBeUndefined();
   expect(container.textContent).not.toContain('Buy any credit plan to unlock this video');
   expect(container.textContent).toContain('3 credits available');
 });
@@ -244,8 +244,8 @@ test('promoters generate and save paid ads with current balance while campaign p
   expect(container.querySelector('video').playsInline).toBe(true);
   expect(container.textContent).toContain('1 credits available');
   expect(button('Save video').disabled).toBe(false);
-  expect(button('Start campaign').disabled).toBe(true);
-  expect(button('Promote with creators').disabled).toBe(true);
+  expect(button('Start campaign')).toBeUndefined();
+  expect(button('Promote with creators')).toBeUndefined();
 });
 
 test('promoters with an exhausted preview and zero credits cannot submit another ad', async () => {
@@ -350,3 +350,4 @@ test('editing a finished video updates playback without another generation reque
   expect(container.querySelector('video').src).toBe('https://media.example/branded.mp4');
   expect(container.textContent).toContain('No generation credit was used.');
 });
+

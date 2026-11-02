@@ -74,3 +74,23 @@ test('fal provider failures and invalid outputs are not converted into success-s
     /no valid scene image URL/
   );
 });
+
+
+test('Veo accepts the six-second scenes and rejects unsupported lengths before submitting', async () => {
+  const fal = fakeFal({ video: { url: 'https://fal.example/scene.mp4' } });
+  await generateVeoClip({ fal, imageUrl: 'https://media.example/scene.png', prompt: 'A hook', durationSeconds: 6 });
+  assert.equal(fal.calls[0][2].input.duration, '6s');
+  assert.equal(fal.calls[0][2].input.resolution, '720p');
+  await assert.rejects(generateVeoClip({ fal, imageUrl: 'https://media.example/scene.png', durationSeconds: 7 }), /Unsupported video duration/);
+  assert.equal(fal.calls.filter(c => c[0] === 'submit').length, 1);
+});
+
+test('creative scene validation enforces timing, distinct narration, and complete prompts', () => {
+  const { normalizeScenes } = require('../services/aiCommercialProviders');
+  const scenes = [1, 2, 3].map(i => ({ imagePrompt: `Image ${i}`, motionPrompt: `Motion ${i}`, narration: `Scene ${i}`, durationSeconds: 99 }));
+  assert.deepEqual(normalizeScenes(scenes).map(s => s.durationSeconds), [6, 8, 6]);
+  assert.equal(normalizeScenes(scenes)[1].narration, 'Scene 2');
+  assert.throws(() => normalizeScenes([{}, ...scenes.slice(1)]), /directions/);
+  scenes[0].narration = Array(20).fill('word').join(' ');
+  assert.throws(() => normalizeScenes(scenes), /too long/);
+});

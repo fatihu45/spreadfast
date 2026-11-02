@@ -251,7 +251,7 @@ function createQuickAdsRouter({
   const upload = multer({
     storage: multer.memoryStorage(),
     // Busboy emits its size-limit event at equality; allow exactly 8 MB.
-    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 3, fields: 5, fieldSize: 256 },
+    limits: { fileSize: MAX_IMAGE_SIZE + 1, files: 3, fields: 5, fieldSize: 4096 },
     fileFilter: (req, file, callback) => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
         callback(Object.assign(new Error('Unsupported image'), { code: 'INVALID_IMAGE_TYPE' }));
@@ -554,3 +554,4 @@ function createQuickAdsRouter({
 
 module.exports = createQuickAdsRouter();
 module.exports.createQuickAdsRouter = createQuickAdsRouter;
+

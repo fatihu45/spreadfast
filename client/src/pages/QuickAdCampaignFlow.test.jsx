@@ -24,7 +24,6 @@ let currentLocation;
 function LocationProbe() { currentLocation = useLocation(); return null; }
 const button = text => [...container.querySelectorAll('button')].find(node => node.textContent.includes(text));
 const requirements = () => container.querySelector('textarea[placeholder="Describe the posts you want creators to make"]');
-const change = (node, value) => act(() => Simulate.change(node, { target: { value } }));
 async function render(entry = '/company/quick-ads') {
   await act(async () => root.render(<AuthContext.Provider value={{ user: { id: 'business-1', role: 'company' }, token: 'test-token' }}>
     <MemoryRouter initialEntries={[entry]}><LocationProbe /><Routes>
@@ -55,41 +54,18 @@ afterEach(() => {
   else process.env.REACT_APP_API_URL = previousApi;
 });
 
-test.each(['Promote with creators', 'Start campaign'])('%s hands hosted media to the existing editable campaign and checkout flow', async action => {
+test('completed Quick Ads stay in the AI workspace without retired campaign actions', async () => {
   await render();
-  expect(button(action).disabled).toBe(true);
   act(() => Simulate.change(container.querySelector('input[type="file"]'), {
     target: { files: [new File(['photo'], 'product.png', { type: 'image/png' })], value: '' },
   }));
   await act(async () => button('Generate Quick Ad').click());
-  await act(async () => button(action).click());
-  expect(currentLocation.pathname + currentLocation.hash).toBe('/company#create-campaign');
-  expect(currentLocation.state).toEqual({ quickAd: { videoUrl, imageUrl } });
-  expect(container.querySelector('.company-create-section').hidden).toBe(false);
-  expect(requirements().value).toContain(videoUrl);
-  expect(requirements().value).toContain(imageUrl);
-  expect(requirements().value).not.toContain('blob:');
+  expect(container.querySelector('video').getAttribute('src')).toBe(videoUrl);
+  expect(button('Save video').disabled).toBe(false);
+  expect(button('Promote with creators')).toBeUndefined();
+  expect(button('Start campaign')).toBeUndefined();
+  expect(currentLocation.pathname).toBe('/company/quick-ads');
   expect(apiCallAuth).not.toHaveBeenCalled();
-
-  change(requirements(), requirements().value + '\nShow the product clearly.');
-  change(container.querySelector('input[placeholder="Give your campaign a name"]'), 'Food campaign');
-  change(container.querySelector('textarea[maxlength="500"]'), 'Fresh food, delivered fast.');
-  change(container.querySelector('input[placeholder="Enter your campaign budget"]'), '20000');
-  act(() => Simulate.change(container.querySelector('.business-create-platforms input[type="checkbox"]')));
-  await act(async () => Simulate.submit(container.querySelector('#create-campaign')));
-  expect(container.querySelector('.business-create-review').textContent).toContain(videoUrl);
-  expect(container.querySelector('.business-create-review').textContent).toContain('Show the product clearly.');
-  expect(apiCallAuth).not.toHaveBeenCalled();
-  await act(async () => Simulate.submit(container.querySelector('#create-campaign')));
-  expect(apiCallAuth).toHaveBeenCalledTimes(1);
-  const [endpoint, token, options] = apiCallAuth.mock.calls[0];
-  expect(endpoint).toBe('/api/payments/initiate');
-  expect(token).toBe('test-token');
-  const payload = JSON.parse(options.body);
-  expect(payload.amount).toBe(20000);
-  expect(payload.description).toContain(videoUrl);
-  expect(payload.description).toContain(imageUrl);
-  expect(payload.description).toContain('Show the product clearly.');
 });
 
 test.each([undefined, { videoUrl: 'javascript:alert(1)', imageUrl }, { videoUrl: 'blob:local-product', imageUrl }])('normal or invalid handoffs keep campaign requirements empty', async quickAd => {
@@ -104,3 +80,4 @@ test('valid video survives a missing original image without inserting a temporar
   expect(requirements().value).not.toContain('Original product photo:');
   expect(requirements().value).not.toContain('blob:');
 });
+

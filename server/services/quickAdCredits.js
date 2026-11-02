@@ -23,11 +23,12 @@ function accountSummary(user) {
 const plain = doc => doc?.toObject ? doc.toObject() : doc;
 
 // One expiring account lock reserves eligibility, not money. No credit is debited here.
-async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
+async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, allowFreePreview = true, provider = 'fal', leaseMs = 12 * 60 * 1000, now = Date.now() }) {
   if (!Number.isSafeInteger(creditCost) || creditCost < 1) fail('INVALID_CREDIT_COST', 'This generation has an invalid credit cost.', 400);
   return DB.withTransaction(async tx => {
     const previous = await tx.QuickAdGeneration.findOne({ userId, idempotencyKey: key });
     if (previous) {
+      if (previous.deletedAt) fail('GENERATION_DELETED', 'This ad was deleted. Start a new request.', 410);
       if (previous.style !== style || (previous.model && previous.model !== model) ||
         (previous.creditCost !== undefined && previous.creditCost !== creditCost)) {
         fail('GENERATION_KEY_CONFLICT', 'Use a new request for different generation settings.');
@@ -45,7 +46,7 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
     if (user.quickAdGenerationLock && new Date(user.quickAdGenerationLockExpiresAt).getTime() > now) {
       fail('GENERATION_IN_PROGRESS', 'An ad is already being created. Please wait.');
     }
-    if (!account.freePreviewAvailable && account.quickAdCredits < creditCost) {
+    if (!(allowFreePreview && account.freePreviewAvailable) && account.quickAdCredits < creditCost) {
       fail('NO_QUICK_AD_CREDITS', 'You need Quick Ads credits to generate another ad.', 403);
     }
     if (user.quickAdGenerationLock) {
@@ -53,7 +54,7 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
         { $set: { status: 'failed', failureCode: 'LEASE_EXPIRED' } });
     }
     const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model, creditCost,
-      provider: 'fal', status: 'pending', stage: 'queued', freePreview: account.freePreviewAvailable,
+      provider, status: 'pending', stage: 'queued', freePreview: allowFreePreview && account.freePreviewAvailable,
       creditUsed: false, downloadable: false, expiresAt: new Date(now + leaseMs) };
     await tx.User.updateOne({ id: userId }, { $set: {
       quickAdGenerationLock: generation.id, quickAdGenerationLockExpiresAt: generation.expiresAt
@@ -124,3 +125,4 @@ async function failGeneration(DB, { userId, id, code = 'GENERATION_FAILED' }) {
   });
 }
 module.exports = { accountSummary, beginGeneration, finishGeneration, failGeneration, fail };
+
