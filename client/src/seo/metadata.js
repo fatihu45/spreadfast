@@ -1,6 +1,6 @@
 export const SITE_URL = 'https://tryspreadfast.com';
-export const HOME_TITLE = 'AI Video Ads from Product Images | SpreadFast';
-export const HOME_DESCRIPTION = 'Turn product photos into commercial video ads with SpreadFast Quick Ads and Fashion Studio. Connect with content creators to promote your business in Nigeria.';
+export const HOME_TITLE = 'AI Advertising Made Simple | SpreadFast';
+export const HOME_DESCRIPTION = 'Turn product photos into video adverts with SpreadFast Quick Ad, Fashion Studio and AI Commercial. AI advertising made simple, with no editing skills needed.';
 export const SOCIAL_IMAGE = `${SITE_URL}/icon-512.png`;
 
 // All application routes are excluded from search. Authentication still protects data.

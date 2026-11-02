@@ -2,12 +2,12 @@ import SubmissionEvidence from '../components/SubmissionEvidence';
 import AdminQuickAdsAnalytics from '../components/AdminQuickAdsAnalytics';
 import { creatorEarning, hasCurrentPricing } from '../utils/campaignPricing';
 import Alert from '../components/ui/Alert';
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiCallAuth } from '../utils/api';
 import { Link } from 'react-router-dom';
-import { AppShell, Badge, Button, Card, EmptyState, FormField, Input, PageHeader, PlatformBadge, StatCard, UserAvatar } from '../components/ui';
+import { AppShell, Badge, Button, Card, EmptyState, FormField, Input, PageHeader, PlatformBadge, UserAvatar } from '../components/ui';
 import NavigationItems from '../components/ui/NavigationItems';
 import UiIcon from '../components/ui/UiIcon';
 import '../components/DashboardShell.css';
@@ -37,7 +37,6 @@ export default function AdminDashboard() {
   };
 
   const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
@@ -51,23 +50,17 @@ export default function AdminDashboard() {
     visible: false
   });
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
 
-      const [statsData, campaignsData, submissionsData, withdrawalsData] = await Promise.all([
-        apiCallAuth('/api/admin/all-stats', token),
+      const [campaignsData, submissionsData, withdrawalsData] = await Promise.all([
         apiCallAuth('/api/admin/campaigns', token),
         apiCallAuth('/api/admin/submissions', token),
         apiCallAuth('/api/admin/withdrawals', token)
       ]);
 
-      if (statsData.success) setStats(statsData.stats);
       if (campaignsData.success) setCampaigns(campaignsData.campaigns || []);
       if (submissionsData.success) setSubmissions(submissionsData.submissions || []);
       if (withdrawalsData.success) setWithdrawals(withdrawalsData.withdrawals || []);
@@ -78,7 +71,11 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (activeTab !== 'overview' && activeTab !== 'quick-ads') fetchAllData();
+  }, [activeTab, fetchAllData]);
 
   const handleCampaignStatusChange = async (campaignId, newStatus) => {
     try {
@@ -185,18 +182,18 @@ export default function AdminDashboard() {
   const navigation = [
     ['overview', 'Overview', 'home'], ['campaigns', 'Campaigns', 'campaign'],
     ['submissions', 'Submissions', 'globe'], ['withdrawals', 'Withdrawals', 'wallet'],
-    ['quick-ads', 'Quick Ads Revenue', 'video'],
+    ['quick-ads', 'Payments & Usage', 'video'],
   ].map(([id, label, icon]) => ({ id, label, icon: <UiIcon name={icon} />, active: activeTab === id, onClick: () => setActiveTab(id) }));
   const footerItems = [
     { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
     { id: 'exit', label: 'Exit Admin', onClick: handleExitAdmin, icon: <UiIcon name="logout" /> },
   ];
   const titles = {
-    overview: ["Good morning, Admin ", "Here's what's happening across SpreadFast."],
-    campaigns: ['Campaigns', 'Manage campaigns across the platform.'],
+    overview: ["Business overview", "Customers, credit sales and AI generation health."],
+    campaigns: ['Campaigns', 'Legacy creator campaigns. Kept for historical records and outstanding work.'],
     submissions: ['Submissions', 'Review creator content and approve campaign earnings.'],
     withdrawals: ['Withdrawals', 'Review requests and keep payment statuses up to date.'],
-    'quick-ads': ['Quick Ads Revenue', 'Track credit purchases, usage and estimated generation costs.'],
+    'quick-ads': ['Payments & Usage', 'Shared credits across Quick Ad, Fashion Studio and AI Commercial.'],
   };
   return <AppShell className="sf-dashboard-shell sf-admin" navigation={navigation}
     brand={<Link to="/" className="sf-dashboard-logo" aria-label="SpreadFast home"><img src="/spreadfast-logo.png" width="2172" height="724" alt="SpreadFast" /></Link>}
@@ -208,27 +205,7 @@ export default function AdminDashboard() {
     <PageHeader title={<>{titles[activeTab][0]}{activeTab === 'overview' && <UiIcon name="sun" />}</>} description={titles[activeTab][1]} />
     {error && <Alert tone="error">{error}</Alert>}
     {success && <Alert tone="success">{success}</Alert>}
-    {activeTab === 'quick-ads' ? <AdminQuickAdsAnalytics /> : loading ? <Card className="sf-admin-loading" role="status" aria-busy="true"><UiIcon name="campaign" /><p>Loading admin dashboard...</p></Card> : <>
-      {activeTab === 'overview' && <div className="sf-stack">
-        {stats ? <>
-          <div className="sf-admin-stats">
-            <StatCard label="Total Users" value={stats.totalUsers} icon={<UiIcon name="user" />} description={<>Promoters: {stats.totalPromoters} &middot; Businesses: {stats.totalCompanies}</>} />
-            <StatCard label="Campaigns" value={stats.totalCampaigns} icon={<UiIcon name="campaign" />} description={<>Active: {stats.activeCampaigns}</>} />
-            <StatCard label="Submissions" value={stats.totalSubmissions} icon={<UiIcon name="globe" />} description={<>Pending: {stats.pendingSubmissions}</>} />
-            <StatCard label="Withdrawals" value={money(stats.totalWithdrawalAmount)} icon={<UiIcon name="wallet" />} description={<>Pending: {money(stats.pendingWithdrawalAmount)}</>} />
-          </div>
-          <Card className="sf-admin-revenue"><div><p className="sf-small sf-muted">Platform share (25%)</p><h2 className="sf-title">{money(stats.totalCampaignFees || 0)}</h2></div><dl className="sf-admin-details"><Detail label="Campaign fees">{money(stats.totalCampaignFees)}</Detail><Detail label="Creator allocation">{money(stats.totalCreatorAllocation)}</Detail><Detail label="Legacy campaign fees (estimate)">{money(stats.legacyCampaignFeeEstimate)}</Detail></dl></Card>
-        </> : <Card><EmptyState title="Statistics unavailable" description="Platform statistics could not be loaded." /></Card>}
-        <section aria-labelledby="admin-attention"><h2 id="admin-attention" className="sf-heading sf-admin-section-heading">Needs your attention</h2>
-          <div className="sf-admin-attention">
-            {[
-              ['submissions', 'Pending submissions', stats?.pendingSubmissions ?? submissions.filter(s => s.status === 'pending').length, 'Review creator proof and earnings.', 'Review submissions'],
-              ['withdrawals', 'Pending withdrawals', stats?.pendingWithdrawals ?? withdrawals.filter(w => w.status === 'pending').length, 'Check requests awaiting completion.', 'Review withdrawals'],
-              ['campaigns', 'Paused campaigns', campaigns.filter(c => c.status === 'paused').length, 'Manage campaigns currently on hold.', 'Manage campaigns'],
-            ].map(([tab, label, count, description, action]) => <Card key={tab}><Badge tone={count > 0 ? 'warning' : 'neutral'}>{count}</Badge><h3 className="sf-heading">{label}</h3><p className="sf-small sf-muted">{description}</p><Button variant="ghost" onClick={() => setActiveTab(tab)}>{action}</Button></Card>)}
-          </div>
-        </section>
-      </div>}
+    {['overview', 'quick-ads'].includes(activeTab) ? <AdminQuickAdsAnalytics details={activeTab === 'quick-ads'} /> : loading ? <Card className="sf-admin-loading" role="status" aria-busy="true"><UiIcon name="campaign" /><p>Loading admin dashboard...</p></Card> : <>
       {activeTab === 'campaigns' && <section aria-label="Campaign management" className="sf-stack">
         <p className="sf-small sf-muted">{campaigns.length} campaigns</p>
         {campaigns.length === 0 && <Card><EmptyState title="No campaigns found." description="Campaigns will appear here when businesses create them." /></Card>}

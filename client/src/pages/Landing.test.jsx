@@ -20,10 +20,6 @@ function render(user = null) {
     </MemoryRouter>
   </AuthContext.Provider>));
 }
-function clickCTA(text) {
-  const button = [...host.querySelectorAll('button')].find(node => node.textContent.startsWith(text));
-  act(() => button.click());
-}
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div');
@@ -37,25 +33,12 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test.each([
-  [null, 'Start a Campaign', '/register?role=company'],
-  [null, 'Earn with SpreadFast', '/register?role=promoter'],
-  [{ role: 'company', name: 'Test business' }, 'Start a Campaign', '/company'],
-  [{ role: 'promoter', name: 'Test creator' }, 'Earn with SpreadFast', '/dashboard'],
-])('preserves the role-aware CTA destination (%s, %s)', (user, text, destination) => {
+test.each([null, { role: 'company' }, { role: 'promoter' }])('AI product links work for every audience (%j)', user => {
   render(user);
-  clickCTA(text);
-  expect(host.querySelector('[data-testid="location"]').textContent).toBe(destination);
-});
-
-test.each([
-  [{ role: 'company' }, 'Earn with SpreadFast', 'Please login as a promoter to join campaigns.'],
-  [{ role: 'promoter' }, 'Start a Campaign', 'Only companies can create campaigns. Please login as a company.'],
-])('preserves wrong-role feedback (%s)', (user, text, message) => {
-  render(user);
-  clickCTA(text);
-  expect(window.alert).toHaveBeenCalledWith(message);
-  expect(host.querySelector('[data-testid="location"]').textContent).toBe('/');
+  const links = [...host.querySelectorAll('.landing-hero-actions a')];
+  expect(links.map(a => a.getAttribute('href'))).toEqual(['/quick-ad', '/ai-commercials']);
+  expect(host.textContent).not.toContain('Start a Campaign');
+  expect(host.textContent).not.toContain('Earn with SpreadFast');
 });
 
 test('keeps header destinations, existing support links and working section anchors', () => {
@@ -67,7 +50,7 @@ test('keeps header destinations, existing support links and working section anch
     expect(document.getElementById(href.slice(1))).not.toBeNull();
   });
   expect(host.querySelectorAll('h1')).toHaveLength(1);
-  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('Get more customers. Grow your Business.');
+  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('AI Advertising. Made Simple.');
 });
 
 test('mobile navigation opens and closes by Escape with focus restored', () => {
@@ -88,7 +71,7 @@ test('FAQ accordion retains its answers and accessible expansion state', () => {
   act(() => button.click());
   expect(button.getAttribute('aria-expanded')).toBe('true');
   expect(answer.hidden).toBe(false);
-  expect(answer.textContent).toContain('Every promoter submission is tracked');
+  expect(answer.textContent).toContain('Create short product videos with Quick Ad');
   act(() => button.click());
   expect(answer.hidden).toBe(true);
 });
