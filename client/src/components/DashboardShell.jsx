@@ -23,7 +23,6 @@ export default function DashboardShell({ children }) {
     item('my-ads', 'My Ads', '/my-ads', 'image', location.pathname === '/my-ads'),
     item('credits', 'Credits', '/quickads/credits', 'wallet', location.pathname === '/quickads/credits'),
   ];
-  if (!isBusiness) navigation.push(item('wallet', 'Wallet', '/wallet', 'wallet', location.pathname === '/wallet'));
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
     { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
@@ -64,3 +63,4 @@ export default function DashboardShell({ children }) {
     </dialog>
   </AppShell>;
 }
+

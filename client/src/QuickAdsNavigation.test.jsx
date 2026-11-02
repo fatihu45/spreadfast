@@ -105,8 +105,9 @@ test.each(['company', 'promoter'])('%s credits direct route retains dashboard na
   expect(deployment.routes).toContainEqual({ src: '^/quickads/credits/?$', dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
 
-test.each([['company', '/ai-commercials'], ['promoter', '/ai-commercials']])('legacy dashboard opens the %s AI studio', (role, destination) => {
-  render('/dashboard', role);
+test.each([['company', '/dashboard'], ['promoter', '/dashboard'], ['promoter', '/wallet']])('legacy %s %s opens the AI studio', (role, path) => {
+  render(path, role);
+  const destination = '/ai-commercials';
   expect(window.location.pathname).toBe(destination);
   expect(container.textContent).not.toContain('Loading campaigns...');
 });

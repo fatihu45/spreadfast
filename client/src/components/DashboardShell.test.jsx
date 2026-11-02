@@ -27,7 +27,7 @@ test('creator navigation shows AI tools while preserving a legacy URL', () => {
   render('promoter', '/submit-proof?campaignId=42');
   expect(host.querySelector('output').textContent).toBe('/submit-proof?campaignId=42');
   for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) {
-    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/ai-commercials', '/promoter/quick-ads', '/my-ads', '/quickads/credits', '/wallet']);
+    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/ai-commercials', '/promoter/quick-ads', '/my-ads', '/quickads/credits']);
     expect(nav.querySelector('[aria-current="page"]')).toBeNull();
     expect(nav.querySelector('button').textContent).toBe('Profile');
   }
@@ -44,18 +44,18 @@ test('business navigation opens My Ads with one active item', () => {
   expect(nav.querySelector('[aria-current="page"]').textContent).toBe('My Ads');
 });
 test('profile shows existing account data without navigation and settings remain disabled', () => {
-  render('promoter', '/wallet');
+  render('promoter', '/my-ads');
   act(() => host.querySelector('.sf-mobile-navigation button').click());
   expect(host.querySelector('dialog').open).toBe(true);
   expect(host.querySelector('dialog').textContent).toContain('test@example.com');
-  expect(host.querySelector('output').textContent).toBe('/wallet');
+  expect(host.querySelector('output').textContent).toBe('/my-ads');
   act(() => host.querySelector('[aria-label="Close profile"]').click());
   expect(host.querySelector('dialog').open).toBe(false);
   const settings = [...host.querySelectorAll('button')].filter(b => b.textContent === 'Settings');
   expect(settings.length).toBe(2); settings.forEach(b => expect(b.disabled).toBe(true));
 });
 test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('logout in %s invokes existing auth action and returns home', selector => {
-  render('company', '/wallet');
+  render('company', '/my-ads');
   act(() => [...host.querySelector(selector).querySelectorAll('button')].find(b => b.textContent === 'Log out').click());
   expect(logout).toHaveBeenCalledTimes(1); expect(host.querySelector('output').textContent).toBe('/');
 });
