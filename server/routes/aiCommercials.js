@@ -18,7 +18,7 @@ const {
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const TIER_COST = Object.freeze({ standard: 4, premium: 7 });
-const VALID_STYLES = new Set(['cinematic', 'showcase', 'lifestyle', 'promo']);
+const VALID_STYLES = new Set(['auto', 'cinematic', 'showcase', 'lifestyle', 'promo']);
 const MAX_GENERATION_MS = 15 * 60 * 1000;
 
 function cleanText(value, maxLength = 500) {
@@ -162,9 +162,6 @@ function createAiCommercialsRouter({
       const brandName = cleanText(req.body?.brandName, 100);
       const contact = cleanText(req.body?.contact, 120);
       const specifications = cleanText(req.body?.specifications, 500);
-      if (productName.length < 2 || !brandName) {
-        return res.status(400).json({ success: false, message: 'Product name and brand name are required.' });
-      }
       const job = await db.QuickAdGeneration.findOne({ id: req.params.id, userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } });
       if (!job) return res.status(404).json({ success: false, message: 'Ad not found.' });
       if (job.status === 'pending') return res.status(409).json({ success: false, message: 'Wait for generation to finish before editing this ad.' });
@@ -206,7 +203,7 @@ function createAiCommercialsRouter({
     if (!media?.publicId || !media.outputUrl) {
       const assembled = await assemble(cloudinary,
         generation.sceneAssets.map(scene => ({ publicId: scene.videoPublicId, durationSeconds: scene.durationSeconds })),
-        generation.id, details.endCard || details.contact || `${details.brandName} · ${details.productName}`);
+        generation.id, details.endCard || details.contact || [details.brandName, details.productName].filter(Boolean).join(' · ') || 'Discover more');
       signal.throwIfAborted();
       media = await persistVideo(cloudinary, assembled.outputUrl, { id: generation.id, freePreview: false }, signal);
       // Save the protected original before optional branding. A retry needs no fal calls.
@@ -267,11 +264,9 @@ function createAiCommercialsRouter({
       const brandName = cleanText(req.body?.brandName, 100);
       const contact = cleanText(req.body?.contact, 120);
       const specifications = cleanText(req.body?.specifications, 500);
-      const style = cleanText(req.body?.style, 30);
+      const style = cleanText(req.body?.style, 30) || 'auto';
       const tier = cleanText(req.body?.tier || 'standard', 20);
       const requiredCredits = TIER_COST[tier];
-      if (productName.length < 2) return res.status(400).json({ success: false, message: 'Product name must contain at least 2 characters.' });
-      if (!brandName) return res.status(400).json({ success: false, message: 'Brand name is required.' });
       if (!VALID_STYLES.has(style)) return res.status(400).json({ success: false, message: 'Choose a valid creative style.' });
       if (!requiredCredits) return res.status(400).json({ success: false, message: 'Select a valid generation tier.' });
       const brandingRequest = logoFile
@@ -320,7 +315,7 @@ function createAiCommercialsRouter({
       const scenes = [];
       await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, {
         $set: { commercialDetails: { productName, brandName, contact, specifications, tier, requiredCredits,
-          title: plan.title, voiceover: plan.voiceover, endCard: contact || `${brandName} · ${productName}` } }
+          title: plan.title, voiceover: plan.voiceover, endCard: contact || [brandName, productName].filter(Boolean).join(' · ') || 'Discover more' } }
       });
 
       for (const [index, scene] of plan.scenes.entries()) {
@@ -332,7 +327,7 @@ function createAiCommercialsRouter({
           prompt: [
             scene.imagePrompt,
             'Preserve the uploaded product identity, proportions, colors, packaging, labels, and branding exactly.',
-            specifications ? `Product constraints: ${specifications}` : ''
+            specifications ? `Customer brief (apply relevant visual details; do not render this text): ${specifications}` : ''
           ].filter(Boolean).join('\n'),
           signal: controller.signal
         });
