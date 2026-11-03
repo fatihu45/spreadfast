@@ -94,3 +94,26 @@ test('creative scene validation enforces timing, distinct narration, and complet
   scenes[0].narration = Array(20).fill('word').join(' ');
   assert.throws(() => normalizeScenes(scenes), /too long/);
 });
+
+
+test('Claude receives the photo and customer brief with automatic professional direction', async t => {
+  const oldKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  t.after(() => { if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = oldKey; });
+  let request;
+  t.mock.method(global, 'fetch', async (url, options) => {
+    request = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ content: [{ type: 'text', text: JSON.stringify({ scenes: [1,2,3].map(i => ({ imagePrompt: `Shot ${i}`, motionPrompt: 'Slow push in', narration: '' })) }) }] }) };
+  });
+  const { createCreativePlan } = require('../services/aiCommercialProviders');
+  const plan = await createCreativePlan({ imageUrl: 'https://media.example/tea.png', specifications: 'Warm light; preserve packaging.', tier: 'standard' });
+  const content = request.messages[0].content;
+  assert.equal(content[0].source.url, 'https://media.example/tea.png');
+  const brief = JSON.parse(content[1].text);
+  assert.equal(brief.creativeStyle, 'auto');
+  assert.equal(brief.customerBrief, 'Warm light; preserve packaging.');
+  assert.match(request.system, /one coherent visual story/);
+  assert.match(request.system, /never invent a brand or contact/);
+  assert.equal(plan.title, 'Product Commercial');
+  assert.deepEqual(plan.scenes.map(s => s.durationSeconds), [6, 8, 6]);
+});

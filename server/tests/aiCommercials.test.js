@@ -45,7 +45,9 @@ async function fixture(t, options = {}) {
   const router = createAiCommercialsRouter({
     cloudinary,
     authenticate: (req, res, next) => { req.user = { id: 'owner', role: 'company' }; next(); },
-    createPlan: async () => ({
+    createPlan: async input => {
+      calls.push(['plan', input]);
+      return ({
       title: 'Three-scene product spot',
       voiceover: 'Meet the new product.',
       endCard: 'Shop today',
@@ -56,7 +58,7 @@ async function fixture(t, options = {}) {
         durationSeconds: [6, 8, 6][index - 1],
         narration: `Narration for scene ${index}`
       }))
-    }),
+    }); },
     generateImage: async input => {
       calls.push(['image', input.prompt]);
       if (options.failImageAt === calls.filter(call => call[0] === 'image').length) throw new Error('Image generation failed');
@@ -289,4 +291,30 @@ test('each scene receives its own narration and duration', async t => {
   const clips = f.calls.filter(c => c[0] === 'video');
   assert.deepEqual(clips.map(c => c[2]), [6, 8, 6]);
   clips.forEach((clip, index) => assert.ok(clip[1].includes(`Narration for scene ${index + 1}`)));
+});
+
+
+test('photo and brief generate a paid commercial with automatic direction and no branding fields', async t => {
+  const f = await fixture(t);
+  const data = form();
+  for (const key of ['productName', 'brandName', 'contact', 'style', 'tier']) data.delete(key);
+  data.set('specifications', 'Warm tea advert with a pouring shot. Preserve packaging.');
+  const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: data });
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  const brief = f.calls.find(call => call[0] === 'plan')[1];
+  assert.equal(brief.style, 'auto');
+  assert.equal(brief.specifications, data.get('specifications'));
+  assert.equal(brief.brandName, '');
+  assert.equal(brief.tier, 'standard');
+  assert.equal(f.calls.find(call => call[0] === 'assemble')[2], 'Discover more');
+  const saved = await f.db.QuickAdGeneration.findOne({ id: result.generationId });
+  assert.equal(saved.style, 'auto');
+  assert.equal(result.freePreview, false);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+  const edit = await fetch(`${f.base}/api/ai-commercials/jobs/${result.generationId}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ specifications: 'Updated brief', productName: '', brandName: '' })
+  });
+  assert.equal(edit.status, 200);
 });

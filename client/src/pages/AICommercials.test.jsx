@@ -76,3 +76,29 @@ test('retry finishing calls only the saved-job endpoint', async () => {
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/ai-commercials/jobs/saved-1/retry'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
+
+
+test('simple creation sends a photo and brief without a style or required branding', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(() => 'blob:product');
+  URL.revokeObjectURL = jest.fn();
+  await render();
+  expect(container.textContent).not.toMatch(/Choose your creative direction|Scene-by-scene creation|Idle/);
+  expect(container.textContent).toContain('Available credits: 4');
+  expect(container.querySelector('details').open).toBe(false);
+  const upload = container.querySelector('.sf-commercials__upload input');
+  Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
+  await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  const brief = container.querySelector('textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(brief, 'Warm tea advert');
+    brief.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => button('Generate commercial').click());
+  const request = global.fetch.mock.calls.find(([url]) => url.endsWith('/generate'));
+  expect(request).toBeDefined();
+  expect(request[1].body.get('style')).toBeNull();
+  expect(request[1].body.get('specifications')).toBe('Warm tea advert');
+  expect(request[1].body.get('brandName')).toBe('');
+  expect(request[1].body.get('tier')).toBe('standard');
+});
