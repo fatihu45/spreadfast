@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
     } finally { clearTimeout(timeoutId); }
   };
 
-  const register = async (name, email, password, role, socialMedia = {}) => {
+  const register = async (name, email, password, role, socialMedia = {}, marketingSubscribed = false) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -76,7 +76,7 @@ export function AuthProvider({ children }) {
       const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role, socialMedia }),
+        body: JSON.stringify({ name, email, password, role, socialMedia, marketingSubscribed }),
         credentials: 'include',
         signal: controller.signal
       });
@@ -217,3 +217,4 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+

@@ -1,5 +1,5 @@
+const { renderLayout } = require('./emailLayout');
 const SENDER = 'SpreadFast <noreply@tryspreadfast.com>';
-const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const naira = value => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 2 }).format(value);
 const date = value => new Date(value).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' }) + ' WAT';
 function siteUrl(path, env = process.env) {
@@ -80,8 +80,8 @@ function renderEmail(kind, data, env = process.env) {
   }
   const url = siteUrl(path, env);
   const greeting = kind.startsWith('admin_') ? 'Hello SpreadFast team,' : `Hi ${d.name || 'there'},`;
-  const text = [greeting, message, ...details.map(([key, value]) => `${key}: ${value ?? 'Not available'}`), `${cta}: ${url}`, 'Thanks,', 'SpreadFast', 'https://tryspreadfast.com'].join('\n\n');
-  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f9f9f9;font-family:Arial,sans-serif;color:#444"><div style="max-width:600px;margin:0 auto;padding:20px"><header style="background:#15803d;padding:24px;border-radius:10px;color:white"><h1 style="margin:0;font-size:24px">SpreadFast</h1></header><main style="background:white;padding:24px;border-radius:10px;margin-top:16px;line-height:1.6;overflow-wrap:anywhere"><h2 style="font-size:20px;color:#15803d">${escapeHtml(subject)}</h2><p>${escapeHtml(greeting)}</p><p>${escapeHtml(message)}</p>${details.map(([key, value]) => `<p style="margin:8px 0"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value ?? 'Not available')}</p>`).join('')}<p style="margin-top:24px"><a href="${escapeHtml(url)}" style="display:inline-block;background:#15803d;color:white;padding:12px 20px;border-radius:8px;text-decoration:none">${escapeHtml(cta)}</a></p><p>Thanks,<br>SpreadFast</p></main><footer style="text-align:center;padding:20px;font-size:12px"><a href="https://tryspreadfast.com">tryspreadfast.com</a></footer></div></body></html>`;
+  const { html, text } = renderLayout({ title: subject, greeting, paragraphs: [message], details, cta, url });
   return { subject, html, text };
 }
 module.exports = { createEmailSender, renderEmail, emailEnabled };
+

@@ -12,6 +12,7 @@ import CompanyDashboard from './pages/CompanyDashboard';
 import QuickAd from './pages/QuickAd';
 import AICommercials from './pages/AICommercials.jsx';
 import QuickAdCredits from './pages/QuickAdCredits';
+import EmailPreferences from './pages/EmailPreferences';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentCallback from './pages/PaymentCallback';
 import PromotionDashboard from './pages/PromotionDashboard';
@@ -66,6 +67,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/email-preferences" element={<ProtectedRoute><EmailPreferences /></ProtectedRoute>} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -159,4 +161,5 @@ function App() {
 }
 
 export default App;
+
 

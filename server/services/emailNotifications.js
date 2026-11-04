@@ -42,6 +42,7 @@ async function deliverNotification(DB, id, sendEmail, now = Date.now()) {
       nextAttemptAt: new Date(Date.now() + Math.min(30, 2 ** Math.min(row.attempts || 0, 5)) * 60000)
     })
   } });
+  if (success && row.kind === 'email_design_test') console.log('[Email design test] Resend accepted', { providerId: result.id });
   if (!success && !result?.skipped) console.error('[Email] Notification delivery failed', { id, kind: row.kind });
 }
 
@@ -72,3 +73,4 @@ async function passwordChanged(DB, user) {
   } catch { console.error('[Email] Password-change notification could not be queued'); }
 }
 module.exports = { enqueueEmail, deliverNotification, startEmailWorker, passwordChanged };
+

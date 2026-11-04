@@ -17,6 +17,10 @@ const cloudinary = require('cloudinary').v2;
 const User = require('./models/user');
 const QuickAdGeneration = require('./models/QuickAdGeneration');
 const EmailNotification = require('./models/EmailNotification');
+const emailMarketingModels = require('./models/EmailMarketing');
+const { startMarketingWorker } = require('./services/emailMarketing');
+const createEmailMarketingRouter = require('./routes/emailMarketing');
+const { renderLayout, SITE } = require('./services/emailLayout');
 const { createEmailSender } = require('./services/emailService');
 const { startEmailWorker, passwordChanged } = require('./services/emailNotifications');
 const { quoteCampaign, hasCurrentPricing, creatorSlots, feeStats, verifyCharge } = require('./services/campaignPricing');
@@ -527,193 +531,46 @@ const ActivityLog = require('./models/ActivityLog');
 // ==================== EMAIL HELPER ====================
 const sendEmail = createEmailSender({ resend });
 startEmailWorker(DB, sendEmail, isMongoConnected);
+const emailMarketingOptions = { models: emailMarketingModels, User, Notification: EmailNotification, resend, isConnected: isMongoConnected };
+app.use('/api/email-marketing', createEmailMarketingRouter(emailMarketingOptions));
+startMarketingWorker(emailMarketingOptions);
 
 // ==================== EMAIL FUNCTIONS ====================
 const sendWelcomeEmail = async (name, email, role) => {
-  const isCompany = role === 'company';
-  const subject = 'Welcome to SpreadFast! 🎉';
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-        <h1 style="color: white; margin: 0;">Welcome to SpreadFast!</h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-        <h2 style="color: #15803d;">Hi ${name}! 👋</h2>
-        <p style="color: #444; font-size: 16px;">
-          Your account has been created successfully as a
-          <strong>${isCompany ? 'Company' : 'Promoter'}</strong>.
-        </p>
-        ${isCompany ? `
-        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="color: #15803d;">As a Company you can:</h3>
-          <ul style="color: #444;">
-            <li>Create campaigns for promoters to spread</li>
-            <li>Pay securely via Paystack</li>
-            <li>Track promoter submissions</li>
-            <li>Grow your brand fast</li>
-          </ul>
-        </div>
-        ` : `
-        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="color: #15803d;">As a Promoter you can:</h3>
-          <ul style="color: #444;">
-            <li>Browse available campaigns</li>
-            <li>Submit proof of promotion</li>
-            <li>Earn money directly to your wallet</li>
-            <li>Withdraw to your bank account</li>
-          </ul>
-        </div>
-        `}
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}"
-             style="background-color: #15803d; color: white; padding: 15px 30px;
-                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            Go to SpreadFast →
-          </a>
-        </div>
-      </div>
-      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
-        © 2025 SpreadFast. All rights reserved.<br/>
-        If you did not create this account, please ignore this email.
-      </p>
-    </div>
-  `;
-  await sendEmail(email, subject, html);
-  console.log('Welcome email sent to:', email);
+  const subject = 'Welcome to SpreadFast';
+  const content = renderLayout({ title: 'Your next product ad starts here.', greeting: `Hi ${name || 'there'},`,
+    paragraphs: ['Welcome to SpreadFast. Turn your product photos into video ads for your business.',
+      'Start with Quick Ad: upload a clear product photo, choose a style, and describe the result you want. For clothing, explore Fashion Studio with front and back outfit photos.'],
+    cta: 'Create your first ad', url: SITE + (role === 'company' ? '/company/quick-ads' : '/promoter/quick-ads') });
+  return sendEmail(email, subject, content.html, content.text);
 };
 
 const sendCampaignConfirmationEmail = async (companyName, companyEmail, campaign) => {
-  const subject = `✅ Your Campaign "${campaign.title}" is Now Live!`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-        <h1 style="color: white; margin: 0;">Campaign Live! 🚀</h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-        <h2 style="color: #15803d;">Hi ${companyName}!</h2>
-        <p style="color: #444; font-size: 16px;">
-          Your campaign has been created successfully and is now
-          <strong style="color: #15803d;">LIVE</strong> to promoters!
-        </p>
-        <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
-          <h3 style="color: #15803d; margin-top: 0;">Campaign Details</h3>
-          <table style="width: 100%; color: #444;">
-            <tr><td style="padding: 8px 0;"><strong>Campaign Name:</strong></td><td>${campaign.title}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Budget:</strong></td><td>₦${parseFloat(campaign.budget).toLocaleString()}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Amount Paid:</strong></td><td>₦${parseFloat(campaign.amountPaid).toLocaleString()}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Active ✅</strong></td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Payment Reference:</strong></td><td style="font-size: 12px;">${campaign.paystackReference || 'N/A'}</td></tr>
-          </table>
-        </div>
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/company"
-             style="background-color: #15803d; color: white; padding: 15px 30px;
-                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            View Your Campaign →
-          </a>
-        </div>
-      </div>
-      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">© 2025 SpreadFast. All rights reserved.</p>
-    </div>
-  `;
-  await sendEmail(companyEmail, subject, html);
-  console.log('Campaign confirmation email sent to:', companyEmail);
+  const subject = `Your campaign "${campaign.title}" is live`;
+  const content = renderLayout({ title: 'Your campaign is live.', greeting: `Hi ${companyName},`,
+    paragraphs: ['Your campaign is ready for promoters.'], details: [['Campaign', campaign.title], ['Budget', `₦${Number(campaign.budget).toLocaleString('en-NG')}`], ['Reference', campaign.paystackReference || 'N/A']],
+    cta: 'View campaign', url: SITE + '/company' });
+  return sendEmail(companyEmail, subject, content.html, content.text);
 };
 
 const sendPasswordResetEmail = async (name, email, resetToken) => {
-  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
   const subject = 'Reset your SpreadFast password';
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-        <h1 style="color: white; margin: 0;">Password Reset Request</h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-        <h2 style="color: #15803d;">Hi ${name}!</h2>
-        <p style="color: #444; font-size: 16px;">
-          We received a request to reset your SpreadFast password. Click the button below to choose a new one.
-          This link expires in 30 minutes.
-        </p>
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="${resetUrl}"
-             style="background-color: #15803d; color: white; padding: 15px 30px;
-                    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            Reset Password →
-          </a>
-        </div>
-        <p style="color: #999; font-size: 13px; margin-top: 30px;">
-          If you didn't request this, you can safely ignore this email — your password won't be changed.
-        </p>
-      </div>
-      <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">© 2025 SpreadFast. All rights reserved.</p>
-    </div>
-  `;
-  await sendEmail(email, subject, html);
-  console.log('Password reset email sent to:', email);
+  const content = renderLayout({ title: 'Reset your password.', greeting: `Hi ${name || 'there'},`,
+    paragraphs: ['Use the button below to choose a new password. This link expires in 30 minutes.', "If you did not request this, you can ignore this email. Your password will not change."],
+    cta: 'Reset password', url: SITE + '/reset-password?token=' + encodeURIComponent(resetToken) });
+  return sendEmail(email, subject, content.html, content.text);
 };
 
-const sendNewCampaignAlertToPromoters = async (campaign) => { if (process.env.NODE_ENV !== 'production') {
-    console.log('📧 [DEV] Skipping promoter email alerts in development');
-    return;
-    }
-    try {
-    const promoters = await DB.User.find({ role: 'promoter' });
-    if (promoters.length === 0) {
-      console.log('No promoters to notify');
-      return;
-    }
-    const promoterSlots = creatorSlots(campaign);
-    const subject = `🔔 New Campaign Available: "${campaign.title}" — Earn Money Now!`;
-
-    const emailPromises = promoters.map(async (promoter) => {
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background-color: #15803d; padding: 30px; border-radius: 10px; text-align: center;">
-            <h1 style="color: white; margin: 0;">New Campaign Alert! 🔔</h1>
-            <p style="color: #dcfce7; margin: 10px 0 0 0;">A new earning opportunity is available</p>
-          </div>
-          <div style="padding: 30px; background: #f9f9f9; border-radius: 10px; margin-top: 20px;">
-            <h2 style="color: #15803d;">Hi ${promoter.name}! 👋</h2>
-            <p style="color: #444; font-size: 16px;">A new campaign just went live on SpreadFast.
-              <strong>Be one of the first to subscribe and start earning!</strong>
-            </p>
-            <div style="background: #dcfce7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #15803d;">
-              <h3 style="color: #15803d; margin-top: 0;">📢 ${campaign.title}</h3>
-              <table style="width: 100%; color: #444;">
-                <tr><td style="padding: 8px 0;"><strong>Description:</strong></td><td>${campaign.description || 'Promote this brand on social media'}</td></tr>
-                <tr><td style="padding: 8px 0;"><strong>Creator pool:</strong></td><td style="color: #15803d;"><strong>₦${parseFloat(campaign.budget).toLocaleString()}</strong></td></tr>
-                <tr><td style="padding: 8px 0;"><strong>Available Slots:</strong></td><td><strong>${promoterSlots} promoters needed</strong></td></tr>
-                <tr><td style="padding: 8px 0;"><strong>Platforms:</strong></td><td>${(campaign.socialMediaPlatforms || []).join(', ') || 'All platforms'}</td></tr>
-                <tr><td style="padding: 8px 0;"><strong>Status:</strong></td><td style="color: #15803d;"><strong>Open for Subscription ✅</strong></td></tr>
-              </table>
-            </div>
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-              <p style="color: #92400e; margin: 0; font-size: 14px;">
-                ⚡ <strong>Act fast!</strong> Only ${promoterSlots} slots available. First come, first served!
-              </p>
-            </div>
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/available-campaigns"
-                 style="background-color: #15803d; color: white; padding: 15px 30px;
-                        border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                Subscribe Now & Start Earning →
-              </a>
-            </div>
-          </div>
-          <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
-            © 2025 SpreadFast. All rights reserved.<br/>
-            You are receiving this because you are a registered promoter on SpreadFast.
-          </p>
-        </div>
-      `;
-      return sendEmail(promoter.email, subject, html);
-    });
-
-    await Promise.allSettled(emailPromises);
-    console.log(`Campaign alert sent to ${promoters.length} promoters`);
-  } catch (error) {
-    console.error('Error sending promoter alerts:', error.message);
+const sendNewCampaignAlertToPromoters = async campaign => {
+  if (process.env.NODE_ENV !== 'production') return;
+  const promoters = await DB.User.find({ role: 'promoter' });
+  for (const promoter of promoters) {
+    const subject = `New campaign: ${campaign.title}`;
+    const content = renderLayout({ title: 'A new campaign is available.', greeting: `Hi ${promoter.name},`,
+      paragraphs: [campaign.description || 'Explore this campaign on SpreadFast.'],
+      details: [['Campaign', campaign.title], ['Available slots', creatorSlots(campaign)]],
+      cta: 'View campaign', url: SITE + '/available-campaigns' });
+    await sendEmail(promoter.email, subject, content.html, content.text);
   }
 };
 
@@ -866,6 +723,8 @@ app.post('/api/auth/register', async (req, res) => {
       email,
       password: hashedPassword,
       role: role || 'promoter',
+      marketingSubscribed: req.body.marketingSubscribed === true,
+      ...(req.body.marketingSubscribed === true ? { marketingConsentAt: new Date(), marketingConsentSource: 'signup-v1' } : {}),
       socialMedia: Object.fromEntries(['tiktok','instagram','twitter','facebook','youtube'].map(key => [key, typeof socialMedia?.[key] === 'string' ? socialMedia[key].trim().slice(0, 500) : ''])),
       walletBalance: 0,
       quickAdCredits: 0,
@@ -2045,3 +1904,4 @@ app.listen(PORT, () => {
   console.log(`📧 Email provider: Resend`);
   console.log(`🔔 Webhook endpoint: POST /api/payments/webhook`);
 });
+

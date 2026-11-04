@@ -59,8 +59,10 @@ export default function DashboardShell({ children }) {
         <Button variant="ghost" onClick={() => profile.current.close()} aria-label="Close profile"><UiIcon name="close" /></Button>
       </div>
       <UserAvatar name={user?.name} size="lg" />
+      <Link to="/email-preferences" onClick={() => profile.current.close()}>Email preferences</Link>
       <dl><dt>Name</dt><dd>{user?.name || 'Not provided'}</dd><dt>Email</dt><dd>{user?.email || 'Not provided'}</dd><dt>Account type</dt><dd>{isBusiness ? 'Business' : 'Creator'}</dd></dl>
     </dialog>
   </AppShell>;
 }
+
 

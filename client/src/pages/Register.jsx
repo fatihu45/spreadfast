@@ -27,6 +27,7 @@ export default function Register() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [marketingSubscribed, setMarketingSubscribed] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [openPolicy, setOpenPolicy] = useState(null);
   const [step, setStep] = useState(1);
@@ -67,7 +68,8 @@ export default function Register() {
       registrationData.email,
       registrationData.password,
       registrationData.role,
-      registrationData.socialMedia
+      registrationData.socialMedia,
+      marketingSubscribed
     );
     if (result.success) {
       window.location.href = getAuthDestination(result.user || { role });
@@ -101,6 +103,7 @@ export default function Register() {
         </fieldset>
         {step === 2 && <fieldset disabled={loading} className="sf-signup-role-fields">
           <legend className="sr-only">Choose your role</legend>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}><input type="checkbox" checked={marketingSubscribed} onChange={e => setMarketingSubscribed(e.target.checked)} />Send me SpreadFast advertising tips and product updates, up to four times weekly. Unsubscribe anytime.</label>
           <div className="sf-signup-roles">{[
             { value: 'promoter', title: 'Promote campaigns', description: 'Create AI video ads and earn by promoting brands.', icon: 'campaign' },
             { value: 'company', title: 'Advertise my business', description: 'Create AI video ads and reach customers with creators.', icon: 'home' }
@@ -123,3 +126,4 @@ export default function Register() {
     <PolicyModal isOpen={openPolicy === 'privacy'} policyType="privacy" onClose={() => setOpenPolicy(null)} />
   </AuthLayout>;
 }
+

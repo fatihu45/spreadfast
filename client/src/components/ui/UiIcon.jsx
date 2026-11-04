@@ -1,6 +1,7 @@
 import React from 'react';
 
 const paths = {
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></>,
   edit: <><path d="m14 5 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z" /></>,
   play: <path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none" />,
   trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
@@ -49,3 +50,4 @@ export default function UiIcon({ name = 'campaign', className }) {
     </svg>
   );
 }
+

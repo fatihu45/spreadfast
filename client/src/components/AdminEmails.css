@@ -1,0 +1,9 @@
+.sf-email-admin { display:grid; gap:24px; }
+.sf-email-panel { background:#fff; border:1px solid #e2e9ee; border-radius:16px; padding:24px; min-width:0; }
+.sf-email-panel p { margin:12px 0; color:#576b7d; }
+.sf-email-controls { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin:20px 0; }
+.sf-email-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.sf-email-panel select,.sf-email-panel textarea { width:100%; border:1px solid #a4b4bf; border-radius:10px; padding:12px; font:inherit; background:#fff; color:#0f2435; }
+.sf-email-preview { display:block; width:100%; height:760px; border:1px solid #e2e9ee; margin-top:24px; }
+.sf-email-row { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid #e2e9ee; padding:16px 0; overflow-wrap:anywhere; }
+@media(max-width:640px) { .sf-email-form { grid-template-columns:1fr; } .sf-email-panel { padding:16px; } .sf-email-row { align-items:flex-start; flex-direction:column; } }
