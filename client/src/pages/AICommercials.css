@@ -31,3 +31,20 @@
 .sf-commercials__photo-list figure { margin: 0; width: 72px; }
 .sf-commercials__photo-list img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: #f5f5f7; }
 .sf-commercials__photo-list figcaption { font-size: 11px; text-align: center; margin-top: 4px; }
+
+
+/* ChatGPT-inspired, restrained percent-progress treatment for commercial creation. */
+.sf-commercials__progress-overlay{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:24px;box-sizing:border-box;text-align:center;color:#fff;background:linear-gradient(150deg,rgba(12,36,27,.84),rgba(9,63,43,.78));isolation:isolate;overflow:hidden}
+.sf-commercials__progress-overlay::before{content:"";position:absolute;width:85%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(75,222,159,.24),transparent 70%);animation:sf-commercial-glow 5s ease-in-out infinite;z-index:-1}
+.sf-commercials__progress-orbit{width:70px;height:70px;display:grid;place-items:center;margin-bottom:1px;border:1px solid rgba(255,255,255,.22);border-top-color:#8ff6c6;border-radius:50%;animation:sf-commercial-spin 3s linear infinite}
+.sf-commercials__progress-orbit span{display:block;width:48px;height:48px;border:1px solid rgba(255,255,255,.14);border-bottom-color:#bbffe1;border-radius:50%}
+.sf-commercials__progress-percent{font-variant-numeric:tabular-nums;font-size:clamp(52px,7vw,84px);letter-spacing:-.065em;line-height:1.05;font-weight:650}
+.sf-commercials__progress-percent small{font-size:.38em;letter-spacing:0;margin-left:4px;font-weight:500}
+.sf-commercials__progress-heading{font-size:15px;font-weight:700;letter-spacing:-.015em}
+.sf-commercials__progress-stage{font-size:12px;color:#d3f6e4;min-height:17px}
+.sf-commercials__progress-track{width:min(255px,85%);height:6px;border-radius:100px;overflow:hidden;background:rgba(255,255,255,.22);margin-top:10px}
+.sf-commercials__progress-track>div{height:100%;border-radius:inherit;background:linear-gradient(90deg,#56cf9c,#b4ffdf);transition:width .35s ease-out}
+.sf-commercials__progress-disclaimer{font-size:10px;line-height:1.5;color:#cae7d8;max-width:270px}
+@keyframes sf-commercial-spin{to{transform:rotate(360deg)}}
+@keyframes sf-commercial-glow{50%{transform:scale(1.35);opacity:.55}}
+@media(prefers-reduced-motion:reduce){.sf-commercials__progress-orbit,.sf-commercials__progress-overlay::before{animation:none}.sf-commercials__progress-track>div{transition:none}}
