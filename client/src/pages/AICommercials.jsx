@@ -31,6 +31,16 @@ function stageLabel(stage) {
   return labels[stage] || 'Processing';
 }
 
+// Progress is indicative: the backend reports phases, not a byte-level percentage.
+// Keep the animation below completion until the server confirms the final video.
+const COMMERCIAL_STAGE_PROGRESS = {
+  queued: 7,
+  preparing_image: 18,
+  creating_scene: 42,
+  creating_video: 68,
+  finalizing: 91
+};
+
 function validateImageFile(file, label = 'Image') {
   if (!file) return `${label} is required.`;
   const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -61,6 +71,7 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [displayProgress, setDisplayProgress] = useState(0);
   const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
   const [jobs, setJobs] = useState([]);
   const [retryingId, setRetryingId] = useState(null);
@@ -70,6 +81,16 @@ export default function AICommercials({ initialTab = 'create' }) {
   // Reuse the same key if the browser loses the response after the server accepted the job.
   const submissionKeyRef = useRef(null);
   const historyRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!isSubmitting) return undefined;
+    const stage = activeJob?.stage || 'queued';
+    const target = COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
+    const interval = window.setInterval(() => {
+      setDisplayProgress(current => Math.min(target, current + (target - current > 15 ? 2 : 1)));
+    }, 220);
+    return () => window.clearInterval(interval);
+  }, [isSubmitting, activeJob?.stage]);
 
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
@@ -285,6 +306,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
     submittingRef.current = true;
     setActiveJob(null);
+    setDisplayProgress(0);
     setIsSubmitting(true);
     setError('');
     setNotice('');
@@ -484,10 +506,19 @@ export default function AICommercials({ initialTab = 'create' }) {
           </div>
 
           <aside className="sf-commercials__preview">
-            <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> Ad details</span></div>
-            <div className="sf-commercials__preview-stage">
+            <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> {isSubmitting ? 'Creating commercial' : 'Ad details'}</span></div>
+            <div className={`sf-commercials__preview-stage${isSubmitting ? ' is-generating' : ''}`}>
               {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a photo and tell us what you want to advertise.</p></div>}
-              <span className="sf-commercials__duration">22 sec commercial</span>
+              {isSubmitting ? (
+                <div className="sf-commercials__progress-overlay" role="status" aria-live="off" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status || 'Preparing your commercial'}`}>
+                  <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
+                  <strong className="sf-commercials__progress-percent">{displayProgress}<small>%</small></strong>
+                  <span className="sf-commercials__progress-heading">Creating your commercial</span>
+                  <span className="sf-commercials__progress-stage">{status || 'Preparing your commercial'}</span>
+                  <div className="sf-commercials__progress-track" aria-hidden="true"><div style={{ width: `${displayProgress}%` }} /></div>
+                  <small className="sf-commercials__progress-disclaimer">Estimated progress · final video will appear in My Ads</small>
+                </div>
+              ) : <span className="sf-commercials__duration">22 sec commercial</span>}
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
