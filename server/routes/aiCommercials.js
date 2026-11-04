@@ -406,8 +406,8 @@ function createAiCommercialsRouter({
         // Provider messages are useful for diagnosing failed transformations. Never log
         // signed delivery URLs, credentials, or arbitrary provider response payloads.
         reason: String(error.message || 'Unknown finalization error')
-          .replace(/https?:\\/\\/\\S+/g, '[redacted-url]')
-          .replace(/(api[_-]?key|secret|token|signature)\\s*[:=]\\s*\\S+/gi, '$1=[redacted]')
+          .replace(/https?:\/\/\S+/g, '[redacted-url]')
+          .replace(/(api[_-]?key|secret|token|signature)\s*[:=]\s*\S+/gi, '$1=[redacted]')
           .slice(0, 300),
         providerStatus: Number(error.http_code || error.statusCode) || undefined
       });
