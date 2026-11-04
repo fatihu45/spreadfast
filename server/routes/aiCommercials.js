@@ -26,6 +26,14 @@ function cleanText(value, maxLength = 500) {
   return String(value ?? '').trim().slice(0, maxLength);
 }
 
+function safeFailureReason(error) {
+  // Provider errors can embed signed URLs or query-string credentials.
+  return String(error?.message || 'Unknown commercial error')
+    .replace(/https?:\/\/\S+/g, '[redacted-url]')
+    .replace(/(api[_-]?key|secret|token|signature)\s*[:=]\s*\S+/gi, '$1=[redacted]')
+    .slice(0, 300);
+}
+
 function isValidImage(file) {
   const bytes = file?.buffer;
   if (!bytes?.length) return false;
@@ -403,12 +411,7 @@ function createAiCommercialsRouter({
       logger.error('[AI Commercials] Resume failed', {
         generationId: claimed?.id, stage: claimed?.stage,
         code: error.code || 'GENERATION_FAILED',
-        // Provider messages are useful for diagnosing failed transformations. Never log
-        // signed delivery URLs, credentials, or arbitrary provider response payloads.
-        reason: String(error.message || 'Unknown finalization error')
-          .replace(/https?:\/\/\S+/g, '[redacted-url]')
-          .replace(/(api[_-]?key|secret|token|signature)\s*[:=]\s*\S+/gi, '$1=[redacted]')
-          .slice(0, 300),
+        reason: safeFailureReason(error),
         providerStatus: Number(error.http_code || error.statusCode) || undefined
       });
       return res.status(error.statusCode || 502).json({ success: false,
@@ -508,7 +511,8 @@ function createAiCommercialsRouter({
         generationId: generation?.id,
         stage,
         code: error.code || 'GENERATION_FAILED',
-        ...(Number.isInteger(error.providerStatus) ? { providerStatus: error.providerStatus } : {})
+        reason: safeFailureReason(error),
+        ...(Number.isInteger(error.providerStatus || error.http_code) ? { providerStatus: error.providerStatus || error.http_code } : {})
       });
       stage = generation?.stage === 'preparing_image' ? 'creative_plan' : generation?.stage || stage;
       const status = error.statusCode || (error.code === 'AI_PROVIDER_NOT_CONFIGURED' ? 503 : 502);
