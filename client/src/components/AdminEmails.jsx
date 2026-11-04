@@ -16,6 +16,21 @@ export default function AdminEmails() {
   useEffect(() => { load().catch(e => setMessage(e.message)); }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
   async function act(fn) { setBusy(true); setMessage(''); try { await fn(); } catch(e) { setMessage(e.message); } finally { setBusy(false); } }
   function change(key, value) { setForm({ ...form, [key]: value }); setPreview(''); testKey.current = null; }
+  async function uploadImage(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setMessage('Choose a JPG, PNG or WebP image smaller than 5 MB.'); return;
+    }
+    await act(async () => {
+      setMessage('Uploading image…');
+      const body = new FormData(); body.append('image', file);
+      const result = await readResponse(await fetch(API + '/images', { method:'POST', headers:{ Authorization:`Bearer ${token}` }, body, signal: AbortSignal.timeout(70000) }));
+      setForm(current => ({ ...current, imageUrl:result.imageUrl }));
+      setPreview(''); testKey.current = null; setMessage('Image uploaded.');
+    });
+  }
   if (!data || !form) return <div><p role="status">{message || 'Loading emails…'}</p><Button onClick={() => act(load)}>Retry</Button></div>;
   return <div className="sf-email-admin"><p role="status">{message}</p>
     <section className="sf-email-panel"><h2>Weekly schedule</h2><p>One queued email per slot, oldest first. Empty slots are skipped. Times are Lagos time.</p><div className="sf-email-controls">
@@ -25,7 +40,10 @@ export default function AdminEmails() {
       <Button disabled={busy} onClick={() => act(async()=>{ await request('/settings','PUT',{ enabled:settings.enabled, frequency:settings.frequency, hour:settings.hour }); await load(); setMessage('Schedule saved.'); })}>Save schedule</Button>
     </div><p>Only subscribed, active users receive marketing emails. Pausing stops future slots; it cannot recall a broadcast already sent.</p></section>
     <section className="sf-email-panel"><h2>Compose an email</h2><p>Save a draft, preview it, then add it to the weekly queue.</p><div className="sf-email-form">
-      {[['subject','Subject'],['title','Headline'],['cta','Button label'],['url','Button link'],['imageUrl','Image URL (optional)']].map(([key,label])=><FormField key={key} label={label}><Input value={form[key] || ''} onChange={e=>change(key,e.target.value)} /></FormField>)}
+      {[['subject','Subject'],['title','Headline'],['cta','Button label'],['url','Button link']].map(([key,label])=><FormField key={key} label={label}><Input value={form[key] || ''} onChange={e=>change(key,e.target.value)} /></FormField>)}
+      <div><FormField label="Image (optional)"><Input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={uploadImage} /></FormField><p>Upload a JPG, PNG or WebP image, up to 5 MB.</p>
+        {form.imageUrl && <div><img src={form.imageUrl} alt="Selected email artwork" style={{ display:'block', maxWidth:'100%', maxHeight:240, borderRadius:12, marginBottom:12 }} /><Button disabled={busy} variant="secondary" onClick={() => change('imageUrl','')}>Remove image</Button></div>}
+      </div>
       <FormField label="Message"><textarea rows={7} value={form.body} onChange={e=>change('body',e.target.value)} /></FormField>
       <FormField label="Recipients"><select value={form.audience} onChange={e=>change('audience',e.target.value)}><option value="all">All subscribed users</option><option value="company">Subscribed businesses</option><option value="promoter">Subscribed promoter accounts</option></select></FormField>
     </div><div className="sf-email-controls">

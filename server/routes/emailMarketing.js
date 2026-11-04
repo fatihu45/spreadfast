@@ -1,7 +1,9 @@
 const express = require('express');
+const multer = require('multer');
+const { MAX_IMAGE_BYTES, TYPES, validateImage, uploadEmailImage } = require('../services/emailImages');
 const { authenticateToken } = require('../middleware/auth');
 const { STARTER, validateCampaign, renderCampaign, queueTest, checked } = require('../services/emailMarketing');
-module.exports = function createEmailMarketingRouter({ models, User, Notification, resend, isConnected, env = process.env }) {
+module.exports = function createEmailMarketingRouter({ models, User, Notification, resend, isConnected, env = process.env, uploadImage = uploadEmailImage }) {
   const router = express.Router();
   const wrap = fn => async (req, res) => {
     try { await fn(req, res); }
@@ -37,6 +39,21 @@ module.exports = function createEmailMarketingRouter({ models, User, Notificatio
     if (!env.ADMIN_EMAIL || req.user.email !== env.ADMIN_EMAIL) return res.status(403).json({ success: false, message: 'Admin access required.' });
     next();
   });
+  const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 0 },
+    fileFilter: (req, file, done) => done(TYPES.includes(file.mimetype) ? null : Object.assign(new Error('Choose a JPG, PNG or WebP image.'), { status: 400 }), TYPES.includes(file.mimetype)) }).single('image');
+  router.post('/admin/images', (req, res, next) => {
+    imageUpload(req, res, error => {
+      if (!error) return next();
+      const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+      res.status(tooLarge ? 413 : 400).json({ success: false, message: tooLarge ? 'Choose an image smaller than 5 MB.' : 'Choose one JPG, PNG or WebP image.' });
+    });
+  }, wrap(async (req, res) => {
+    validateImage(req.file);
+    try {
+      const imageUrl = await uploadImage(req.file);
+      res.json({ success: true, imageUrl });
+    } catch { throw Object.assign(new Error('Image upload failed. Please try again.'), { status: 503 }); }
+  }));
   const { EmailMarketingSettings: Settings, EmailCampaign: Campaign } = models;
   router.get('/admin', wrap(async (req, res) => {
     const settings = await Settings.findById('weekly') || { enabled: false, frequency: 3, hour: 8 };

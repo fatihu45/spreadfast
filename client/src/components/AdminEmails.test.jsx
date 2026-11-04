@@ -1,6 +1,6 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import {act as legacyAct} from 'react-dom/test-utils';
+import {act as legacyAct, Simulate} from 'react-dom/test-utils';
 import {AuthContext} from '../context/AuthContext';
 import AdminEmails from './AdminEmails';
 const act=React.act || legacyAct;
@@ -11,3 +11,19 @@ afterEach(()=>{act(()=>root.unmount());host.remove();jest.restoreAllMocks();});
 async function render(){await act(async()=>root.render(<AuthContext.Provider value={{token:'test-token'}}><AdminEmails/></AuthContext.Provider>));}
 test('loads a paused schedule without sending emails',async()=>{await render();expect(host.textContent).toContain('Weekly schedule');expect(host.querySelector('input[type="checkbox"]').checked).toBe(false);expect(global.fetch).toHaveBeenCalledTimes(1);expect(global.fetch.mock.calls[0][1].method).toBe('GET');});
 test('preview is sandboxed and never requests a send',async()=>{await render();const button=[...host.querySelectorAll('button')].find(b=>b.textContent==='Preview');await act(async()=>button.click());expect(host.querySelector('iframe').getAttribute('sandbox')).toBe('');expect(global.fetch.mock.calls.some(([url])=>url.endsWith('/test'))).toBe(false);});
+
+test('image field uploads a file, previews it and can remove it',async()=>{
+  await render();expect(host.textContent).not.toContain('Image URL');
+  const original=global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async(url,options)=>url.endsWith('/images')?{ok:true,json:async()=>({success:true,imageUrl:'https://res.cloudinary.com/test/email.png'})}:original(url,options));
+  const timeout=AbortSignal.timeout;AbortSignal.timeout=()=>undefined;
+  try {
+    const file=new File(['image'],'photo.png',{type:'image/png'});
+    await act(async()=>Simulate.change(host.querySelector('input[type="file"]'),{target:{files:[file],value:'photo.png'}}));
+    const upload=global.fetch.mock.calls.find(([url])=>url.endsWith('/images'));
+    expect(upload[1].body).toBeInstanceOf(FormData);expect(upload[1].headers['Content-Type']).toBeUndefined();
+    expect(host.querySelector('img[alt="Selected email artwork"]').src).toBe('https://res.cloudinary.com/test/email.png');
+    await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='Remove image').click());
+    expect(host.querySelector('img[alt="Selected email artwork"]')).toBeNull();
+  } finally {AbortSignal.timeout=timeout;}
+});
