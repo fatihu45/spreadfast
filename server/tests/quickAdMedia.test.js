@@ -124,9 +124,9 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
   const result = await assembleVideos(client, clips, 'ad', 'Visit brand.example');
   assert.equal(uploaded.publicId, clips[0].publicId);
   const transformations = uploaded.options.eager[0].transformation;
-  assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay.public_id), [
-    'video:spreadfast:quick-ads:videos:ad-scene-2',
-    'video:spreadfast:quick-ads:videos:ad-scene-3'
+  assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay), [
+    'video:authenticated:spreadfast:quick-ads:videos:ad-scene-2',
+    'video:authenticated:spreadfast:quick-ads:videos:ad-scene-3'
   ]);
   assert.ok(transformations.some(item => item.overlay?.text === 'Visit brand.example'));
   const endCard = transformations.find(item => item.gravity === 'south');
