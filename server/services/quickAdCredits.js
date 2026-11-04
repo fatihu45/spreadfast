@@ -23,7 +23,7 @@ function accountSummary(user) {
 const plain = doc => doc?.toObject ? doc.toObject() : doc;
 
 // One expiring account lock reserves eligibility, not money. No credit is debited here.
-async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, allowFreePreview = true, provider = 'fal', leaseMs = 12 * 60 * 1000, now = Date.now() }) {
+async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, allowFreePreview = true, provider = 'fal', executionId, leaseMs = 12 * 60 * 1000, now = Date.now() }) {
   if (!Number.isSafeInteger(creditCost) || creditCost < 1) fail('INVALID_CREDIT_COST', 'This generation has an invalid credit cost.', 400);
   return DB.withTransaction(async tx => {
     const previous = await tx.QuickAdGeneration.findOne({ userId, idempotencyKey: key });
@@ -54,6 +54,7 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
         { $set: { status: 'failed', failureCode: 'LEASE_EXPIRED' } });
     }
     const generation = { id: randomUUID(), userId, idempotencyKey: key, style, model, creditCost,
+      ...(executionId ? { executionId, cancellationRequested: false } : {}),
       provider, status: 'pending', stage: 'queued', freePreview: allowFreePreview && account.freePreviewAvailable,
       creditUsed: false, downloadable: false, expiresAt: new Date(now + leaseMs) };
     await tx.User.updateOne({ id: userId }, { $set: {
@@ -64,11 +65,13 @@ async function beginGeneration(DB, { userId, key, style, model, creditCost = 1, 
   });
 }
 
-async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatus, now = Date.now() }) {
+async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatus, executionId, now = Date.now() }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
     if (!generation) fail('GENERATION_NOT_FOUND', 'Ad not found.', 404);
     if (generation.status === 'completed') return plain(generation);
+    if (executionId && generation.executionId !== executionId) fail('GENERATION_EXPIRED', 'This attempt is no longer active.');
+    if (generation.cancellationRequested) fail('USER_CANCELLED', 'Commercial cancelled. No credits were charged.');
     const user = await tx.User.findOne({ id: userId });
     const account = accountSummary(user);
     if (generation.status !== 'pending' || user.quickAdGenerationLock !== id || new Date(generation.expiresAt).getTime() <= now) {
@@ -113,11 +116,11 @@ async function finishGeneration(DB, { userId, id, imageUrl, media, brandingStatu
   });
 }
 
-async function failGeneration(DB, { userId, id, code = 'GENERATION_FAILED' }) {
+async function failGeneration(DB, { userId, id, code = 'GENERATION_FAILED', executionId }) {
   return DB.withTransaction(async tx => {
     const generation = await tx.QuickAdGeneration.findOne({ id, userId });
-    if (!generation || generation.status !== 'pending') return;
-    await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: { status: 'failed', stage: 'failed', failureCode: code } });
+    if (!generation || generation.status !== 'pending' || (executionId && generation.executionId !== executionId)) return;
+    await tx.QuickAdGeneration.updateOne({ id, userId }, { $set: { status: 'failed', stage: 'failed', failureCode: generation.cancellationRequested ? 'USER_CANCELLED' : code } });
     const user = await tx.User.findOne({ id: userId });
     if (user?.quickAdGenerationLock === id) await tx.User.updateOne({ id: userId }, {
       $set: { quickAdGenerationLock: null, quickAdGenerationLockExpiresAt: null }

@@ -61,22 +61,28 @@ async function fixture(t, options = {}) {
       }))
     }); },
     generateImage: async input => {
-      calls.push(['image', input.prompt]);
+      calls.push(['image', input.prompt, input.imageUrls, input.requestId]);
+      if (input.onSubmitted && !input.requestId) await input.onSubmitted(`image-${calls.length}`);
       if (options.failImageAt === calls.filter(call => call[0] === 'image').length) throw new Error('Image generation failed');
       return { imageUrl: imageDataUrl, requestId: `image-${calls.length}` };
     },
     generateVideo: async input => {
-      calls.push(['video', input.prompt, input.durationSeconds]);
-      if (options.failVideoAt === calls.filter(call => call[0] === 'video').length) throw new Error('Video generation failed');
+      calls.push(['video', input.prompt, input.durationSeconds, input.requestId]);
+      if (input.onSubmitted && !input.requestId) await input.onSubmitted(`video-${calls.length}`);
+      if (options.generateVideo) return options.generateVideo(input);
+      if (options.failVideoAt === calls.filter(call => call[0] === 'video').length) throw Object.assign(new Error('Video generation failed'), { providerTerminal: true });
       return { videoUrl: `https://fal.example/scene-${calls.length}.mp4`, requestId: `video-${calls.length}` };
     },
-    persistVideo: async (client, url, generation) => ({
+    persistVideo: async (client, url, generation) => {
+      if (options.failStoreAt && generation.id.endsWith(`scene-${options.failStoreAt}`)) throw new Error('Storage failed');
+      return ({
       publicId: `spreadfast/quick-ads/videos/${generation.id}`,
       outputUrl: `https://res.cloudinary.com/test/video/authenticated/${generation.id}.mp4`,
       ...(generation.freePreview ? { previewUrl: 'https://res.cloudinary.com/test/video/authenticated/preview.mp4' } : {})
-    }),
+    }); },
     assemble: async (client, clips, id, endCard) => {
       calls.push(['assemble', clips.length, endCard]);
+      if (options.assemble) return options.assemble(clips);
       if (options.failAssembly) throw new Error('Assembly failed');
       return {
         publicId: clips[0].publicId,
@@ -404,4 +410,176 @@ test('legacy paid jobs retain stored six-second closing scenes on finalization r
   const claimed = await claimFinalization(f.db, { id: job.id, userId: 'owner', leaseMs: 10000 });
   assert.deepEqual(claimed.generation.sceneAssets.map(scene => scene.durationSeconds), [6, 8, 6]);
   assert.equal(claimed.generation.creditCost, 4);
+});
+
+test('up to four product angles reach planning and every scene image generator, with logo excluded', async t => {
+  const f = await fixture(t); const data = form();
+  for (let i = 0; i < 3; i++) data.append('productImage', new Blob([image], { type: 'image/png' }), `angle-${i}.png`);
+  data.append('logo', new Blob([image], { type: 'image/png' }), 'logo.png');
+  const result = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: data });
+  assert.equal(result.status, 200);
+  const plan = f.calls.find(c => c[0] === 'plan')[1];
+  assert.equal(plan.imageUrls.length, 4);
+  assert.equal(new Set(plan.imageUrls).size, 4);
+  for (const call of f.calls.filter(c => c[0] === 'image')) assert.deepEqual(call[2], plan.imageUrls);
+});
+
+test('invalid extra photos and more than four photos fail before reservations or providers', async t => {
+  const f = await fixture(t);
+  const invalid = form(); invalid.append('productImage', new Blob(['invalid'], { type: 'image/png' }), 'bad.png');
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: invalid })).status, 400);
+  const tooMany = form(); for (let i = 0; i < 4; i++) tooMany.append('productImage', new Blob([image], { type: 'image/png' }), `${i}.png`);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: tooMany })).status, 400);
+  assert.equal(f.calls.length, 0);
+  assert.equal((await f.db.QuickAdGeneration.find({})).length, 0);
+});
+
+test('retry reuses the plan, first complete clip and second scene image after a terminal video failure', async t => {
+  const options = { failVideoAt: 2 }; const f = await fixture(t, options);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() })).status, 502);
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  assert.ok(job.creativePlan); assert.ok(job.sceneAssets[0].videoPublicId); assert.ok(job.sceneAssets[1].imageUrl);
+  const history = await fetch(`${f.base}/api/ai-commercials/jobs`).then(r => r.json());
+  assert.equal(history.jobs[0].commercialRetryAvailable, true);
+  assert.equal(history.jobs[0].creativePlan, undefined);
+  options.failVideoAt = null;
+  const retry = await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' });
+  assert.equal(retry.status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'plan').length, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'image').length, 3);
+  assert.equal(f.calls.filter(c => c[0] === 'video').length, 4);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+  assert.equal((await f.db.QuickAdGeneration.find({ userId: 'owner' })).length, 1);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' })).status, 200);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+});
+
+test('storage failure reuses generated video URL without submitting a second video job', async t => {
+  const options = { failStoreAt: 2 }; const f = await fixture(t, options);
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  assert.ok(job.sceneAssets[1].generatedVideoUrl);
+  options.failStoreAt = null;
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' })).status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'video').length, 3);
+  assert.equal(f.calls.filter(c => c[0] === 'image').length, 3);
+});
+
+test('transport failure resumes the saved provider request ID rather than resubmitting', async t => {
+  let fail = true; const received = [];
+  const f = await fixture(t, { generateVideo: async input => {
+    received.push(input.requestId);
+    if (fail) { fail = false; throw new Error('temporary connection failure'); }
+    return { videoUrl: 'https://fal.example/result.mp4', requestId: input.requestId || 'new-request' };
+  } });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  const savedId = job.sceneAssets[0].videoRequestId;
+  assert.ok(savedId);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' })).status, 200);
+  assert.equal(received[1], savedId);
+});
+
+test('cancelling during planning aborts the active request, releases its lock and never starts media', async t => {
+  let entered; const started = new Promise(resolve => { entered = resolve; });
+  const f = await fixture(t, { createPlan: async ({ signal }) => {
+    entered(); return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  } });
+  const pending = fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  await started;
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  const cancel = () => fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/cancel`, { method: 'POST' });
+  assert.equal((await cancel()).status, 200);
+  assert.equal((await cancel()).status, 200);
+  const response = await pending;
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).message, /cancelled/);
+  assert.equal(f.calls.length, 1);
+  const user = await f.db.User.findOne({ id: 'owner' });
+  assert.equal(user.quickAdCredits, 10); assert.equal(user.quickAdGenerationLock, null);
+  assert.equal((await f.db.QuickAdGeneration.findOne({ id: job.id })).failureCode, 'USER_CANCELLED');
+});
+
+test('cancel wins against final assembly and prevents a late completion debit', async t => {
+  let entered, release; const started = new Promise(r => { entered = r; }); const gate = new Promise(r => { release = r; });
+  const f = await fixture(t, { assemble: async () => { entered(); await gate; return { outputUrl: 'https://media.example/final.mp4' }; } });
+  const pending = fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  await started;
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  try { assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/cancel`, { method: 'POST' })).status, 200); }
+  finally { release(); }
+  assert.equal((await pending).status, 409);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+  assert.equal((await f.db.QuickAdGeneration.findOne({ id: job.id })).status, 'failed');
+});
+
+test('cancel endpoint rejects foreign, deleted and completed jobs', async t => {
+  const f = await fixture(t);
+  await f.db.QuickAdGeneration.create({ id: 'foreign', userId: 'other', provider: 'ai-commercials', status: 'pending' });
+  await f.db.QuickAdGeneration.create({ id: 'deleted', userId: 'owner', provider: 'ai-commercials', status: 'failed', deletedAt: new Date() });
+  const result = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() }).then(r => r.json());
+  for (const id of ['foreign', 'deleted']) assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${id}/cancel`, { method: 'POST' })).status, 404);
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${result.generationId}/cancel`, { method: 'POST' })).status, 409);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
+});
+
+test('expired jobs resume with a new execution token; old cleanup and completion cannot affect the retry', async t => {
+  const f = await fixture(t, { failVideoAt: 2 });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  await f.db.QuickAdGeneration.updateOne({ id: job.id }, { $set: { status: 'pending', expiresAt: new Date(0) } });
+  const { claimFinalization } = require('../services/aiCommercialRecovery');
+  const { failGeneration, finishGeneration } = require('../services/quickAdCredits');
+  const next = await claimFinalization(f.db, { id: job.id, userId: 'owner', leaseMs: 10000 });
+  assert.notEqual(next.generation.executionId, job.executionId);
+  await failGeneration(f.db, { id: job.id, userId: 'owner', executionId: job.executionId });
+  assert.equal((await f.db.QuickAdGeneration.findOne({ id: job.id })).status, 'pending');
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdGenerationLock, job.id);
+  await assert.rejects(finishGeneration(f.db, { id: job.id, userId: 'owner', executionId: job.executionId, media: { publicId: 'old', outputUrl: 'https://old' } }), { code: 'GENERATION_EXPIRED' });
+  await assert.rejects(claimFinalization(f.db, { id: job.id, userId: 'owner', leaseMs: 10000 }));
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+});
+
+test('an ambiguous submission without a provider ID is blocked from automatic repayment', async t => {
+  const f = await fixture(t, { failVideoAt: 2 });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  job.sceneAssets[1].videoSubmitting = true;
+  job.sceneAssets[1].videoRequestId = undefined;
+  await f.db.QuickAdGeneration.updateOne({ id: job.id }, { $set: { sceneAssets: job.sceneAssets } });
+  const calls = f.calls.length;
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' })).status, 409);
+  assert.equal(f.calls.length, calls);
+  const history = await fetch(`${f.base}/api/ai-commercials/jobs`).then(r => r.json());
+  assert.equal(history.jobs[0].commercialRecoveryRequired, true);
+  assert.equal(history.jobs[0].commercialRetryAvailable, false);
+});
+
+test('new progress fields survive the production Mongoose schema', () => {
+  const Generation = require('../models/QuickAdGeneration');
+  const doc = new Generation({ id: 'schema', userId: 'owner', idempotencyKey: 'key', style: 'auto', model: 'model', freePreview: false, expiresAt: new Date(),
+    executionId: 'attempt', cancellationRequested: true, sourceImageUrls: ['https://media.example/a.png'], creativePlan: { scenes: [{ imagePrompt: 'safe' }] },
+    sceneAssets: [{ imageRequestId: 'image-id', videoRequestId: 'video-id', imageSubmitting: true, videoSubmitting: false,
+      imageModel: 'image-model', videoModel: 'video-model', generatedImageUrl: 'https://image', generatedVideoUrl: 'https://video' }] });
+  assert.equal(doc.validateSync(), undefined);
+  const plain = doc.toObject();
+  assert.equal(plain.executionId, 'attempt'); assert.equal(plain.cancellationRequested, true);
+  assert.equal(plain.sceneAssets[0].imageRequestId, 'image-id'); assert.equal(plain.sceneAssets[0].videoRequestId, 'video-id');
+  assert.equal(plain.sourceImageUrls.length, 1); assert.equal(plain.creativePlan.scenes.length, 1);
+});
+
+test('one resume replaces a known terminal provider request while retaining its scene image', async t => {
+  let count = 0;
+  const f = await fixture(t, { generateVideo: async input => {
+    count++;
+    if (count === 1) throw new Error('lost polling connection');
+    if (count === 2) { assert.ok(input.requestId); throw Object.assign(new Error('provider cancelled'), { providerTerminal: true }); }
+    if (count === 3) assert.equal(input.requestId, undefined);
+    return { videoUrl: 'https://fal.example/result.mp4', requestId: input.requestId || `new-${count}` };
+  } });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${job.id}/retry`, { method: 'POST' })).status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'image').length, 3);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 6);
 });

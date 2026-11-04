@@ -12,28 +12,66 @@ function isHttpsUrl(value) {
   try { return new URL(value).protocol === 'https:'; } catch { return false; }
 }
 
+// The installed fal SDK retries queue POSTs internally. Suppress ambiguous submit
+// retries while keeping its read-only polling/retrieval retries and existing models.
+async function singleSubmissionFetch(url, options) {
+  if (options?.method?.toUpperCase() !== 'POST' || new URL(url).hostname !== 'queue.fal.run') return fetch(url, options);
+  let response;
+  let body;
+  try {
+    response = await fetch(url, options);
+    body = await response.text();
+  } catch {
+    throw Object.assign(new Error('The provider submission could not be confirmed.'), { code: 'PROVIDER_SUBMISSION_UNKNOWN' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error('The provider rejected the submission.'), {
+      code: 'PROVIDER_SUBMISSION_FAILED',
+      providerTerminal: [400, 401, 402, 403, 404, 422, 429].includes(response.status)
+    });
+  }
+  return new Response(body, { status: response.status, headers: response.headers });
+}
+
 async function loadFalClient() {
   const credentials = requiredEnv('FAL_KEY');
   const { createFalClient } = await import('@fal-ai/client');
-  return createFalClient({ credentials });
+  return createFalClient({ credentials, fetch: singleSubmissionFetch });
 }
 
-async function runQueuedFalJob(fal, model, input, { signal, pollIntervalMs = 1500, onSubmitted } = {}) {
-  const queued = await fal.queue.submit(model, { input, ...(signal ? { abortSignal: signal } : {}) });
-  const requestId = queued?.request_id;
-  if (typeof requestId !== 'string' || !requestId.trim()) throw new Error('The AI provider did not return a request ID.');
-  if (onSubmitted) await onSubmitted(requestId);
-  while (true) {
-    if (signal?.aborted) signal.throwIfAborted();
-    const status = await fal.queue.status(model, { requestId, logs: false, ...(signal ? { abortSignal: signal } : {}) });
-    if (status?.status === 'COMPLETED') break;
-    if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) {
-      throw new Error(`The AI provider job ended with status ${String(status?.status || 'unknown')}.`);
+async function runQueuedFalJob(fal, model, input, { signal, pollIntervalMs = 1500, onSubmitted, requestId } = {}) {
+  signal?.throwIfAborted();
+  try {
+    if (!requestId) {
+      const queued = await fal.queue.submit(model, { input, ...(signal ? { abortSignal: signal } : {}) });
+      requestId = queued?.request_id;
+      if (typeof requestId !== 'string' || !requestId.trim()) throw new Error('The AI provider did not return a request ID.');
+      if (onSubmitted) await onSubmitted(requestId);
     }
-    await delay(pollIntervalMs, undefined, signal ? { signal } : {});
+    while (true) {
+      signal?.throwIfAborted();
+      const status = await fal.queue.status(model, { requestId, logs: false, ...(signal ? { abortSignal: signal } : {}) });
+      if (status?.error || ['FAILED', 'CANCELLED'].includes(status?.status)) {
+        throw Object.assign(new Error(`The AI provider job ended with status ${status?.status}.`), { providerTerminal: true });
+      }
+      if (status?.status === 'COMPLETED') break;
+      if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw new Error('The AI provider returned an unknown status.');
+      await delay(pollIntervalMs, undefined, signal ? { signal } : {});
+    }
+    let result;
+    try { result = await fal.queue.result(model, { requestId, ...(signal ? { abortSignal: signal } : {}) }); }
+    catch (error) {
+      // Only definitive inference failures may be resubmitted. Transport failures retain the request ID.
+      if ([400, 422].includes(error.status)) error.providerTerminal = true;
+      throw error;
+    }
+    return { requestId, data: result?.data };
+  } finally {
+    if (requestId && signal?.aborted && signal.reason?.code === 'USER_CANCELLED') {
+      // Best effort: the provider may already have started or completed the job.
+      try { await fal.queue.cancel(model, { requestId, abortSignal: AbortSignal.timeout(5000) }); } catch {}
+    }
   }
-  const result = await fal.queue.result(model, { requestId, ...(signal ? { abortSignal: signal } : {}) });
-  return { requestId, data: result?.data };
 }
 
 function requiredEnv(name) {
@@ -42,6 +80,7 @@ function requiredEnv(name) {
     const error = new Error(`Missing required server configuration: ${name}`);
     error.code = 'AI_PROVIDER_NOT_CONFIGURED';
     error.status = 503;
+    error.providerTerminal = true;
     throw error;
   }
   return value;
@@ -59,7 +98,7 @@ function parseJsonObject(text) {
 }
 
 /** Claude remains the director; only the server-side transport changes. */
-async function createCreativePlan({ productName, brandName, contact, specifications, style = 'auto', imageUrl, tier, signal }) {
+async function createCreativePlan({ productName, brandName, contact, specifications, style = 'auto', imageUrl, imageUrls, tier, signal }) {
   const payload = await requestCreativeCompletion({
       max_tokens: 3000,
       temperature: 0.4,
@@ -79,10 +118,9 @@ async function createCreativePlan({ productName, brandName, contact, specificati
       ].join(' ') }, {
         role: 'user',
         content: [
-          ...(imageUrl ? [{
-            type: 'image_url',
-            image_url: { url: imageUrl }
-          }] : []),
+          ...(imageUrls?.length ? imageUrls : imageUrl ? [imageUrl] : []).slice(0, 4).map(url => ({
+            type: 'image_url', image_url: { url }
+          })),
           {
             type: 'text',
             text: JSON.stringify({
@@ -95,7 +133,7 @@ async function createCreativePlan({ productName, brandName, contact, specificati
               qualityTier: tier,
               productImageUrl: imageUrl,
               constraints: [
-                'Product identity and visible details must remain faithful to the source image.',
+                'The photos show the same product from different angles; use them together to preserve identity. Never combine unrelated products or invent unseen details.',
                 'Do not place invented labels, logos, stitching, pockets, patterns, or accessories on the product.',
                 'No unsupported performance, health, safety, or superiority claims.',
                 'Make each scene visually distinct but keep the product consistent.'
@@ -151,48 +189,50 @@ function normalizeScenes(scenes) {
   });
 }
 
-async function generateNanoBananaImage({ imageUrl, prompt, fal: providedFal, signal, onSubmitted }) {
+async function generateNanoBananaImage({ imageUrl, imageUrls, prompt, fal: providedFal, signal, onSubmitted, requestId: existingRequestId, model = IMAGE_MODEL }) {
   if (!isHttpsUrl(imageUrl)) throw new Error('A public HTTPS source image is required.');
+  const references = imageUrls?.length ? imageUrls : [imageUrl];
+  if (references.length > 4 || !references.every(isHttpsUrl)) throw new Error('Upload up to four valid product images.');
   const fal = providedFal || await loadFalClient();
-  const { requestId, data } = await runQueuedFalJob(fal, IMAGE_MODEL, {
+  const { requestId, data } = await runQueuedFalJob(fal, model, {
     prompt: String(prompt || '').slice(0, 2200),
-    image_urls: [imageUrl],
+    image_urls: references,
     num_images: 1,
     aspect_ratio: '9:16',
     resolution: '1K',
     output_format: 'png',
     limit_generations: true
-  }, { signal, onSubmitted });
+  }, { signal, onSubmitted, requestId: existingRequestId });
   const generatedUrl = data?.images?.[0]?.url || data?.image?.url || data?.image_url || data?.url || data?.output?.url;
-  if (!isHttpsUrl(generatedUrl)) throw new Error('Nano Banana returned no valid scene image URL.');
-  return { imageUrl: generatedUrl, requestId, model: IMAGE_MODEL };
+  if (!isHttpsUrl(generatedUrl)) throw Object.assign(new Error('Nano Banana returned no valid scene image URL.'), { providerTerminal: true });
+  return { imageUrl: generatedUrl, requestId, model };
 }
 
 /**
  * Standard uses Veo Fast; Premium uses the full Veo endpoint. Each call returns
  * one clip of up to 8 seconds, which the route assembles with the other scenes.
  */
-async function generateVeoClip({ imageUrl, prompt, tier = 'standard', durationSeconds = 8, fal: providedFal, signal, onSubmitted, onQueueUpdate }) {
+async function generateVeoClip({ imageUrl, prompt, tier = 'standard', durationSeconds = 8, fal: providedFal, signal, onSubmitted, onQueueUpdate, requestId: existingRequestId, model }) {
   if (![4, 6, 8].includes(durationSeconds)) throw new Error('Unsupported video duration.');
   if (!VEO_MODELS[tier]) throw new Error('Unsupported AI Commercials quality tier.');
   if (!isHttpsUrl(imageUrl)) throw new Error('A public HTTPS scene image URL is required.');
   const fal = providedFal || await loadFalClient();
-  const { requestId, data } = await runQueuedFalJob(fal, VEO_MODELS[tier], {
+  const { requestId, data } = await runQueuedFalJob(fal, model || VEO_MODELS[tier], {
     image_url: imageUrl,
     prompt: String(prompt || '').slice(0, 1800),
     aspect_ratio: '9:16',
     duration: `${durationSeconds}s`,
     resolution: '720p',
     generate_audio: true
-  }, { signal, onSubmitted: async id => {
+  }, { signal, requestId: existingRequestId, onSubmitted: async id => {
     if (onSubmitted) await onSubmitted(id);
     if (onQueueUpdate) await onQueueUpdate({ status: 'IN_PROGRESS', requestId: id });
   } });
   const videoUrl = data?.video?.url;
   if (!isHttpsUrl(videoUrl)) {
-    throw new Error('Veo returned no valid video URL.');
+    throw Object.assign(new Error('Veo returned no valid video URL.'), { providerTerminal: true });
   }
-  return { videoUrl, requestId, model: VEO_MODELS[tier] };
+  return { videoUrl, requestId, model: model || VEO_MODELS[tier] };
 }
 
 module.exports = { normalizeScenes, createCreativePlan, generateNanoBananaImage, generateVeoClip, runQueuedFalJob, IMAGE_MODEL, VEO_MODELS };
