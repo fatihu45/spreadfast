@@ -1,4 +1,4 @@
-const { canRetryFinalization } = require('./aiCommercialRecovery');
+const { canRetryFinalization, canRetryCommercial } = require('./aiCommercialRecovery');
 const { publicBranding } = require('./quickAdBranding');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -104,6 +104,11 @@ function publicGeneration(generation, user) {
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
     brandingStatus: generation.brandingStatus || (generation.branding?.mode && generation.branding.mode !== 'none' ? 'applied' : 'none'),
+    commercialRecoveryRequired: generation.provider === 'ai-commercials' && generation.status === 'failed' &&
+      (generation.sceneAssets || []).some(scene => (scene.imageSubmitting && !scene.imageRequestId) || (scene.videoSubmitting && !scene.videoRequestId)),
+    commercialRetryAvailable: canRetryCommercial(generation),
+    cancellationRequested: generation.cancellationRequested === true && generation.status === 'pending',
+    cancelled: generation.failureCode === 'USER_CANCELLED',
     finalizationRetryAvailable: canRetryFinalization(generation),
     brandingRetryAvailable: generation.status === 'completed' && generation.brandingStatus === 'failed',
     downloadable: canDownloadGeneration(generation, user),

@@ -102,3 +102,41 @@ test('simple creation sends a photo and brief without a style or required brandi
   expect(request[1].body.get('brandName')).toBe('');
   expect(request[1].body.get('tier')).toBe('standard');
 });
+
+test('multiple product photos are previewed and sent together', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(file => `blob:${file.name}`); URL.revokeObjectURL = jest.fn();
+  await render();
+  const upload = container.querySelector('.sf-commercials__upload input');
+  expect(upload.multiple).toBe(true);
+  Object.defineProperty(upload, 'files', { value: ['front', 'back', 'side'].map(name => new File(['image'], `${name}.png`, { type: 'image/png' })) });
+  await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(container.querySelectorAll('.sf-commercials__photo-list img')).toHaveLength(3);
+  await act(async () => button('Generate commercial').click());
+  const request = global.fetch.mock.calls.find(([url]) => url.endsWith('/generate'));
+  expect(request[1].body.getAll('productImage')).toHaveLength(3);
+});
+
+test('more than four photos are rejected before submission', async () => {
+  credits = 4; await render();
+  const upload = container.querySelector('.sf-commercials__upload input');
+  Object.defineProperty(upload, 'files', { value: Array.from({ length: 5 }, (_, i) => new File(['image'], `${i}.png`, { type: 'image/png' })) });
+  await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(container.textContent).toContain('Choose up to four photos');
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});
+
+test('pending history jobs can be cancelled with authentication', async () => {
+  jobs = [{ generationId: 'pending-1', status: 'pending', stage: 'creating_video', productName: 'Bag' }];
+  await render('history');
+  await act(async () => button('Cancel generation').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/pending-1/cancel'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
+});
+
+test('partial jobs show Resume commercial and never start a new generation', async () => {
+  jobs = [{ generationId: 'partial-1', status: 'failed', commercialRetryAvailable: true, requiredCredits: 4 }];
+  await render('history');
+  await act(async () => button('Resume commercial').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/partial-1/retry'), expect.objectContaining({ method: 'POST' }));
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});

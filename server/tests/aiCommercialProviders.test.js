@@ -88,7 +88,7 @@ test('Veo accepts the six-second scenes and rejects unsupported lengths before s
 test('creative scene validation enforces timing, distinct narration, and complete prompts', () => {
   const { normalizeScenes } = require('../services/aiCommercialProviders');
   const scenes = [1, 2, 3].map(i => ({ imagePrompt: `Image ${i}`, motionPrompt: `Motion ${i}`, narration: `Scene ${i}`, durationSeconds: 99 }));
-  assert.deepEqual(normalizeScenes(scenes).map(s => s.durationSeconds), [6, 8, 6]);
+  assert.deepEqual(normalizeScenes(scenes).map(s => s.durationSeconds), [6, 8, 8]);
   assert.equal(normalizeScenes(scenes)[1].narration, 'Scene 2');
   assert.throws(() => normalizeScenes([{}, ...scenes.slice(1)]), /directions/);
   scenes[0].narration = Array(20).fill('word').join(' ');
@@ -97,23 +97,57 @@ test('creative scene validation enforces timing, distinct narration, and complet
 
 
 test('Claude receives the photo and customer brief with automatic professional direction', async t => {
-  const oldKey = process.env.ANTHROPIC_API_KEY;
-  process.env.ANTHROPIC_API_KEY = 'test-key';
-  t.after(() => { if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = oldKey; });
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  t.after(() => { if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey; });
   let request;
   t.mock.method(global, 'fetch', async (url, options) => {
     request = JSON.parse(options.body);
-    return { ok: true, json: async () => ({ content: [{ type: 'text', text: JSON.stringify({ scenes: [1,2,3].map(i => ({ imagePrompt: `Shot ${i}`, motionPrompt: 'Slow push in', narration: '' })) }) }] }) };
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ title: 'Product Commercial', voiceover: '', endCard: '', accuracyRules: [], scenes: [1,2,3].map(i => ({ purpose: 'Scene', durationSeconds: 8, imagePrompt: `Shot ${i}`, motionPrompt: 'Slow push in', narration: '' })) }) } }] }) };
   });
   const { createCreativePlan } = require('../services/aiCommercialProviders');
   const plan = await createCreativePlan({ imageUrl: 'https://media.example/tea.png', specifications: 'Warm light; preserve packaging.', tier: 'standard' });
-  const content = request.messages[0].content;
-  assert.equal(content[0].source.url, 'https://media.example/tea.png');
+  const content = request.messages[1].content;
+  assert.equal(content[0].image_url.url, 'https://media.example/tea.png');
   const brief = JSON.parse(content[1].text);
   assert.equal(brief.creativeStyle, 'auto');
   assert.equal(brief.customerBrief, 'Warm light; preserve packaging.');
-  assert.match(request.system, /one coherent visual story/);
-  assert.match(request.system, /never invent a brand or contact/);
+  assert.match(request.messages[0].content, /one coherent visual story/);
+  assert.match(request.messages[0].content, /never invent a brand or contact/);
   assert.equal(plan.title, 'Product Commercial');
-  assert.deepEqual(plan.scenes.map(s => s.durationSeconds), [6, 8, 6]);
+  assert.deepEqual(plan.scenes.map(s => s.durationSeconds), [6, 8, 8]);
+});
+
+test('saved fal request IDs poll the existing job without paying for another submit', async () => {
+  const fal = fakeFal({ video: { url: 'https://fal.example/saved.mp4' } });
+  const video = await generateVeoClip({ fal, imageUrl: 'https://media.example/scene.png', requestId: 'saved-request' });
+  assert.equal(video.requestId, 'saved-request');
+  assert.equal(fal.calls.filter(c => c[0] === 'submit').length, 0);
+  assert.equal(fal.calls[0][2].requestId, 'saved-request');
+});
+
+test('customer cancellation attempts fal queue cancellation without resubmission', async () => {
+  const controller = new AbortController();
+  const fal = fakeFal({}); let cancelledId;
+  fal.queue.cancel = async (model, { requestId }) => { cancelledId = requestId; };
+  fal.queue.status = async () => { controller.abort(Object.assign(new Error('Cancelled'), { code: 'USER_CANCELLED' })); throw controller.signal.reason; };
+  await assert.rejects(runQueuedFalJob(fal, IMAGE_MODEL, {}, { signal: controller.signal, requestId: 'cancel-me' }), { code: 'USER_CANCELLED' });
+  assert.equal(cancelledId, 'cancel-me');
+  assert.equal(fal.calls.filter(c => c[0] === 'submit').length, 0);
+});
+
+test('multiple reference photos are sent together to Nano Banana', async () => {
+  const fal = fakeFal({ images: [{ url: 'https://fal.example/scene.png' }] });
+  const images = ['https://media.example/front.png', 'https://media.example/back.png'];
+  await generateNanoBananaImage({ fal, imageUrl: images[0], imageUrls: images, prompt: 'Same product' });
+  assert.deepEqual(fal.calls[0][2].input.image_urls, images);
+});
+
+test('installed fal SDK cannot silently retry an ambiguous paid submission', async t => {
+  const previous = process.env.FAL_KEY; process.env.FAL_KEY = 'mock-only-fal-key';
+  t.after(() => { if (previous === undefined) delete process.env.FAL_KEY; else process.env.FAL_KEY = previous; });
+  let requests = 0;
+  t.mock.method(global, 'fetch', async () => { requests++; throw new TypeError('fetch failed'); });
+  await assert.rejects(generateNanoBananaImage({ imageUrl: 'https://media.example/product.png', prompt: 'Product' }), { code: 'PROVIDER_SUBMISSION_UNKNOWN' });
+  assert.equal(requests, 1);
 });
