@@ -360,9 +360,15 @@ function createAiCommercialsRouter({
         generation.sceneAssets.map(scene => ({ publicId: scene.videoPublicId, durationSeconds: scene.durationSeconds })),
         generation.id, details.endCard || details.contact || [details.brandName, details.productName].filter(Boolean).join(' · ') || 'Discover more');
       await ensureActive(db, generation, signal);
-      media = await persistVideo(cloudinary, assembled.outputUrl, { id: generation.id, freePreview: false }, signal);
-      // Save the protected original before optional branding. A retry needs no fal calls.
-      media = { ...media, originalOutputUrl: media.outputUrl };
+      // The assembled clip is already an authenticated Cloudinary eager derivative.
+      // Re-uploading its delivery URL is both unnecessary and unreliable: authenticated
+      // media may reject server-to-server remote fetches even when the clips exist.
+      // Keep the original scene asset + transformation so branding and retries
+      // render from saved Cloudinary clips without any additional fal submissions.
+      if (!assembled?.publicId || !assembled?.outputUrl?.startsWith('https://')) {
+        throw Object.assign(new Error('The assembled Cloudinary video is unavailable.'), { code: 'CLOUDINARY_ASSEMBLY_INVALID' });
+      }
+      media = { ...assembled, originalOutputUrl: assembled.outputUrl };
       await checkpoint(db, generation, { media });
     }
     if (branding.mode !== 'none' && generation.brandingStatus !== 'applied') {
@@ -394,7 +400,17 @@ function createAiCommercialsRouter({
         try { await failGeneration(db, { userId: req.user.id, id: claimed.id, executionId: claimed.executionId, code: claimed.stage === 'finalizing' ? 'ASSEMBLY_FAILED' : 'GENERATION_FAILED' }); }
         catch { logger.error('[AI Commercials] Retry cleanup failed', { generationId: claimed.id }); }
       }
-      logger.error('[AI Commercials] Resume failed', { generationId: claimed?.id, stage: claimed?.stage, code: error.code || 'GENERATION_FAILED' });
+      logger.error('[AI Commercials] Resume failed', {
+        generationId: claimed?.id, stage: claimed?.stage,
+        code: error.code || 'GENERATION_FAILED',
+        // Provider messages are useful for diagnosing failed transformations. Never log
+        // signed delivery URLs, credentials, or arbitrary provider response payloads.
+        reason: String(error.message || 'Unknown finalization error')
+          .replace(/https?:\\/\\/\\S+/g, '[redacted-url]')
+          .replace(/(api[_-]?key|secret|token|signature)\\s*[:=]\\s*\\S+/gi, '$1=[redacted]')
+          .slice(0, 300),
+        providerStatus: Number(error.http_code || error.statusCode) || undefined
+      });
       return res.status(error.statusCode || 502).json({ success: false,
         message: error.code === 'USER_CANCELLED' ? 'Commercial cancelled. No credits were charged.' : error.quickAdSafe ? error.message : 'Could not finish this commercial. Your saved scenes are safe; no credits were charged. Retry from My Ads.' });
     } finally { clearTimeout(timer); stopWatching(); }
