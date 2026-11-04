@@ -55,7 +55,7 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
   const transformations = [];
   for (const clip of clips.slice(1)) {
     transformations.push(
-      { overlay: { public_id: `video:${videoLayerId(clip.publicId)}`, type: 'authenticated' }, flags: 'splice' },
+      { overlay: `video:authenticated:${videoLayerId(clip.publicId)}`, flags: 'splice' },
       { width: 720, height: 1280, crop: 'fill' },
       { flags: 'layer_apply' }
     );
