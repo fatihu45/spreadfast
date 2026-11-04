@@ -28,13 +28,13 @@ test('details are validated first and Continue does not create an account', asyn
 test('creator signup keeps consent, social payload and server error behavior', async () => {
   await render(); await details(); await submit(); expect(register).not.toHaveBeenCalled(); expect(host.textContent).toContain('You must agree');
   await change(host.querySelector('.sf-signup-social input'), '@creator'); await consent(); await submit();
-  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'promoter', { tiktok: '@creator', instagram: '', twitter: '', facebook: '', youtube: '' });
+  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'promoter', { tiktok: '@creator', instagram: '', twitter: '', facebook: '', youtube: '' }, false);
   expect(host.querySelector('[role="alert"]').textContent).toBe('Email already registered');
 });
 test('business role link stays preselected and successful signup opens Quick Ads', async () => {
   await render('/register?role=company'); await details(); expect(host.querySelector('input[value="company"]').checked).toBe(true); expect(host.querySelector('.sf-signup-social')).toBeNull();
   await consent(); register.mockResolvedValue({ success: true }); await submit();
-  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'company', undefined); expect(window.location.href).toBe('/company/quick-ads');
+  expect(register).toHaveBeenCalledWith('Actual Name', 'name@example.test', 'test-password', 'company', undefined, false); expect(window.location.href).toBe('/company/quick-ads');
 });
 test('role can change and creator success opens creator Quick Ads', async () => {
   await render('/register?role=company'); await details(); await act(async () => Simulate.change(host.querySelector('input[value="promoter"]'))); await consent(); register.mockResolvedValue({ success: true }); await submit(); expect(window.location.href).toBe('/promoter/quick-ads');
@@ -44,3 +44,4 @@ test('password toggle and policy actions never submit registration', async () =>
   await click(button('Terms & Conditions')); expect(host.querySelector('[role="dialog"]').getAttribute('aria-label')).toBe('terms'); expect(host.querySelector('[role="dialog"]').closest('form')).toBeNull();
   await click(button('Close policy')); await click(button('Privacy Policy')); expect(host.querySelector('[role="dialog"]').getAttribute('aria-label')).toBe('privacy'); expect(register).not.toHaveBeenCalled();
 });
+

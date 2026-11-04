@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import AdminEmails from '../components/AdminEmails';
 import AdminQuickAdsAnalytics from '../components/AdminQuickAdsAnalytics';
 import { AppShell, PageHeader, UserAvatar } from '../components/ui';
 import NavigationItems from '../components/ui/NavigationItems';
@@ -19,12 +20,14 @@ export default function AdminDashboard() {
 
   const navigation = [
     ['overview', 'Overview', 'home'],
+    ['emails', 'Emails', 'mail'],
     ['quick-ads', 'Payments & Usage', 'video'],
   ].map(([id, label, icon]) => ({ id, label, icon: <UiIcon name={icon} />, active: activeTab === id, onClick: () => setActiveTab(id) }));
   const footerItems = [
     { id: 'exit', label: 'Exit Admin', onClick: handleExitAdmin, icon: <UiIcon name="logout" /> },
   ];
   const titles = {
+    emails: ['Emails', 'Branded updates, weekly schedules and delivery history.'],
     overview: ["Business overview", "Customers, credit sales and AI generation health."],
     'quick-ads': ['Payments & Usage', 'Shared credits across Quick Ad, Fashion Studio and AI Commercial.'],
   };
@@ -36,6 +39,7 @@ export default function AdminDashboard() {
       <details className="sf-dashboard-more"><summary aria-label="Admin actions"><UiIcon name="more" /></summary><div className="sf-dashboard-more__menu"><NavigationItems items={footerItems} /></div></details>
     </>}>
     <PageHeader title={<>{titles[activeTab][0]}{activeTab === 'overview' && <UiIcon name="sun" />}</>} description={titles[activeTab][1]} />
-    <AdminQuickAdsAnalytics details={activeTab === 'quick-ads'} />
+    {activeTab === 'emails' ? <AdminEmails /> : <AdminQuickAdsAnalytics details={activeTab === 'quick-ads'} />}
   </AppShell>;
 }
+

@@ -19,6 +19,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['promoter', 'company', 'admin'], default: 'promoter' },
   status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
+  marketingSubscribed: { type: Boolean, default: false },
+  marketingConsentAt: Date,
+  marketingConsentSource: String,
   tokenVersion: { type: Number, default: 0 },
   quickAdCredits: quickAdCounter(),
   quickAdsGenerated: quickAdCounter(),
@@ -46,3 +49,4 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.models.User || mongoose.model('User', userSchema);
+
