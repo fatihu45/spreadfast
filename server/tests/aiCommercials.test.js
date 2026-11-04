@@ -44,9 +44,10 @@ async function fixture(t, options = {}) {
   };
   const router = createAiCommercialsRouter({
     cloudinary,
-    authenticate: (req, res, next) => { req.user = { id: 'owner', role: 'company' }; next(); },
+    authenticate: options.realAuth ? undefined : (req, res, next) => { req.user = { id: 'owner', role: 'company' }; next(); },
     createPlan: async input => {
       calls.push(['plan', input]);
+      if (options.createPlan) return options.createPlan(input);
       return ({
       title: 'Three-scene product spot',
       voiceover: 'Meet the new product.',
@@ -55,7 +56,7 @@ async function fixture(t, options = {}) {
         purpose: `Scene ${index}`,
         imagePrompt: `Set up scene ${index}`,
         motionPrompt: `Move camera for scene ${index}`,
-        durationSeconds: [6, 8, 6][index - 1],
+        durationSeconds: [6, 8, 8][index - 1],
         narration: `Narration for scene ${index}`
       }))
     }); },
@@ -289,7 +290,7 @@ test('each scene receives its own narration and duration', async t => {
   const f = await fixture(t);
   await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
   const clips = f.calls.filter(c => c[0] === 'video');
-  assert.deepEqual(clips.map(c => c[2]), [6, 8, 6]);
+  assert.deepEqual(clips.map(c => c[2]), [6, 8, 8]);
   clips.forEach((clip, index) => assert.ok(clip[1].includes(`Narration for scene ${index + 1}`)));
 });
 
@@ -317,4 +318,90 @@ test('photo and brief generate a paid commercial with automatic direction and no
     body: JSON.stringify({ specifications: 'Updated brief', productName: '', brandName: '' })
   });
   assert.equal(edit.status, 200);
+});
+
+for (const code of ['AI_PROVIDER_NOT_CONFIGURED', 'OPENROUTER_AUTH_FAILED', 'OPENROUTER_INSUFFICIENT_CREDITS', 'OPENROUTER_RATE_LIMITED', 'OPENROUTER_TIMEOUT', 'CREATIVE_PLAN_CANCELLED', 'CREATIVE_PLAN_INVALID']) {
+  test(`planning failure ${code} releases reservation before any media costs`, async t => {
+    const f = await fixture(t, { createPlan: async () => { throw Object.assign(new Error('secret provider body'), { code, statusCode: 503 }); } });
+    const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+    assert.equal(response.status, 503);
+    assert.doesNotMatch(JSON.stringify(await response.json()), /secret|OpenRouter|Claude/);
+    assert.doesNotMatch(JSON.stringify(f.logs), /secret provider body/);
+    assert.equal(f.calls.length, 1);
+    const user = await f.db.User.findOne({ id: 'owner' });
+    assert.equal(user.quickAdCredits, 10);
+    assert.equal(user.quickAdGenerationLock, null);
+    const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+    const { failGeneration } = require('../services/quickAdCredits');
+    await failGeneration(f.db, { userId: 'owner', id: job.id });
+    assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+  });
+}
+
+test('all scenes must be valid before the first paid media request', async t => {
+  const f = await fixture(t, { createPlan: async () => ({ scenes: [
+    { imagePrompt: 'valid', motionPrompt: 'valid', narration: '' }, {}, {}
+  ] }) });
+  const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  assert.equal(response.status, 502);
+  assert.equal(f.calls.length, 1);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdGenerationLock, null);
+});
+
+test('duplicate requests during planning cannot start another plan or release the active lock', async t => {
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, { createPlan: async () => { entered(); await gate; throw new Error('planning failed'); } });
+  const headers = { 'Idempotency-Key': 'concurrent-plan' };
+  const first = fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers, body: form() });
+  await started;
+  try {
+    for (const key of ['concurrent-plan', 'different-key']) {
+      const duplicate = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: form() });
+      assert.equal(duplicate.status, 409);
+      assert.ok((await f.db.User.findOne({ id: 'owner' })).quickAdGenerationLock);
+    }
+    assert.equal(f.calls.length, 1);
+  } finally { release(); }
+  assert.equal((await first).status, 502);
+  assert.equal((await f.db.User.findOne({ id: 'owner' })).quickAdCredits, 10);
+});
+
+
+test('commercial routes enforce real authentication and current account role before provider calls', async t => {
+  const f = await fixture(t, { realAuth: true });
+  for (const auth of ['', 'Bearer invalid']) {
+    const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers: { Authorization: auth }, body: form() });
+    assert.equal(response.status, 401);
+  }
+  const jwt = require('jsonwebtoken');
+  const headers = { Authorization: `Bearer ${jwt.sign({ id: 'owner' }, process.env.JWT_SECRET)}` };
+  await f.db.User.updateOne({ id: 'owner' }, { $set: { role: 'admin' } });
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', headers, body: form() })).status, 403);
+  await f.db.User.updateOne({ id: 'owner' }, { $set: { role: 'company', status: 'suspended' } });
+  assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs`, { headers })).status, 403);
+  assert.equal(f.calls.length, 0);
+});
+
+test('foreign commercial records cannot be edited, deleted or finalized', async t => {
+  const f = await fixture(t);
+  await f.db.QuickAdGeneration.create({ id: 'foreign', userId: 'another', provider: 'ai-commercials', status: 'failed' });
+  for (const [path, method] of [['foreign', 'PATCH'], ['foreign', 'DELETE'], ['foreign/retry', 'POST']]) {
+    assert.equal((await fetch(`${f.base}/api/ai-commercials/jobs/${path}`, { method })).status, 404);
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('legacy paid jobs retain stored six-second closing scenes on finalization retry', async t => {
+  const f = await fixture(t, { failAssembly: true });
+  await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  job.sceneAssets[2].durationSeconds = 6;
+  await f.db.QuickAdGeneration.updateOne({ id: job.id }, { $set: { sceneAssets: job.sceneAssets } });
+  const { claimFinalization } = require('../services/aiCommercialRecovery');
+  const claimed = await claimFinalization(f.db, { id: job.id, userId: 'owner', leaseMs: 10000 });
+  assert.deepEqual(claimed.generation.sceneAssets.map(scene => scene.durationSeconds), [6, 8, 6]);
+  assert.equal(claimed.generation.creditCost, 4);
 });

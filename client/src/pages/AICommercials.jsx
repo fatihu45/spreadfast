@@ -432,7 +432,7 @@ export default function AICommercials({ initialTab = 'create' }) {
             <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> Ad details</span></div>
             <div className="sf-commercials__preview-stage">
               {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a photo and tell us what you want to advertise.</p></div>}
-              <span className="sf-commercials__duration">20 sec commercial</span>
+              <span className="sf-commercials__duration">22 sec commercial</span>
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>

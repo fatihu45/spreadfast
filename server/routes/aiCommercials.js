@@ -10,6 +10,7 @@ const { storeVideo, assembleVideos, publicGeneration, PREVIEW_TRANSFORMATION } =
 const { readBranding, uploadBranding, renderBranding } = require('../services/quickAdBranding');
 const {
   createCreativePlan,
+  normalizeScenes,
   generateNanoBananaImage,
   generateVeoClip,
   IMAGE_MODEL,
@@ -312,6 +313,8 @@ function createAiCommercialsRouter({
       await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'preparing_image' } });
       const plan = await createPlan({ productName, brandName, contact, specifications, style, imageUrl: sourceImageUrl, tier, signal: controller.signal });
       if (!Array.isArray(plan?.scenes) || plan.scenes.length !== 3) throw new Error('The creative plan did not contain exactly three scenes.');
+      // Validate every scene before any paid image/video submission.
+      plan.scenes = normalizeScenes(plan.scenes);
       const scenes = [];
       await db.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, {
         $set: { commercialDetails: { productName, brandName, contact, specifications, tier, requiredCredits,
@@ -396,7 +399,6 @@ function createAiCommercialsRouter({
       return res.json({
         success: true,
         completed: true,
-        provider: 'anthropic+nano-banana+veo',
         ...publicGeneration(completed, latestUser)
       });
     } catch (error) {
@@ -413,14 +415,17 @@ function createAiCommercialsRouter({
       logger.error('[AI Commercials] Generation failed', {
         generationId: generation?.id,
         stage,
-        code: error.code || 'GENERATION_FAILED'
+        code: error.code || 'GENERATION_FAILED',
+        ...(Number.isInteger(error.providerStatus) ? { providerStatus: error.providerStatus } : {})
       });
       const status = error.statusCode || (error.code === 'AI_PROVIDER_NOT_CONFIGURED' ? 503 : 502);
       return res.status(status).json({
         success: false,
         message: error.code === 'AI_PROVIDER_NOT_CONFIGURED'
           ? 'AI commercial generation is not configured on the server.'
-          : error.statusCode && error.statusCode < 500
+          : stage === 'creative_plan'
+            ? 'We could not prepare your commercial. No credits were charged. Please try again shortly.'
+          : error.quickAdSafe && error.statusCode < 500
             ? error.message
             : stage === 'finalizing'
               ? 'Your scenes were saved, but the final video could not be finished. No credits were charged. Open My Ads and retry finishing.'
