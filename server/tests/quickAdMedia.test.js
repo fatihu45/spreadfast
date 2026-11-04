@@ -107,6 +107,13 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
         uploaded = { publicId, options };
         return { public_id: publicId, eager: [{ secure_url: 'https://res.cloudinary.com/test/video/authenticated/final.mp4' }] };
       }
+    },
+    url: (publicId, options) => {
+      assert.equal(options.type, 'authenticated');
+      assert.equal(options.sign_url, true);
+      assert.equal(options.resource_type, 'video');
+      assert.equal(options.transformation, uploaded.options.eager[0].transformation);
+      return 'https://res.cloudinary.com/test/video/authenticated/s--signed--/final.mp4';
     }
   };
   const clips = [
@@ -117,15 +124,31 @@ test('commercial scenes are spliced in order and CTA output remains authenticate
   const result = await assembleVideos(client, clips, 'ad', 'Visit brand.example');
   assert.equal(uploaded.publicId, clips[0].publicId);
   const transformations = uploaded.options.eager[0].transformation;
-  assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay.public_id), [
-    'video:spreadfast:quick-ads:videos:ad-scene-2',
-    'video:spreadfast:quick-ads:videos:ad-scene-3'
+  assert.deepEqual(transformations.filter(item => item.flags === 'splice').map(item => item.overlay), [
+    'video:authenticated:spreadfast:quick-ads:videos:ad-scene-2',
+    'video:authenticated:spreadfast:quick-ads:videos:ad-scene-3'
   ]);
   assert.ok(transformations.some(item => item.overlay?.text === 'Visit brand.example'));
   const endCard = transformations.find(item => item.gravity === 'south');
   assert.equal(endCard.start_offset, 14);
   assert.equal(endCard.end_offset, 20);
-  assert.equal(result.outputUrl, 'https://res.cloudinary.com/test/video/authenticated/final.mp4');
+  assert.equal(result.outputUrl, 'https://res.cloudinary.com/test/video/authenticated/s--signed--/final.mp4');
+});
+
+test('Cloudinary eager failures and unsigned derivative URLs never produce a completed commercial', async () => {
+  const clips = [{ publicId: 'spreadfast/quick-ads/videos/scene-1' }];
+  const unsigned = {
+    uploader: { explicit: async publicId => ({ public_id: publicId,
+      eager: [{ secure_url: 'https://res.cloudinary.com/test/video/authenticated/scene-1.mp4' }] }) },
+    url: () => 'https://res.cloudinary.com/test/video/authenticated/unsigned.mp4'
+  };
+  await assert.rejects(assembleVideos(unsigned, clips, 'ad'), { code: 'CLOUDINARY_UNSIGNED_DERIVATIVE' });
+  const failed = {
+    uploader: { explicit: async publicId => ({ public_id: publicId,
+      eager: [{ status: 'failed', error: { message: 'Invalid transformation' } }] }) },
+    url: () => { throw new Error('must not generate URL for failed eager'); }
+  };
+  await assert.rejects(assembleVideos(failed, clips, 'ad'), { code: 'CLOUDINARY_ASSEMBLY_FAILED' });
 });
 
 test('interrupted generation recovery is owner-scoped and reports expired reservations safely', async t => {

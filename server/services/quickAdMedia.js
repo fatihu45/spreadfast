@@ -55,7 +55,7 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
   const transformations = [];
   for (const clip of clips.slice(1)) {
     transformations.push(
-      { overlay: { public_id: `video:${videoLayerId(clip.publicId)}`, type: 'authenticated' }, flags: 'splice' },
+      { overlay: `video:authenticated:${videoLayerId(clip.publicId)}`, flags: 'splice' },
       { width: 720, height: 1280, crop: 'fill' },
       { flags: 'layer_apply' }
     );
@@ -80,16 +80,27 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
     eager_async: false,
     timeout: 300000
   });
-  const outputUrl = result?.eager?.[0]?.secure_url;
-  if (!result?.public_id || !outputUrl?.startsWith('https://') || !outputUrl.includes('/video/authenticated/')) {
-    throw new Error('The final commercial video could not be assembled as protected media.');
+  const eager = result?.eager?.[0];
+  // Cloudinary may return an eager failure as data instead of throwing.
+  if (!result?.public_id || eager?.status === 'failed' || eager?.error ||
+      typeof eager?.secure_url !== 'string' || !eager.secure_url.startsWith('https://')) {
+    throw Object.assign(new Error('Cloudinary could not assemble the protected commercial.'), {
+      code: 'CLOUDINARY_ASSEMBLY_FAILED'
+    });
   }
-  return {
-    publicId: base,
-    outputUrl,
-    originalOutputUrl: outputUrl,
-    transformations
-  };
+  // Authenticated derivatives MUST use signed delivery URLs. Do not reuse an
+  // unsigned eager URL as an upload source: that remote fetch can fail with 401.
+  const outputUrl = cloudinary.url(base, {
+    resource_type: 'video', type: 'authenticated', format: 'mp4',
+    transformation: transformations, sign_url: true, secure: true
+  });
+  if (!outputUrl?.startsWith('https://') ||
+      !outputUrl.includes('/video/authenticated/s--')) {
+    throw Object.assign(new Error('Cloudinary did not return a signed commercial URL.'), {
+      code: 'CLOUDINARY_UNSIGNED_DERIVATIVE'
+    });
+  }
+  return { publicId: base, outputUrl, originalOutputUrl: outputUrl, transformations };
 }
 // Keep trial provenance and credit accounting unchanged; verified lifetime purchases
 // grant access even after the customer spends their remaining balance.

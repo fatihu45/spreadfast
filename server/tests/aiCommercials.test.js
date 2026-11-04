@@ -18,6 +18,7 @@ test.after(() => {
 async function fixture(t, options = {}) {
   const calls = [];
   const logs = [];
+  const storedVideos = [];
   const db = quickAdsDb([{
     id: 'owner',
     role: 'company',
@@ -74,6 +75,7 @@ async function fixture(t, options = {}) {
       return { videoUrl: `https://fal.example/scene-${calls.length}.mp4`, requestId: `video-${calls.length}` };
     },
     persistVideo: async (client, url, generation) => {
+      storedVideos.push(generation.id);
       if (options.failStoreAt && generation.id.endsWith(`scene-${options.failStoreAt}`)) throw new Error('Storage failed');
       return ({
       publicId: `spreadfast/quick-ads/videos/${generation.id}`,
@@ -105,7 +107,7 @@ async function fixture(t, options = {}) {
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
-  return { calls, db, logs, base: `http://127.0.0.1:${server.address().port}` };
+  return { calls, storedVideos, db, logs, base: `http://127.0.0.1:${server.address().port}` };
 }
 
 function form({ tier = 'standard' } = {}) {
@@ -179,6 +181,19 @@ test('premium generations reserve and deduct seven credits only after a successf
   assert.equal((await f.db.QuickAdGeneration.findOne({ id: result.generationId })).creditsUsed, 7);
 });
 
+
+test('successful commercial uses only the three persisted scene clips and keeps assembled Cloudinary derivative', async t => {
+  const f = await fixture(t);
+  const response = await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(f.storedVideos.length, 3, 'final Cloudinary derivative must not be uploaded again');
+  const stored = await f.db.QuickAdGeneration.findOne({ id: result.generationId });
+  assert.equal(stored.media.publicId, stored.sceneAssets[0].videoPublicId);
+  assert.ok(stored.media.outputUrl.includes('-assembled.mp4'));
+  assert.equal(stored.media.originalOutputUrl, stored.media.outputUrl);
+  assert.equal(stored.creditUsed, true);
+});
 
 test('replaying the same idempotency key returns the completed commercial without paying providers twice', async t => {
   const f = await fixture(t);
