@@ -190,7 +190,7 @@ test('successful commercial uses only the three persisted scene clips and keeps 
   assert.equal(f.storedVideos.length, 3, 'final Cloudinary derivative must not be uploaded again');
   const stored = await f.db.QuickAdGeneration.findOne({ id: result.generationId });
   assert.equal(stored.media.publicId, stored.sceneAssets[0].videoPublicId);
-  assert.match(stored.media.outputUrl, /assembled\\.mp4/);
+  assert.ok(stored.media.outputUrl.includes('-assembled.mp4'));
   assert.equal(stored.media.originalOutputUrl, stored.media.outputUrl);
   assert.equal(stored.creditUsed, true);
 });
