@@ -95,12 +95,20 @@ async function queueTest(Notification, campaign, nonce) {
 }
 function startMarketingWorker({ models, User, Notification, resend, isConnected, env = process.env }) {
   let busy = false;
+  let lastTestStatus;
+  console.log('[Email design test] Runtime controls', { requested: Boolean(env.EMAIL_DESIGN_TEST_NONCE), enabled: emailEnabled(env), production: env.NODE_ENV === 'production' });
   const tick = async () => {
     if (busy || !isConnected()) return;
     busy = true;
     try {
       // Explicit deployment nonce requests one test, deduplicated by the existing outbox.
-      if (env.EMAIL_DESIGN_TEST_NONCE && env.NODE_ENV === 'production' && emailEnabled(env)) await queueTest(Notification, STARTER, env.EMAIL_DESIGN_TEST_NONCE);
+      if (env.EMAIL_DESIGN_TEST_NONCE && env.NODE_ENV === 'production' && emailEnabled(env)) {
+        const test = await queueTest(Notification, STARTER, env.EMAIL_DESIGN_TEST_NONCE);
+        if (test.status !== lastTestStatus) {
+          console.log('[Email design test] Status', { status: test.status, providerId: test.providerId || null });
+          lastTestStatus = test.status;
+        }
+      }
       await models.EmailCampaign.updateMany({ status: 'sending', updatedAt: { $lt: new Date(Date.now() - 3600000) } }, { $set: { status: 'needs_review', error: 'Interrupted send. Reconcile in Resend; do not resend blindly.' } });
       await runWeekly({ models, User, resend, env });
     } catch { console.error('[Email marketing] Worker could not complete'); }
