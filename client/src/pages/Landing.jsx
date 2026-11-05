@@ -57,7 +57,7 @@ export default function LandingPage() {
               {user ? (
                 <>
                   <span className="landing-welcome">Welcome, {user.name}</span>
-                  <Link to={getAuthDestination(user)} className="sf-control sf-button sf-button--primary">{getAuthDestination(user) === '/admin-portal' ? 'Admin Dashboard' : 'Open Quick Ads'}</Link>
+                  <Link to={getAuthDestination(user)} className="sf-control sf-button sf-button--primary">{getAuthDestination(user) === '/admin-portal' ? 'Admin Dashboard' : 'Create Ad'}</Link>
                 </>
               ) : (
                 <>
