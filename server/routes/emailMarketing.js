@@ -83,6 +83,16 @@ module.exports = function createEmailMarketingRouter({ models, User, Notificatio
     const campaign = await Campaign.create({ ...validateCampaign(req.body), createdBy: req.user.id, status: 'draft' });
     res.json({ success: true, campaign });
   }));
+  router.post('/admin/campaigns/:id/send', wrap(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid campaign.' });
+    if (!resend || env.NODE_ENV !== 'production' || env.EMAILS_ENABLED === 'false') return res.status(400).json({ success: false, message: 'Production email delivery must be configured first.' });
+    // Atomic claim: retries and simultaneous clicks cannot enqueue a second send.
+    let campaign = await Campaign.findOneAndUpdate({ _id: req.params.id, status: { $in: ['draft', 'ready'] } }, { $set: { status: 'queued' } }, { new: true });
+    if (!campaign) campaign = await Campaign.findById(req.params.id);
+    if (!campaign) return res.status(404).json({ success: false, message: 'Email not found.' });
+    if (!['queued', 'sending', 'sent'].includes(campaign.status)) return res.status(409).json({ success: false, message: 'This email cannot be resent. Check its delivery status first.' });
+    res.status(202).json({ success: true, campaign, message: campaign.status === 'sent' ? 'This email was already sent.' : 'Email queued to send now. Delivery status will update below.' });
+  }));
   router.patch('/admin/campaigns/:id', wrap(async (req, res) => {
     if (!/^[a-f\d]{24}$/i.test(req.params.id) || !['draft','ready'].includes(req.body.status)) return res.status(400).json({ success: false, message: 'Invalid campaign or status.' });
     const campaign = await Campaign.findOneAndUpdate({ _id: req.params.id, status: { $in: ['draft','ready'] } }, { $set: { status: req.body.status } }, { new: true });

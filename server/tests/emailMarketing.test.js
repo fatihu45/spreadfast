@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { STARTER, validateCampaign, renderCampaign, slotFor, eligible, syncContact, runWeekly, queueTest } = require('../services/emailMarketing');
+const { STARTER, validateCampaign, renderCampaign, slotFor, eligible, syncContact, runWeekly, runImmediate, queueTest } = require('../services/emailMarketing');
 const good = { ...STARTER };
 test('brand template escapes copy, retains logo, and distinguishes test from unsubscribe broadcast', () => {
   const mail = renderCampaign({ ...good, title:'Hello <script>', body:'<img src=x onerror=x>\n\nSecond paragraph' });
@@ -40,7 +40,7 @@ test('contact sync preserves provider unsubscribe and only creates missing conta
 function fixture({ fail=false, empty=false }={}) {
   const slots=new Set(), row={...good,_id:'db',id:'db',status:'ready'}, user={id:'u',name:'User',email:'user@example.test',role:'company',marketingSubscribed:true};
   let sends=0;
-  const models={EmailMarketingSettings:{findById:async()=>({enabled:true,frequency:3,hour:8})},EmailMarketingSlot:{create:async({_id})=>{if(slots.has(_id))throw Object.assign(new Error(),{code:11000});slots.add(_id);}},EmailCampaign:{findOneAndUpdate:async()=>{if(empty || row.status!=='ready')return null;row.status='sending';return row;}, updateOne:async(q,{$set})=>Object.assign(row,$set)}};
+  const models={EmailMarketingSettings:{findById:async()=>({enabled:true,frequency:3,hour:8})},EmailMarketingSlot:{create:async({_id})=>{if(slots.has(_id))throw Object.assign(new Error(),{code:11000});slots.add(_id);}},EmailCampaign:{findOneAndUpdate:async(query)=>{if(empty || row.status!==query.status)return null;row.status='sending';return row;}, updateOne:async(q,{$set})=>Object.assign(row,$set)}};
   const User={find:()=>({select:()=>({lean:async()=>[user,{...user}]})}),findOne:async()=>user};
   const resend={segments:{create:async()=>({data:{id:'seg'}})},contacts:{get:async()=>({data:{id:'contact'}}),segments:{add:async()=>({data:{id:'contact'}})}},broadcasts:{create:async()=>({data:{id:'broadcast'}}),send:async()=>{sends++;if(fail)throw new Error('Lost response');return{data:{id:'broadcast'}};}}};
   return { args:{models,User,resend,env:{NODE_ENV:'production'},now:new Date('2026-11-04T07:05:00Z'),pace:async()=>{}},row,sends:()=>sends };
@@ -60,4 +60,35 @@ test('test sends are fixed to owner address and deduplicated by nonce',async()=>
   const rows=new Map();const Notification={create:async row=>{if(rows.has(row.id))throw Object.assign(new Error(),{code:11000});rows.set(row.id,row);},findOne:async({id})=>rows.get(id)};
   await Promise.all([queueTest(Notification,good,'test-nonce'),queueTest(Notification,good,'test-nonce')]);assert.equal(rows.size,1);
   const row=[...rows.values()][0];assert.equal(row.to,'tryspreadfast@gmail.com');assert.equal(row.status,'pending');assert.ok(!row.html.includes('{{{'));
+});
+
+test('registered audience includes legacy accounts but excludes recorded opt-outs and inactive users',()=>{
+  const user={role:'company',marketingSubscribed:false};
+  assert.equal(eligible(user,'registered'),true);
+  assert.equal(eligible({...user,marketingConsentAt:new Date()},'registered'),false);
+  assert.equal(eligible({...user,marketingConsentSource:'account-preferences-v1'},'registered'),false);
+  assert.equal(eligible({...user,status:'banned'},'registered'),false);
+  assert.equal(eligible({...user,role:'admin'},'registered'),false);
+  assert.equal(eligible(user,'all'),false);
+});
+test('send now works while weekly schedule is paused and concurrent claims send only once',async()=>{
+  const f=fixture(); f.row.status='queued';
+  f.args.models.EmailMarketingSettings.findById=async()=>({enabled:false});
+  await Promise.all([runImmediate(f.args),runImmediate(f.args)]); await runImmediate(f.args);
+  assert.equal(f.sends(),1);assert.equal(f.row.status,'sent');assert.equal(f.row.recipients,1);
+});
+test('immediate sends retain production gates and ambiguous response protection',async()=>{
+  const f=fixture();f.row.status='queued';
+  await runImmediate({...f.args,env:{NODE_ENV:'test'}});assert.equal(f.sends(),0);
+  await runImmediate({...f.args,env:{NODE_ENV:'production',EMAILS_ENABLED:'false'}});assert.equal(f.sends(),0);
+  const g=fixture({fail:true});g.row.status='queued';await runImmediate(g.args);await runImmediate(g.args);
+  assert.equal(g.row.status,'needs_review');assert.equal(g.sends(),1);
+});
+test('registered broadcast rechecks preference changes, deduplicates, and honors provider opt-out',async()=>{
+  const f=fixture();f.row.status='queued';f.row.audience='registered';
+  const users=[{id:'legacy',role:'company',email:'legacy@example.test'}, {id:'out',role:'company',email:'out@example.test',marketingConsentAt:new Date(),marketingSubscribed:false}, {id:'provider-out',role:'promoter',email:'provider@example.test'}];
+  f.args.User.find=()=>({select:()=>({lean:async()=>[...users,users[0]]})});
+  f.args.User.findOne=async({id})=>users.find(u=>u.id===id);
+  f.args.resend.contacts.get=async({email})=>({data:{id:email,unsubscribed:email==='provider@example.test'}});
+  await runImmediate(f.args);assert.equal(f.row.recipients,1);assert.equal(f.sends(),1);
 });

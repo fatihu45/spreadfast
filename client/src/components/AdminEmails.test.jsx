@@ -27,3 +27,15 @@ test('image field uploads a file, previews it and can remove it',async()=>{
     expect(host.querySelector('img[alt="Selected email artwork"]')).toBeNull();
   } finally {AbortSignal.timeout=timeout;}
 });
+
+test('saved draft can send now without enabling the weekly schedule',async()=>{
+  const original=global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async(url,options)=>{
+    const response=await original(url,options);const data=await response.json();
+    return {...response,json:async()=>({...data,campaigns:[{_id:'campaign1',subject:'Milestone',status:'draft',audience:'registered'}]})};
+  });
+  await render();expect(host.textContent).toContain('All signed-up users');
+  await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='Send now').click());
+  expect(global.fetch.mock.calls.filter(([url])=>url.endsWith('/campaigns/campaign1/send'))).toHaveLength(1);
+  expect(global.fetch.mock.calls.some(([url])=>url.endsWith('/settings'))).toBe(false);
+});
