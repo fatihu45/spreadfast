@@ -14,6 +14,11 @@ export default function AdminEmails() {
   }
   async function load() { const r = await request(); setData(r); setSettings(r.settings); setForm(f => f || r.starter); }
   useEffect(() => { load().catch(e => setMessage(e.message)); }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!data?.campaigns.some(item => ['queued','sending'].includes(item.status))) return undefined;
+    const timer = setInterval(() => { load().catch(e => setMessage(e.message)); }, 10000);
+    return () => clearInterval(timer);
+  }, [data, token]); // eslint-disable-line react-hooks/exhaustive-deps
   async function act(fn) { setBusy(true); setMessage(''); try { await fn(); } catch(e) { setMessage(e.message); } finally { setBusy(false); } }
   function change(key, value) { setForm({ ...form, [key]: value }); setPreview(''); testKey.current = null; }
   async function uploadImage(event) {
@@ -38,21 +43,21 @@ export default function AdminEmails() {
       <FormField label="Send time"><select value={settings.hour} onChange={e => setSettings({ ...settings, hour:Number(e.target.value) })}>{Array.from({length:24},(_,h)=><option key={h} value={h}>{String(h).padStart(2,'0')}:00 WAT</option>)}</select></FormField>
       <label><input type="checkbox" checked={settings.enabled} onChange={e => setSettings({ ...settings, enabled:e.target.checked })} /> Enable weekly sending</label>
       <Button disabled={busy} onClick={() => act(async()=>{ await request('/settings','PUT',{ enabled:settings.enabled, frequency:settings.frequency, hour:settings.hour }); await load(); setMessage('Schedule saved.'); })}>Save schedule</Button>
-    </div><p>Only subscribed, active users receive marketing emails. Pausing stops future slots; it cannot recall a broadcast already sent.</p></section>
-    <section className="sf-email-panel"><h2>Compose an email</h2><p>Save a draft, preview it, then add it to the weekly queue.</p><div className="sf-email-form">
+    </div><p>Recipient selection is saved with each email. Unsubscribed and inactive accounts are excluded. Pausing stops future slots; it cannot recall a broadcast already sent.</p></section>
+    <section className="sf-email-panel"><h2>Compose an email</h2><p>Preview your email and save a draft. Then choose Send now or add it to the weekly queue.</p><div className="sf-email-form">
       {[['subject','Subject'],['title','Headline'],['cta','Button label'],['url','Button link']].map(([key,label])=><FormField key={key} label={label}><Input value={form[key] || ''} onChange={e=>change(key,e.target.value)} /></FormField>)}
       <div><FormField label="Image (optional)"><Input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={uploadImage} /></FormField><p>Upload a JPG, PNG or WebP image, up to 5 MB.</p>
         {form.imageUrl && <div><img src={form.imageUrl} alt="Selected email artwork" style={{ display:'block', maxWidth:'100%', maxHeight:240, borderRadius:12, marginBottom:12 }} /><Button disabled={busy} variant="secondary" onClick={() => change('imageUrl','')}>Remove image</Button></div>}
       </div>
       <FormField label="Message"><textarea rows={7} value={form.body} onChange={e=>change('body',e.target.value)} /></FormField>
-      <FormField label="Recipients"><select value={form.audience} onChange={e=>change('audience',e.target.value)}><option value="all">All subscribed users</option><option value="company">Subscribed businesses</option><option value="promoter">Subscribed promoter accounts</option></select></FormField>
+      <FormField label="Recipients"><select value={form.audience} onChange={e=>change('audience',e.target.value)}><option value="registered">All signed-up users (except unsubscribed)</option><option value="all">All subscribed users</option><option value="company">Subscribed businesses</option><option value="promoter">Subscribed promoter accounts</option></select></FormField>
     </div><div className="sf-email-controls">
       <Button disabled={busy} onClick={()=>act(async()=>setPreview((await request('/preview','POST',form)).html))}>Preview</Button>
       <Button disabled={busy || !data.configured} variant="secondary" onClick={()=>act(async()=>{ if(!testKey.current) testKey.current=crypto.randomUUID(); const r=await request('/test','POST',form,{'Idempotency-Key':testKey.current}); await load(); setMessage(r.message); })}>Send test to my Gmail</Button>
-      <Button disabled={busy} variant="secondary" onClick={()=>act(async()=>{ await request('/campaigns','POST',form); await load(); setMessage('Draft saved. Add it to the queue below when ready.'); })}>Save draft</Button>
+      <Button disabled={busy} variant="secondary" onClick={()=>act(async()=>{ await request('/campaigns','POST',form); await load(); setMessage('Draft saved. Choose Send now or Add to queue below.'); })}>Save draft</Button>
     </div>{preview && <iframe title="Email preview" sandbox="" srcDoc={preview} className="sf-email-preview" />}</section>
     <section className="sf-email-panel"><h2>Email queue and history</h2><p>Sent means accepted by Resend, not confirmed inbox delivery. Delivery and click reports are available in <a href="https://resend.com/broadcasts" target="_blank" rel="noreferrer">Resend</a>.</p>
-      {!data.campaigns.length && <p>No emails queued yet.</p>}{data.campaigns.map(item=><article className="sf-email-row" key={item._id}><div><strong>{item.subject}</strong><p>{item.status.replace('_',' ')} · {item.audience}{item.recipients != null ? ` · ${item.recipients} recipients` : ''}</p>{item.error && <p>{item.error}</p>}{item.broadcastId && <small>Broadcast: {item.broadcastId}</small>}</div>{['draft','ready'].includes(item.status) && <Button disabled={busy} variant="secondary" onClick={()=>act(async()=>{ await request(`/campaigns/${item._id}`,'PATCH',{status:item.status === 'draft' ? 'ready':'draft'}); await load(); })}>{item.status === 'draft' ? 'Add to queue':'Remove from queue'}</Button>}</article>)}
+      {!data.campaigns.length && <p>No emails queued yet.</p>}{data.campaigns.map(item=><article className="sf-email-row" key={item._id}><div><strong>{item.subject}</strong><p>{item.status.replace('_',' ')} · {item.audience}{item.recipients != null ? ` · ${item.recipients} recipients` : ''}</p>{item.error && <p>{item.error}</p>}{item.broadcastId && <small>Broadcast: {item.broadcastId}</small>}</div>{['draft','ready'].includes(item.status) && <><Button disabled={busy || !data.configured} onClick={()=>act(async()=>{ const r=await request(`/campaigns/${item._id}/send`,'POST',{}); await load(); setMessage(r.message); })}>Send now</Button><Button disabled={busy} variant="secondary" onClick={()=>act(async()=>{ await request(`/campaigns/${item._id}`,'PATCH',{status:item.status === 'draft' ? 'ready':'draft'}); await load(); })}>{item.status === 'draft' ? 'Add to queue':'Remove from queue'}</Button></>}</article>)}
       <h3>Recent test emails</h3>{data.tests.map((item,i)=><p key={i}>tryspreadfast@gmail.com — {item.status}{item.providerId ? ` · ${item.providerId}`:''}</p>)}<Button disabled={busy} variant="secondary" onClick={()=>act(load)}>Refresh status</Button>
     </section></div>;
 }
