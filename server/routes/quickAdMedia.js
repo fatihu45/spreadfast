@@ -99,9 +99,22 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
       const page = Math.max(1, Number(req.query.page) || 1);
       const skip = (page - 1) * limit;
       const user = await DB.User.findOne({ id: req.user.id });
-      const rows = await DB.QuickAdGeneration.find({ userId: req.user.id, deletedAt: { $exists: false } }).sort({ createdAt: -1 }).skip(skip).limit(limit);
+      const query = { userId: req.user.id, deletedAt: { $exists: false } };
+      const studio = req.query.studio;
+      if (studio) {
+        if (!['quick','fashion','auto','product','commercial'].includes(studio)) return res.status(400).json({success:false,message:'Invalid studio filter.'});
+        const legacy = studio === 'commercial' ? {provider:'ai-commercials'} : studio === 'fashion' ? {style:'fashion_studio'} : studio === 'quick' ? {provider:{$ne:'ai-commercials'},style:{$ne:'fashion_studio'}} : null;
+        query.$or = [{studioType:studio}, ...(legacy ? [{studioType:{$exists:false},...legacy}] : [])];
+      }
+      const rows = await DB.QuickAdGeneration.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
       res.set('Cache-Control', 'no-store').json({ success: true, generations: rows.map(g => ({
         generationId: g.id,
+        title: g.title || g.commercialDetails?.title || 'Your advertisement',
+        studioType: g.studioType || (g.provider === 'ai-commercials' ? 'commercial' : g.style === 'fashion_studio' ? 'fashion' : 'quick'),
+        generationMode: g.generationMode,
+        studioRetryAvailable: g.provider === 'studios' && g.status === 'failed' && !!g.media?.publicId && (g.finalizationRetries || 0) < 2 && (g.generationMode !== 'auto_voiceover' || g.studioAssets?.voice?.applied === true),
+        duration: g.outputDurationSeconds || (g.provider === 'ai-commercials' ? (g.sceneAssets || []).reduce((sum, scene) => sum + (scene.durationSeconds || 0), 0) : 5),
+        creditsUsed: g.creditsUsed || (g.creditUsed ? g.creditCost || 1 : 0),
         style: g.style,
         status: g.status,
         stage: g.stage || (g.status === 'completed' ? 'completed' : 'queued'),
@@ -116,15 +129,27 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
       })) });
     } catch (error) { safeError(res, error); }
   });
+  router.patch('/generations/:id', authenticate, quickAdAccountOnly, async (req,res) => {
+    try {
+      const generation = await owned(req);
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+      if (!title || title.length > 100 || /[\u0000-\u001f\u007f]/.test(title)) return res.status(400).json({success:false,message:'Enter a title of 1–100 characters.'});
+      if (generation.status === 'pending') return res.status(409).json({success:false,message:'Wait for generation to finish.'});
+      const result = await req.app.locals.db.QuickAdGeneration.updateOne({id:generation.id,userId:req.user.id,status:generation.status,deletedAt:{$exists:false}},{$set:{title}});
+      if (!result.matchedCount) return res.status(409).json({success:false,message:'This ad changed. Refresh and try again.'});
+      res.json({success:true});
+    } catch(error) { safeError(res,error); }
+  });
   // Retain billing/idempotency records and assets used by existing campaigns.
   router.delete('/generations/:id', authenticate, quickAdAccountOnly, async (req, res) => {
     try {
       const generation = await owned(req);
       if (generation.status === 'pending') fail('GENERATION_IN_PROGRESS', 'Wait until this ad finishes before deleting it.', 409);
-      await req.app.locals.db.QuickAdGeneration.updateOne(
-        { id: generation.id, userId: req.user.id, status: generation.status },
+      const deleted = await req.app.locals.db.QuickAdGeneration.updateOne(
+        { id: generation.id, userId: req.user.id, status: generation.status, deletedAt: { $exists: false } },
         { $set: { deletedAt: new Date() } }
       );
+      if (!deleted.matchedCount) return res.status(409).json({success:false,message:'This ad changed. Refresh and try again.'});
       res.set('Cache-Control', 'no-store').json({ success: true });
     } catch (error) { safeError(res, error); }
   });

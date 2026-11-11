@@ -11,6 +11,7 @@ const { storeVideo, publicGeneration } = require('../services/quickAdMedia');
 const { createQuickAdMediaRouter, safeError } = require('./quickAdMedia');
 const { quickAdAccountOnly } = require('../services/quickAdAccess');
 
+const { STUDIO_CREDIT_COSTS } = require('../config/studios');
 const COMMERCIAL_IMAGE_MODEL = process.env.COMMERCIAL_IMAGE_MODEL || 'fal-ai/nano-banana-2/edit';
 const VIDEO_MODEL = process.env.VIDEO_MODEL || 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
@@ -311,6 +312,14 @@ function createQuickAdsRouter({
     if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(key)) {
       return res.status(400).json({ success: false, message: 'Invalid generation request key.' });
     }
+    const studioMode = isFashionStyle ? 'fashion_mannequin' : 'quick_ad';
+    if (process.env.STUDIO_WORKER_ENABLED === 'true' && (process.env.STUDIO_ENABLED_MODES || '').split(',').includes(studioMode)) {
+      // Preserve the old multipart API while opting into the durable executor.
+      req.headers['idempotency-key'] = key;
+      req.body = { ...req.body, mode: studioMode, instructions: additionalInstructions };
+      req.files = { images: imageFiles, ...(logoFile ? { brandingLogo: [logoFile] } : {}) };
+      return require('./studios').createStudiosRouter({cloudinary:cloudinaryClient}).enqueue(req,res);
+    }
     let config;
     try { config = cloudinaryClient.config(); } catch {
       logFailure(logger, { stage: 'configuration', style, error: generationError('CONFIGURATION_MISSING') });
@@ -340,7 +349,7 @@ function createQuickAdsRouter({
         throw generationError('UNSUPPORTED_FASHION_VIDEO_MODEL');
       }
       stage = 'credits';
-      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL });
+      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL, creditCost: STUDIO_CREDIT_COSTS[isFashionStyle ? 'fashion_mannequin' : 'quick_ad'] });
       generation = reservation.generation;
       if (reservation.reused) return res.json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
       controller.signal.throwIfAborted();
@@ -555,3 +564,7 @@ function createQuickAdsRouter({
 module.exports = createQuickAdsRouter();
 module.exports.createQuickAdsRouter = createQuickAdsRouter;
 
+
+module.exports.buildCommercialImagePrompt = buildCommercialImagePrompt;
+module.exports.buildFashionImagePrompt = buildFashionImagePrompt;
+module.exports.buildQuickAdPrompt = buildQuickAdPrompt;

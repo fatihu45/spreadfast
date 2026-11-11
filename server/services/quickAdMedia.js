@@ -61,7 +61,7 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
     );
   }
   if (endCardText) {
-    const durations = clips.map(clip => [4, 6, 8].includes(clip.durationSeconds) ? clip.durationSeconds : 8);
+    const durations = clips.map(clip => [4, 5, 6, 8, 10].includes(clip.durationSeconds) ? clip.durationSeconds : 8);
     const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
     transformations.push(
       { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 120) },
@@ -111,6 +111,11 @@ function canDownloadGeneration(generation, user) {
 }
 function publicGeneration(generation, user) {
   const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+    studioType: generation.studioType || (generation.provider === 'ai-commercials' ? 'commercial' : generation.style === 'fashion_studio' ? 'fashion' : 'quick'),
+    generationMode: generation.generationMode,
+    title: generation.title || generation.commercialDetails?.title || 'Your advertisement',
+    duration: generation.outputDurationSeconds || (generation.provider === 'ai-commercials' ? (generation.sceneAssets || []).reduce((sum, s) => sum + (s.durationSeconds || 0), 0) : 5),
+    creditCost: generation.creditCost || 1, creditsUsed: generation.creditsUsed || 0,
     createdAt: generation.createdAt, completedAt: generation.completedAt,
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
