@@ -193,7 +193,7 @@ test('OpenRouter text-part responses and fenced JSON are supported', async t => 
   t.mock.method(global, 'fetch', async () => ({
     ok: true, json: async () => ({
       choices: [{ finish_reason: 'stop', message: { content: [
-        { type: 'text', text: '```json\\n' + JSON.stringify(valid) + '\\n```' }
+        { type: 'text', text: '```json\n' + JSON.stringify(valid) + '\n```' }
       ] } }]
     })
   }));
