@@ -98,7 +98,7 @@ function parseJsonObject(text) {
 }
 
 /** Claude remains the director; only the server-side transport changes. */
-async function createCreativePlan({ productName, brandName, contact, specifications, style = 'auto', imageUrl, imageUrls, tier, signal }) {
+async function createCreativePlanOnce({ productName, brandName, contact, specifications, style = 'auto', imageUrl, imageUrls, tier, signal }) {
   const payload = await requestCreativeCompletion({
       max_tokens: 3000,
       temperature: 0.4,
@@ -144,8 +144,13 @@ async function createCreativePlan({ productName, brandName, contact, specificati
       }]
     }, { signal });
   let plan;
+  let validationIssue = 'INVALID_STRUCTURE';
   try {
     const choice = payload.choices?.[0];
+    if (!choice) validationIssue = 'MISSING_CHOICE';
+    else if (choice.finish_reason !== 'stop') validationIssue = 'INCOMPLETE_RESPONSE';
+    else if (typeof choice.message?.content !== 'string') validationIssue = 'MISSING_CONTENT';
+    else validationIssue = 'INVALID_JSON_OR_FIELDS';
     if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string') throw new Error();
     plan = parseJsonObject(choice.message.content);
     if (typeof plan.title !== 'string' || !plan.title.trim() || typeof plan.voiceover !== 'string' ||
@@ -154,16 +159,41 @@ async function createCreativePlan({ productName, brandName, contact, specificati
         !Array.isArray(plan.scenes) || !plan.scenes.every(scene => scene &&
           typeof scene.purpose === 'string' && scene.purpose.trim() &&
           [6, 8].includes(scene.durationSeconds))) throw new Error();
-    plan.scenes = normalizeScenes(plan.scenes);
+    try { plan.scenes = normalizeScenes(plan.scenes); }
+    catch (error) {
+      validationIssue = /narration is too long/.test(error.message) ? 'NARRATION_TOO_LONG' : 'INVALID_SCENES';
+      throw error;
+    }
   } catch {
     throw Object.assign(new Error('The commercial plan was incomplete. Please try again.'), {
-      code: 'CREATIVE_PLAN_INVALID', statusCode: 502
+      code: 'CREATIVE_PLAN_INVALID', statusCode: 502, validationIssue
     });
   }
   plan.title = String(plan.title || `${[brandName, productName].filter(Boolean).join(' ') || 'Product'} Commercial`).slice(0, 120);
   plan.voiceover = plan.scenes.map(scene => scene.narration).filter(Boolean).join(' ');
   plan.endCard = String(plan.endCard || '').slice(0, 300);
   return plan;
+}
+
+
+/**
+ * Invalid LLM plans are recoverable before any paid fal media work starts.
+ * Retry with the same input at most once; never retry provider/billing failures.
+ * Diagnostics are fixed categories, not provider responses or customer content.
+ */
+async function createCreativePlan(input) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    input.signal?.throwIfAborted();
+    try { return await createCreativePlanOnce(input); }
+    catch (error) {
+      if (error.code !== 'CREATIVE_PLAN_INVALID') throw error;
+      console.warn('[AI Commercials] Invalid creative plan', {
+        validationIssue: error.validationIssue || 'INVALID_STRUCTURE',
+        attempt: attempt + 1
+      });
+      if (attempt === 1) throw error;
+    }
+  }
 }
 
 function normalizeScenes(scenes) {
