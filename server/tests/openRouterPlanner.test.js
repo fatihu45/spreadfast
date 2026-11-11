@@ -82,6 +82,30 @@ test('invalid, incomplete, refused and truncated plans fail before media generat
   for (const payload of [completion(incomplete), completion([]), completion({}), { choices: [{ finish_reason: 'length', message: { content: JSON.stringify(validPlan()) } }] }, { choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] }, { choices: [] }]) {
     const mock = t.mock.method(global, 'fetch', async () => reply(200, payload));
     await assert.rejects(createCreativePlan({}), { code: 'CREATIVE_PLAN_INVALID' });
-    assert.equal(mock.mock.callCount(), 1); mock.mock.restore();
+    assert.equal(mock.mock.callCount(), 2); mock.mock.restore();
   }
+});
+
+test('a malformed Claude plan is retried once before starting paid media work', async t => {
+  env(t);
+  let calls = 0;
+  const incomplete = validPlan();
+  delete incomplete.scenes[1].motionPrompt;
+  t.mock.method(global, 'fetch', async () => reply(200, completion(++calls === 1 ? incomplete : validPlan())));
+  const plan = await createCreativePlan({ imageUrl: 'https://media.example/tea.png' });
+  assert.equal(calls, 2);
+  assert.deepEqual(plan.scenes.map(scene => scene.durationSeconds), [6, 8, 8]);
+});
+
+test('plan retries stop immediately when cancelled after an invalid response', async t => {
+  env(t);
+  const controller = new AbortController();
+  let calls = 0;
+  t.mock.method(global, 'fetch', async () => {
+    calls += 1;
+    controller.abort();
+    return reply(200, completion({}));
+  });
+  await assert.rejects(createCreativePlan({ signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(calls, 1);
 });
