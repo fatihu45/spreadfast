@@ -82,6 +82,6 @@ test('invalid, incomplete, refused and truncated plans fail before media generat
   for (const payload of [completion(incomplete), completion([]), completion({}), { choices: [{ finish_reason: 'length', message: { content: JSON.stringify(validPlan()) } }] }, { choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] }, { choices: [] }]) {
     const mock = t.mock.method(global, 'fetch', async () => reply(200, payload));
     await assert.rejects(createCreativePlan({}), { code: 'CREATIVE_PLAN_INVALID' });
-    assert.equal(mock.mock.callCount(), 1); mock.mock.restore();
+    assert.equal(mock.mock.callCount(), 2); mock.mock.restore();
   }
 });
