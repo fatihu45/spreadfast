@@ -473,7 +473,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" className="sf-commercials__retry-button" disabled={!!retryingId || isSubmitting} onClick={() => retryFinalization(job)}>
-                      <UiIcon name="refresh-cw" /> {isRetrying ? `Resuming · ${displayProgress}%` : job.finalizationRetryAvailable ? 'Retry finishing video' : 'Retry commercial'}
+                      <UiIcon name="arrow" /> {isRetrying ? `Resuming · ${displayProgress}%` : job.finalizationRetryAvailable ? 'Retry finishing video' : 'Retry commercial'}
                     </button>}
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <small>Reuses saved scenes. {job.requiredCredits || 4} credits are charged only when the video is finished.</small>}
                     {job.commercialRecoveryRequired && <small>Please contact support to recover this commercial safely. No credits were charged.</small>}
