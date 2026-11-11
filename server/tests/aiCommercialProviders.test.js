@@ -151,3 +151,69 @@ test('installed fal SDK cannot silently retry an ambiguous paid submission', asy
   await assert.rejects(generateNanoBananaImage({ imageUrl: 'https://media.example/product.png', prompt: 'Product' }), { code: 'PROVIDER_SUBMISSION_UNKNOWN' });
   assert.equal(requests, 1);
 });
+
+
+test('invalid first Claude plan retries planning before submitting media jobs', async t => {
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  t.after(() => { if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey; });
+  let calls = 0;
+  const valid = {
+    title: 'Tea', voiceover: '', endCard: '', accuracyRules: [],
+    scenes: [1, 2, 3].map(i => ({
+      purpose: 'Scene', imagePrompt: 'Close-up of tea', motionPrompt: 'Slow camera pan',
+      durationSeconds: i === 1 ? 6 : 8, narration: ''
+    }))
+  };
+  t.mock.method(global, 'fetch', async () => {
+    calls++;
+    return { ok: true, json: async () => ({
+      choices: [{ finish_reason: 'stop', message: {
+        content: calls === 1 ? '{"title":"incomplete"}' : JSON.stringify(valid)
+      } }]
+    }) };
+  });
+  const { createCreativePlan } = require('../services/aiCommercialProviders');
+  const plan = await createCreativePlan({ imageUrl: 'https://media.example/tea.png' });
+  assert.equal(calls, 2);
+  assert.equal(plan.scenes.length, 3);
+});
+
+test('OpenRouter text-part responses and fenced JSON are supported', async t => {
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  t.after(() => { if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey; });
+  const valid = {
+    title: 'Tea', voiceover: '', endCard: '', accuracyRules: [],
+    scenes: [1, 2, 3].map(i => ({
+      purpose: 'Scene', imagePrompt: 'Product shot', motionPrompt: 'Camera push',
+      durationSeconds: i === 1 ? 6 : 8, narration: ''
+    }))
+  };
+  t.mock.method(global, 'fetch', async () => ({
+    ok: true, json: async () => ({
+      choices: [{ finish_reason: 'stop', message: { content: [
+        { type: 'text', text: '```json\n' + JSON.stringify(valid) + '\n```' }
+      ] } }]
+    })
+  }));
+  const { createCreativePlan } = require('../services/aiCommercialProviders');
+  const plan = await createCreativePlan({ imageUrl: 'https://media.example/tea.png' });
+  assert.equal(plan.title, 'Tea');
+});
+
+test('invalid Claude plans fail after a bounded retry without submitting paid media', async t => {
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  t.after(() => { if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey; });
+  let calls = 0;
+  t.mock.method(global, 'fetch', async () => {
+    calls++;
+    return { ok: true, json: async () => ({
+      choices: [{ finish_reason: 'stop', message: { content: '{"scenes":[]}' } }]
+    }) };
+  });
+  const { createCreativePlan } = require('../services/aiCommercialProviders');
+  await assert.rejects(createCreativePlan({ imageUrl: 'https://media.example/tea.png' }), { code: 'CREATIVE_PLAN_INVALID' });
+  assert.equal(calls, 2);
+});

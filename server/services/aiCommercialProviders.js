@@ -98,7 +98,7 @@ function parseJsonObject(text) {
 }
 
 /** Claude remains the director; only the server-side transport changes. */
-async function createCreativePlan({ productName, brandName, contact, specifications, style = 'auto', imageUrl, imageUrls, tier, signal }) {
+async function createCreativePlanAttempt({ productName, brandName, contact, specifications, style = 'auto', imageUrl, imageUrls, tier, signal }) {
   const payload = await requestCreativeCompletion({
       max_tokens: 3000,
       temperature: 0.4,
@@ -146,8 +146,17 @@ async function createCreativePlan({ productName, brandName, contact, specificati
   let plan;
   try {
     const choice = payload.choices?.[0];
-    if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string') throw new Error();
-    plan = parseJsonObject(choice.message.content);
+    // OpenRouter providers can return textual content as a string or text parts.
+    const rawContent = choice?.message?.content;
+    const content = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text).join('')
+        : '';
+    if (!['stop', 'end_turn'].includes(choice?.finish_reason) || !content.trim()) {
+      throw new Error('missing_or_truncated_response');
+    }
+    plan = parseJsonObject(content);
     if (typeof plan.title !== 'string' || !plan.title.trim() || typeof plan.voiceover !== 'string' ||
         typeof plan.endCard !== 'string' || !Array.isArray(plan.accuracyRules) ||
         !plan.accuracyRules.every(rule => typeof rule === 'string') ||
@@ -164,6 +173,22 @@ async function createCreativePlan({ productName, brandName, contact, specificati
   plan.voiceover = plan.scenes.map(scene => scene.narration).filter(Boolean).join(' ');
   plan.endCard = String(plan.endCard || '').slice(0, 300);
   return plan;
+}
+
+/**
+ * An invalid creative plan must not fail a paid commercial immediately.
+ * Retry only malformed/incomplete plans, before any Nano Banana/Veo work begins.
+ * Provider, cancellation and billing errors still propagate without resubmission.
+ */
+async function createCreativePlan(input) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    input.signal?.throwIfAborted();
+    try {
+      return await createCreativePlanAttempt(input);
+    } catch (error) {
+      if (error.code !== 'CREATIVE_PLAN_INVALID' || attempt === 1) throw error;
+    }
+  }
 }
 
 function normalizeScenes(scenes) {
