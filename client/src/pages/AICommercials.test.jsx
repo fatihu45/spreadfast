@@ -72,7 +72,7 @@ test('retry finishing calls only the saved-job endpoint', async () => {
   jobs = [{ generationId: 'saved-1', status: 'failed', productName: 'Bag', requiredCredits: 7, finalizationRetryAvailable: true }];
   await render('history');
   expect(container.textContent).toContain('7 credits are charged only when the video is finished');
-  await act(async () => button('Retry finishing').click());
+  await act(async () => button('Retry finishing video').click());
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/ai-commercials/jobs/saved-1/retry'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
@@ -133,10 +133,10 @@ test('pending history jobs can be cancelled with authentication', async () => {
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/pending-1/cancel'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
 });
 
-test('partial jobs show Resume commercial and never start a new generation', async () => {
+test('partial jobs show Retry commercial and never start a new generation', async () => {
   jobs = [{ generationId: 'partial-1', status: 'failed', commercialRetryAvailable: true, requiredCredits: 4 }];
   await render('history');
-  await act(async () => button('Resume commercial').click());
+  await act(async () => button('Retry commercial').click());
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/partial-1/retry'), expect.objectContaining({ method: 'POST' }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
