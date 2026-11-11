@@ -18,20 +18,13 @@ const {
 } = require('../services/aiCommercialProviders');
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
-const TIER_COST = Object.freeze({ standard: 4, premium: 7 });
+const { quote, STUDIO_CREDIT_COSTS } = require('../config/studios');
+const TIER_COST = Object.freeze({ standard: STUDIO_CREDIT_COSTS.commercial_standard, premium: STUDIO_CREDIT_COSTS.commercial_premium });
 const VALID_STYLES = new Set(['auto', 'cinematic', 'showcase', 'lifestyle', 'promo']);
 const MAX_GENERATION_MS = 15 * 60 * 1000;
 
 function cleanText(value, maxLength = 500) {
   return String(value ?? '').trim().slice(0, maxLength);
-}
-
-function safeFailureReason(error) {
-  // Provider errors can embed signed URLs or query-string credentials.
-  return String(error?.message || 'Unknown commercial error')
-    .replace(/https?:\/\/\S+/g, '[redacted-url]')
-    .replace(/(api[_-]?key|secret|token|signature)\s*[:=]\s*\S+/gi, '$1=[redacted]')
-    .slice(0, 300);
 }
 
 function isValidImage(file) {
@@ -113,7 +106,9 @@ function createAiCommercialsRouter({
   assemble = assembleVideos,
   brandingUpload = uploadBranding,
   brandingRender = renderBranding,
-  logger = console
+  logger = console,
+  pricing = tier => quote(`commercial_${tier}`),
+  durable = process.env.STUDIO_WORKER_ENABLED === 'true'
 } = {}) {
   const router = express.Router();
   const upload = multer({
@@ -143,7 +138,8 @@ function createAiCommercialsRouter({
         freePreviewAvailable: false,
         requiredCredits: TIER_COST.standard,
         available: summary.quickAdCredits,
-        tierCredits: TIER_COST
+        tierCredits: Object.fromEntries(Object.keys(TIER_COST).map(tier => [tier, pricing(tier).credits])),
+        tierAvailability: Object.fromEntries(Object.keys(TIER_COST).map(tier => [tier, pricing(tier).available]))
       });
     } catch (error) {
       return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Could not load credits.' });
@@ -274,6 +270,14 @@ function createAiCommercialsRouter({
     }
     // Validate all directions before paying for any media, even when resuming saved work.
     plan.scenes = normalizeScenes(plan.scenes);
+    const recordCost = async (kind, model, requestId, estimatedUsd) => {
+      const usage = [...(generation.providerUsage || [])];
+      if (usage.some(item => item.requestId === requestId)) return;
+      usage.push({kind, model, requestId, estimatedUsd, currency:'USD'});
+      const providerCosts = {imageGeneration:0,videoGeneration:0,voiceGeneration:0,other:0};
+      for (const item of usage) providerCosts[item.kind] += item.estimatedUsd;
+      await checkpoint(db,generation,{providerUsage:usage,providerCosts,estimatedTotalCost:usage.reduce((sum,item)=>sum+item.estimatedUsd,0),providerReportedTotalCost:null,currency:'USD'});
+    };
     const scenes = (generation.sceneAssets || []).map(scene => scene.toObject ? scene.toObject() : { ...scene });
     for (const [index, scene] of plan.scenes.entries()) {
       await ensureActive(db, generation, signal);
@@ -305,7 +309,7 @@ function createAiCommercialsRouter({
               prompt: [scene.imagePrompt, 'Preserve the product identity, proportions, colors, packaging, labels, and branding exactly.',
                 details.specifications ? `Customer brief (apply relevant visual details; do not render this text): ${details.specifications}` : ''].filter(Boolean).join('\n'),
               model: asset.imageModel, requestId: asset.imageRequestId, signal,
-              onSubmitted: async id => { asset.imageRequestId = id; await save(); }
+              onSubmitted: async id => { asset.imageRequestId = id; await save(); await recordCost('imageGeneration',asset.imageModel,id,.08); }
             }));
             asset.generatedImageUrl = generated.imageUrl;
             asset.imageRequestId = generated.requestId;
@@ -338,7 +342,7 @@ function createAiCommercialsRouter({
             const spoken = scene.narration ? `Use a calm, warm, consistent narrator voice. Speak only this scene's script: ${JSON.stringify(scene.narration)}. No extra dialogue.` : 'No spoken dialogue. Use subtle ambient sound only.';
             const video = await resumeProvider('video', () => generateVideo({ imageUrl: asset.imageUrl, prompt: [spoken, scene.motionPrompt].join('\n'),
               durationSeconds: asset.durationSeconds, tier: details.tier || 'standard', model: asset.videoModel,
-              requestId: asset.videoRequestId, signal, onSubmitted: async id => { asset.videoRequestId = id; await save(); } }));
+              requestId: asset.videoRequestId, signal, onSubmitted: async id => { asset.videoRequestId = id; await save(); await recordCost('videoGeneration',asset.videoModel,id,asset.durationSeconds * (details.tier === 'premium' ? .4 : .15)); } }));
             asset.generatedVideoUrl = video.videoUrl; asset.videoRequestId = video.requestId; asset.videoSubmitting = false;
             await save();
           } catch (error) {
@@ -411,7 +415,7 @@ function createAiCommercialsRouter({
       logger.error('[AI Commercials] Resume failed', {
         generationId: claimed?.id, stage: claimed?.stage,
         code: error.code || 'GENERATION_FAILED',
-        reason: safeFailureReason(error),
+        reason: 'Provider stage failed',
         providerStatus: Number(error.http_code || error.statusCode) || undefined
       });
       return res.status(error.statusCode || 502).json({ success: false,
@@ -442,9 +446,11 @@ function createAiCommercialsRouter({
       const specifications = cleanText(req.body?.specifications, 500);
       const style = cleanText(req.body?.style, 30) || 'auto';
       const tier = cleanText(req.body?.tier || 'standard', 20);
-      const requiredCredits = TIER_COST[tier];
+      const price = TIER_COST[tier] ? pricing(tier) : null;
+      const requiredCredits = price?.credits;
       if (!VALID_STYLES.has(style)) return res.status(400).json({ success: false, message: 'Choose a valid creative style.' });
       if (!requiredCredits) return res.status(400).json({ success: false, message: 'Select a valid generation tier.' });
+      if (!price.available) return res.status(503).json({success:false,message:price.reason || 'Commercial pricing is being reviewed.'});
       const brandingRequest = logoFile
         ? readBranding({ brandingMode: 'logo' }, logoFile)
         : { mode: 'none' };
@@ -460,7 +466,7 @@ function createAiCommercialsRouter({
         allowFreePreview: false,
         provider: 'ai-commercials',
         executionId: randomUUID(),
-        leaseMs: MAX_GENERATION_MS + 60 * 1000
+        leaseMs: durable ? 86400000 : MAX_GENERATION_MS + 60 * 1000
       });
       generation = reservation.generation;
       if (reservation.reused && generation.status === 'completed') {
@@ -485,6 +491,10 @@ function createAiCommercialsRouter({
         commercialDetails: { productName, brandName, contact, specifications, tier, requiredCredits },
         branding: uploadedLogo, brandingStatus: uploadedLogo.mode === 'none' ? 'none' : 'pending'
       });
+      if (durable) {
+        await checkpoint(db,generation,{durableJob:true,workerUntil:new Date(0)});
+        return res.status(202).json(publicGeneration(generation, await db.User.findOne({id:req.user.id})));
+      }
       stage = 'creative_plan';
       const completed = await continueCommercial(db, generation, controller.signal);
       generation = completed;
@@ -511,7 +521,7 @@ function createAiCommercialsRouter({
         generationId: generation?.id,
         stage,
         code: error.code || 'GENERATION_FAILED',
-        reason: safeFailureReason(error),
+        reason: 'Provider stage failed',
         ...(Number.isInteger(error.providerStatus || error.http_code) ? { providerStatus: error.providerStatus || error.http_code } : {})
       });
       stage = generation?.stage === 'preparing_image' ? 'creative_plan' : generation?.stage || stage;
@@ -537,6 +547,30 @@ function createAiCommercialsRouter({
     }
   });
 
+  router.startWorker = (db, connected) => {
+    if (!durable) return () => {};
+    let busy = false;
+    const timer = setInterval(async () => {
+      if (busy || !connected()) return;
+      busy = true;
+      try {
+        const rows = await db.QuickAdGeneration.find({provider:'ai-commercials',status:'pending',durableJob:true}).sort({createdAt:1}).limit(100);
+        for (const row of rows) {
+          if (new Date(row.expiresAt).getTime() <= Date.now()) { await failGeneration(db,{userId:row.userId,id:row.id,code:'LEASE_EXPIRED'}); continue; }
+          const job = await require('../services/studioWorker').claim(db,row.id,Date.now(),'ai-commercials');
+          if (!job) continue;
+          try { await continueCommercial(db,job,AbortSignal.timeout(MAX_GENERATION_MS)); }
+          catch {
+            if (job.workerAttempts >= 3) await failGeneration(db,{userId:job.userId,id:job.id,executionId:job.executionId,code:'COMMERCIAL_STAGE_FAILED'});
+            else await db.QuickAdGeneration.updateOne({id:job.id,executionId:job.executionId,status:'pending'},{$set:{workerUntil:new Date(Date.now()+30000)}});
+          }
+          break;
+        }
+      } catch { logger.error('[AI Commercials] Worker unavailable'); }
+      finally { busy=false; }
+    },5000);
+    timer.unref(); return ()=>clearInterval(timer);
+  };
   return router;
 }
 

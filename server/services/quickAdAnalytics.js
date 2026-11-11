@@ -91,8 +91,8 @@ function calculateQuickAdAnalytics({ users, purchases, generations }, env = proc
   const paidAccounts = [...buyers.keys()].filter(id => accountIds.has(id)).length;
   const rate = (n, d) => d ? round(n / d * 100) : null;
   const generationRows = [...new Map(generations.map(g => [g.id, g])).values()];
-  const productStats = ['Quick Ad', 'Fashion Studio', 'AI Commercial'].map(product => {
-    const rows = generationRows.filter(g => (isCommercial(g) ? 'AI Commercial' : g.style === 'fashion_studio' ? 'Fashion Studio' : 'Quick Ad') === product);
+  const productStats = ['Quick Ad', 'Fashion Studio', 'Auto Studio', 'Product Studio', 'AI Commercial'].map(product => {
+    const rows = generationRows.filter(g => (g.studioType === 'auto' ? 'Auto Studio' : g.studioType === 'product' ? 'Product Studio' : g.studioType === 'fashion' ? 'Fashion Studio' : isCommercial(g) ? 'AI Commercial' : g.style === 'fashion_studio' ? 'Fashion Studio' : 'Quick Ad') === product);
     const successful = rows.filter(g => g.status === 'completed');
     const failed = rows.filter(g => g.status === 'failed').length;
     return { product, completed: successful.length, failed, pending: rows.filter(g => g.status === 'pending').length,
@@ -117,7 +117,16 @@ function calculateQuickAdAnalytics({ users, purchases, generations }, env = proc
     brandingFailures: completed.filter(g => g.brandingStatus === 'failed').length,
     availableCredits: accounts.reduce((sum, u) => sum + whole(u.quickAdCredits), 0)
   };
-  return { success: true, growth, productStats, topCustomers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10), asOf: new Date(now).toISOString(), analytics: { totalRevenue, totalCreditsSold, totalCreditsUsed,
+  const estimates = generationRows.filter(g => Number.isFinite(g.estimatedTotalCost));
+  const reported = generationRows.filter(g => Number.isFinite(g.providerReportedTotalCost));
+  const providerExpenses = {
+    currency: 'USD', estimatedTotal: round(estimates.reduce((sum,g)=>sum+g.estimatedTotalCost,0)),
+    estimatedFailed: round(estimates.filter(g=>g.status==='failed').reduce((sum,g)=>sum+g.estimatedTotalCost,0)),
+    reportedTotal: reported.length ? round(reported.reduce((sum,g)=>sum+g.providerReportedTotalCost,0)) : null,
+    estimatedRecords: estimates.length, totalRecords: generationRows.length,
+    byCategory: Object.fromEntries(['imageGeneration','videoGeneration','voiceGeneration','other'].map(key=>[key,round(estimates.reduce((sum,g)=>sum+(Number(g.providerCosts?.[key])||0),0))]))
+  };
+  return { success: true, providerExpenses, growth, productStats, topCustomers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10), asOf: new Date(now).toISOString(), analytics: { totalRevenue, totalCreditsSold, totalCreditsUsed,
     creditsRemaining: totalCreditsSold - totalCreditsUsed, totalQuickAdsGenerated: completed.length,
     estimatedGenerationCost, estimatedGrossProfit, estimatedGrossMargin }, estimatesAvailable: unitCost !== null,
     transactions, usage, transactionLimit: 50 };
@@ -128,7 +137,7 @@ async function getQuickAdAnalytics(DB, env = process.env) {
   const records = await DB.withTransaction(async tx => ({
     users: await tx.User.find({}, { id: 1, name: 1, email: 1, role: 1, quickAdCredits: 1, createdAt: 1 }),
     purchases: await tx.PaystackTransaction.find({ purpose: PURPOSE }, { id: 1, userId: 1, buyerRole: 1, email: 1, reference: 1, purpose: 1, planId: 1, amount: 1, credits: 1, creditsApplied: 1, status: 1, verifiedAt: 1, createdAt: 1 }),
-    generations: await tx.QuickAdGeneration.find({}, { id: 1, userId: 1, status: 1, style: 1, provider: 1, creditUsed: 1, creditsUsed: 1, creditCost: 1, freePreview: 1, completedAt: 1, expiresAt: 1, brandingStatus: 1 })
+    generations: await tx.QuickAdGeneration.find({}, { id: 1, userId: 1, status: 1, style: 1, provider: 1, creditUsed: 1, creditsUsed: 1, creditCost: 1, freePreview: 1, completedAt: 1, expiresAt: 1, brandingStatus: 1, studioType: 1, estimatedTotalCost: 1, providerReportedTotalCost: 1, providerCosts: 1 })
   }));
   return calculateQuickAdAnalytics(records, env);
 }

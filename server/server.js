@@ -692,6 +692,9 @@ const optionalAuthentication = (req, res, next) => req.headers.authorization
   ? authenticateToken(req, res, next) : next();
 const quickAdsRoute = require('./routes/quickAds');
 const aiCommercialsRoute = require('./routes/aiCommercials');
+app.use('/api/studios', require('./routes/studios').createStudiosRouter());
+require('./services/studioWorker').startStudioWorker(DB, isMongoConnected);
+aiCommercialsRoute.startWorker(DB,isMongoConnected);
 app.use('/api/quick-ads', quickAdsRoute);
 app.use('/api/ai-commercials', aiCommercialsRoute);
 const { createQuickAdPaymentsRouter } = require('./routes/quickAdPayments');

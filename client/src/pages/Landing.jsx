@@ -10,6 +10,7 @@ import LandingHeroVisual from '../components/LandingHeroVisual';
 import LandingSampleVideo from '../components/LandingSampleVideo';
 import LandingVideoCarousel from '../components/LandingVideoCarousel';
 import './Landing.css';
+import { StudioCards } from './Studios';
 
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
@@ -19,7 +20,7 @@ export default function LandingPage() {
 
   const faqs = [
     { q: 'What can I create with SpreadFast?', a: 'Create short product videos with Quick Ad, rotating outfit videos with Fashion Studio, and multi-scene ads with AI Commercial. Upload your product photos and choose the format that fits your business.' },
-    { q: 'How does Fashion Studio work?', a: 'Choose Fashion Studio inside Quick Ad and upload clear front and back photos of your outfit. SpreadFast creates an invisible-mannequin video. Add optional specifications to describe details that should stay consistent.' },
+    { q: 'How does Fashion Studio work?', a: 'Open Fashion Studio from Create and upload clear front and back photos of your outfit. SpreadFast creates an invisible-mannequin video. Add optional specifications to describe details that should stay consistent.' },
     { q: 'How much does it cost?', a: 'Buy 1 credit for ₦1,700, 4 for ₦5,000, 8 for ₦10,000, or 16 for ₦20,000. Quick Ad uses 1 credit. AI Commercial shows the credits required for your selected tier before generation.' },
     { q: 'Do I need editing experience?', a: 'No. Upload clear product photos, choose a style, and add your product details. SpreadFast handles the video generation. Review the result before publishing, because AI can change product details.' },
     { q: 'Can I add my brand?', a: 'Yes. Use the branding options in the workspace to add your brand name or logo. Check the preview to make sure the final ad represents your business accurately.' },
@@ -75,13 +76,13 @@ export default function LandingPage() {
           <Container className="landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-eyebrow"><span aria-hidden="true" />AI-powered advertising</p>
-              <h1 id="landing-title">AI Advertising.<br className="landing-title-break" /> Made <span className="landing-title-accent">Simple.</span></h1>
+              <h1 id="landing-title">Ai advertisement,<br className="landing-title-break" /> made <span className="landing-title-accent">simple.</span></h1>
               <p className="landing-hero-description">
-                Turn product photos into stunning video adverts — with no editing skills. Made for businesses ready to stand out.
+                Create stunning video advertisements for fashion, cars, shoes, bags, and more. No expensive cameras, editing skills, or production teams required. Studio availability is shown below.
               </p>
               <div className="landing-hero-actions">
-                <Link to="/quick-ad" className="sf-control sf-button sf-button--primary"><UiIcon name="video" /> Create a Quick Ad</Link>
-                <Link to="/ai-commercials" className="sf-control sf-button sf-button--secondary">Create an AI Commercial <UiIcon name="arrow" /></Link>
+                <Link to="/create" className="sf-control sf-button sf-button--primary"><UiIcon name="video" /> Create Your First Ad</Link>
+                <a href="#studios" className="sf-control sf-button sf-button--secondary">Explore Studios <UiIcon name="arrow" /></a>
               </div>
               <div className="landing-trust" aria-label="Why SpreadFast">
                 <span><strong>Your product</strong><small>Made for the spotlight</small></span>
@@ -92,6 +93,8 @@ export default function LandingPage() {
             <LandingHeroVisual />
           </Container>
         </section>
+
+        <section id="studios"><Container><h2>What are you advertising?</h2><StudioCards marketing /></Container></section>
 
         <section id="products" className="landing-quick-ads" aria-labelledby="landing-quick-ads-title">
           <Container>
@@ -150,14 +153,14 @@ export default function LandingPage() {
               </li>
               <li>
                 <span className="landing-step-icon" aria-hidden="true"><ShareIcon color="currentColor" size={28} /></span>
-                <h3>2. Create</h3>
-                <p>Choose Quick Ad, Fashion Studio, or AI Commercial. Review the credit cost and generate.</p>
+                <h3>2. Customize</h3>
+                <p>Select your studio, presentation style, and optional branding.</p>
                 <span className="landing-step-arrow" aria-hidden="true">⟶</span>
               </li>
               <li>
                 <span className="landing-step-icon" aria-hidden="true"><PeopleIcon color="currentColor" size={28} /></span>
-                <h3>3. Share</h3>
-                <p>Preview your ad, download the finished video, and share it with your customers.</p>
+                <h3>3. Generate</h3>
+                <p>Create and download your video advertisement. Review it before sharing.</p>
               </li>
             </ol>
           </Container>

@@ -86,6 +86,7 @@ test('sends authenticated multipart once and renders an inline playable result',
 });
 
 test('fashion enables generation with both outfit photos and sends the pair without an ordinary product', async () => {
+  await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{token:'session-token',user:{id:'company-1',role:'company'}}}><QuickAd key="fashion" dedicatedFashion /></AuthContext.Provider></MemoryRouter>));
   act(() => Simulate.change(container.querySelector('input[value="fashion_studio"]')));
   const front = new File(['front'], 'front.png', { type: 'image/png' });
   const back = new File(['back'], 'back.png', { type: 'image/png' });

@@ -92,8 +92,9 @@ export default function AICommercials({ initialTab = 'create' }) {
     return () => window.clearInterval(interval);
   }, [isSubmitting, activeJob?.stage]);
 
-  const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
+  const requiredCredits = useMemo(() => balance.tierCredits?.[tier] || TIER_COST[tier], [tier, balance.tierCredits]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
+  const tierAvailable = balance.tierAvailability?.[tier] !== false;
 
   async function loadCredits() {
     if (!token) return;
@@ -350,8 +351,8 @@ export default function AICommercials({ initialTab = 'create' }) {
       }
 
       submissionKeyRef.current = null;
-      setStatus('Commercial ready');
-      setNotice('Your AI commercial is ready to review.');
+      setStatus(data.status === 'pending' ? 'Commercial queued' : 'Commercial ready');
+      setNotice(data.status === 'pending' ? 'Your commercial is saved and processing. You can return through My Ads.' : 'Your AI commercial is ready to review.');
       setTab('history');
       await loadCredits();
       await loadHistory();
@@ -486,8 +487,8 @@ export default function AICommercials({ initialTab = 'create' }) {
             <section className="sf-commercials__panel">
               <div className="sf-commercials__step"><span>2</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
               <div className="sf-commercials__tiers">
-                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>4 credits</b></button>
-                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>7 credits</b></button>
+                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{balance.tierCredits?.standard || TIER_COST.standard} credits</b></button>
+                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{balance.tierCredits?.premium || TIER_COST.premium} credits</b></button>
               </div>
             </section>
 
@@ -497,12 +498,13 @@ export default function AICommercials({ initialTab = 'create' }) {
               <small>{user?.role ? `Available credits: ${balance.quickAdCredits || 0}` : 'Log in to view your credit balance'}</small>
             </div>
 
-            <Button fullWidth size="lg" disabled={isSubmitting || !canAfford} onClick={handleSubmit}>
+            <Button fullWidth size="lg" disabled={isSubmitting || !canAfford || !tierAvailable} onClick={handleSubmit}>
               <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${requiredCredits} credits`}
             </Button>
             {isSubmitting && activeJob?.status === 'pending' && <button type="button" className="sf-commercials__secondary" disabled={!!cancellingId || activeJob.cancellationRequested} onClick={() => cancelJob(activeJob)}>{activeJob.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
+            {!tierAvailable && <p role="status">This tier is awaiting pricing or provider configuration.</p>}
             {!canAfford && <p className="sf-commercials__footnote">You have {balance.quickAdCredits || 0} credits available. Buy more to generate this ad.</p>}
-            <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>
+            <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed. Your selected tier’s current cost is shown above.</p>
           </div>
 
           <aside className="sf-commercials__preview">
@@ -523,7 +525,7 @@ export default function AICommercials({ initialTab = 'create' }) {
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
               <div><span>BRAND</span><strong>{brandName || 'Your brand'}</strong></div>
-              <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · 4 credits` : `Premium · 7 credits`}</strong></div>
+              <div><span>QUALITY</span><strong>{`${tier === 'standard' ? 'Standard' : 'Premium'} · ${requiredCredits} credits`}</strong></div>
             </div>
             {logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
             {photoFiles.length > 0 && <small className="sf-commercials__file-meta">{photoFiles.length} product photo{photoFiles.length > 1 ? 's' : ''} · {toFileSizeLabel(photoFiles.reduce((sum, file) => sum + file.size, 0))}</small>}

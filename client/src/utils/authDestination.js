@@ -2,7 +2,7 @@
 export function getAuthDestination(user) {
   const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
   if (user?.email === adminEmail) return '/admin-portal';
-  if (user?.role === 'company') return '/ai-commercials';
-  if (user?.role === 'promoter') return '/ai-commercials';
+  if (user?.role === 'company') return '/create';
+  if (user?.role === 'promoter') return '/create';
   return '/';
 }

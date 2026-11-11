@@ -15,11 +15,8 @@ export default function DashboardShell({ children }) {
   const openProfile = () => profile.current?.showModal();
   const handleLogout = () => { logout(); navigate('/'); };
   const item = (id, label, to, icon, active) => ({ id, label, to, icon: <UiIcon name={icon} />, active });
-  const quickAdsPath = isBusiness ? '/company/quick-ads' : '/promoter/quick-ads';
   const navigation = [
-    item('create-ads', 'Create Ads', '/ai-commercials', 'video', ['/ai-commercials'].includes(location.pathname)),
-    item('quick-ads', 'Quick Ads', quickAdsPath, 'star',
-      ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads'].includes(location.pathname.replace(/\/+$/, ''))),
+    item('create-ads', 'Create', '/create', 'video', location.pathname === '/create' || location.pathname.startsWith('/studios/') || location.pathname.includes('quick-ad') || location.pathname === '/ai-commercials'),
     item('my-ads', 'My Ads', '/my-ads', 'image', location.pathname === '/my-ads'),
     item('credits', 'Credits', '/quickads/credits', 'wallet', location.pathname === '/quickads/credits'),
   ];
