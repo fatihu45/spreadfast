@@ -27,7 +27,7 @@ test('creator navigation shows AI tools while preserving a legacy URL', () => {
   render('promoter', '/submit-proof?campaignId=42');
   expect(host.querySelector('output').textContent).toBe('/submit-proof?campaignId=42');
   for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) {
-    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/ai-commercials', '/promoter/quick-ads', '/my-ads', '/quickads/credits']);
+    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/create', '/my-ads', '/quickads/credits']);
     expect(nav.querySelector('[aria-current="page"]')).toBeNull();
     expect(nav.querySelector('button').textContent).toBe('Profile');
   }
@@ -37,7 +37,7 @@ test('business navigation opens My Ads with one active item', () => {
   render('company', '/company');
   expect(host.querySelector('a[href="/wallet"]')).toBeNull();
   const nav = host.querySelector('.sf-sidebar nav');
-  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Create Ads', 'Quick Ads', 'My Ads', 'Credits']);
+  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Create', 'My Ads', 'Credits']);
   act(() => [...nav.querySelectorAll('a')].find(a => a.textContent === 'My Ads').click());
   expect(host.querySelector('output').textContent).toBe('/my-ads');
   expect(nav.querySelectorAll('[aria-current="page"]').length).toBe(1);

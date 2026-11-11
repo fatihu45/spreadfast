@@ -16,7 +16,7 @@ jest.mock('./pages/PromotionDashboard', () => () => <div>Creator overview</div>)
 let root;
 let container;
 const navs = () => [...container.querySelectorAll('nav[aria-label="Main navigation"], nav[aria-label="Mobile navigation"]')];
-const quickLink = nav => [...nav.querySelectorAll('a')].find(link => link.textContent === 'Quick Ads');
+const quickLink = nav => [...nav.querySelectorAll('a')].find(link => link.textContent === 'Create');
 function render(path, role = 'company', loading = false) {
   window.history.replaceState({}, '', path);
   act(() => root.render(<AuthContext.Provider value={{
@@ -40,8 +40,8 @@ afterEach(() => {
 });
 
 test.each([
-  ['company', '/company', '/company/quick-ads', 'My Ads'],
-  ['promoter', '/promoter-dashboard', '/promoter/quick-ads', 'My Ads'],
+  ['company', '/company', '/create', 'My Ads'],
+  ['promoter', '/promoter-dashboard', '/create', 'My Ads'],
 ])('%s navigation links reuse desktop and mobile styles and become active on click', (role, home, destination, next) => {
   render(home, role);
   expect(navs()).toHaveLength(2);
@@ -50,12 +50,12 @@ test.each([
     expect(link.getAttribute('href')).toBe(destination);
     expect(link.classList.contains('sf-navigation-link')).toBe(true);
     expect(link.querySelector('.sf-icon')).not.toBeNull();
-    expect(link.closest('li').previousElementSibling.textContent).toBe('Create Ads');
+    expect(link.closest('li').previousElementSibling).toBeNull();
     expect(link.closest('li').nextElementSibling.textContent).toBe(next);
   }
   act(() => quickLink(navs()[1]).click());
   expect(window.location.pathname).toBe(destination);
-  expect(container.querySelector('#quick-ad-title').textContent).toBe('Quick Ads');
+  expect(container.querySelector('h1').textContent).toBe('What are you advertising today?');
   for (const nav of navs()) {
     expect(quickLink(nav).getAttribute('aria-current')).toBe('page');
     expect(quickLink(nav).classList.contains('sf-navigation-link--active')).toBe(true);
@@ -107,7 +107,7 @@ test.each(['company', 'promoter'])('%s credits direct route retains dashboard na
 
 test.each([['company', '/dashboard'], ['promoter', '/dashboard'], ['promoter', '/wallet']])('legacy %s %s opens the AI studio', (role, path) => {
   render(path, role);
-  const destination = '/ai-commercials';
+  const destination = '/create';
   expect(window.location.pathname).toBe(destination);
   expect(container.textContent).not.toContain('Loading campaigns...');
 });

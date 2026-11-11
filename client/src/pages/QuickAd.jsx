@@ -19,7 +19,7 @@ const styles = [
 ];
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
-export default function QuickAd() {
+export default function QuickAd({ dedicatedFashion = false }) {
   const location = useLocation();
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
@@ -33,7 +33,7 @@ export default function QuickAd() {
   const [product, setProduct] = useState(null);
   const [frontPhoto, setFrontPhoto] = useState(null);
   const [backPhoto, setBackPhoto] = useState(null);
-  const [styleId, setStyleId] = useState('food');
+  const [styleId, setStyleId] = useState(dedicatedFashion ? 'fashion_studio' : 'food');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState('');
@@ -70,7 +70,7 @@ export default function QuickAd() {
     { key: 'finalizing', label: 'Finishing your Quick Ad' },
     { key: 'completed', label: 'Your Quick Ad is ready' },
   ];
-  const normalizedStage = generationStage === 'queued' ? 'preparing_image' : generationStage;
+  const normalizedStage = ({queued:'preparing_image',preparing_images:'preparing_image',generating_images:'creating_scene',generating_video:'creating_video',assembling_video:'finalizing',applying_branding:'finalizing'})[generationStage] || generationStage;
   const currentStageIndex = Math.max(0, stageSteps.findIndex(step => step.key === normalizedStage));
   const stageLabel = stageSteps.find(step => step.key === normalizedStage)?.label || stageSteps[0].label;
   const previewImage = stageImage || (isFashionStyle ? frontPhoto?.url : product?.url) || null;
@@ -360,7 +360,8 @@ export default function QuickAd() {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      showResult(data);
+      if (data.status === 'pending') { setGenerationStage(data.stage || 'queued'); setNotice('Your ad is saved and processing. You can return through My Ads.'); }
+      else showResult(data);
     } catch (failure) {
       if (!controller.signal.aborted) {
         const status = failure.response?.status;
@@ -428,7 +429,7 @@ export default function QuickAd() {
   return <section className="quick-ad" aria-labelledby="quick-ad-title">
     <header className="quick-ad-heading">
       <div className="quick-ad-heading-line">
-        <h1 id="quick-ad-title">Quick Ads</h1>
+        <h1 id="quick-ad-title">{dedicatedFashion ? 'Invisible Mannequin' : 'Quick Ads'}</h1>
         <span className="quick-ad-studio-badge">AI studio</span>
       </div>
       <p>Turn your product photos into an ad.</p>
@@ -497,7 +498,7 @@ export default function QuickAd() {
           <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose your style</h2><p>Find the feeling that fits your product.</p></div></div>
           <fieldset className="quick-ad-templates" disabled={generating || brandingSaving}>
             <legend className="sr-only">Ad style</legend>
-            {styles.map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
+            {styles.filter(style => dedicatedFashion ? style.id === 'fashion_studio' : style.id !== 'fashion_studio').map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
               <input type="radio" name="quick-ad-style" value={style.id} checked={styleId === style.id} onChange={() => { setStyleId(style.id); reset(); }} />
               <span className={'quick-ad-art' + (style.id === 'fashion_studio' ? ' is-fashion' : '')} aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /></span>
               <span className="quick-ad-template-copy"><strong>{style.name}</strong><span>{style.description}</span></span>
