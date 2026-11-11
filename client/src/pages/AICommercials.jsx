@@ -83,14 +83,14 @@ export default function AICommercials({ initialTab = 'create' }) {
   const historyRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!isSubmitting) return undefined;
+    if (!isSubmitting && !retryingId) return undefined;
     const stage = activeJob?.stage || 'queued';
     const target = COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
     const interval = window.setInterval(() => {
       setDisplayProgress(current => Math.min(target, current + (target - current > 15 ? 2 : 1)));
     }, 220);
     return () => window.clearInterval(interval);
-  }, [isSubmitting, activeJob?.stage]);
+  }, [isSubmitting, retryingId, activeJob?.stage]);
 
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
@@ -131,8 +131,13 @@ export default function AICommercials({ initialTab = 'create' }) {
   }
 
   async function retryFinalization(job) {
+    if (retryingId || isSubmitting) return;
     setRetryingId(job.generationId);
+    setActiveJob({ ...job, stage: job.finalizationRetryAvailable ? 'finalizing' : 'queued' });
+    setDisplayProgress(0);
+    setStatus(job.finalizationRetryAvailable ? 'Assembling final video' : 'Resuming saved commercial');
     setError('');
+    setNotice('');
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId)}/retry`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
@@ -142,8 +147,35 @@ export default function AICommercials({ initialTab = 'create' }) {
       setNotice('Your commercial is ready. Saved scenes were reused.');
       await loadCredits();
     } catch (retryError) { setError(retryError.message); }
-    finally { setRetryingId(null); await loadHistory(); }
+    finally { setRetryingId(null); setActiveJob(null); await loadHistory(); }
   }
+
+  // A retry uses the same long-running backend request as first generation.
+  // Read the saved job while that request is in flight to animate real stage changes.
+  useEffect(() => {
+    if (!retryingId || !token) return undefined;
+    let stopped = false;
+    let checking = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
+          headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
+        });
+        const data = await response.json();
+        const job = data.jobs?.find(item => item.generationId === retryingId);
+        if (!stopped && response.ok && data.success && job) {
+          setActiveJob(job);
+          setStatus(stageLabel(job.stage));
+        }
+      } catch { /* Keep displaying estimated progress if the connection drops. */ }
+      finally { checking = false; }
+    };
+    check();
+    const timer = window.setInterval(check, 2000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [retryingId, token]);
 
   async function downloadJob(job) {
     try {
@@ -399,6 +431,7 @@ export default function AICommercials({ initialTab = 'create' }) {
               const rawStatus = String(job.status || job.stage || 'processing').toLowerCase();
               const isCompleted = rawStatus === 'completed' || rawStatus === 'complete';
               const isFailed = rawStatus === 'failed' || rawStatus === 'error';
+              const isRetrying = retryingId === job.generationId;
               const videoUrl = job.videoUrl || (job.previewPath ? `${API_URL}${job.previewPath}` : '');
               const createdAt = job.completedAt || job.createdAt || job.updatedAt;
               const dateLabel = createdAt && !Number.isNaN(new Date(createdAt).getTime())
@@ -412,8 +445,17 @@ export default function AICommercials({ initialTab = 'create' }) {
                     </div>
                   ) : (
                     <div className={`sf-commercials__history-media sf-commercials__history-media--placeholder ${isFailed ? 'is-failed' : ''}`} aria-label={isFailed ? 'Generation failed' : 'Video is processing'}>
-                      <UiIcon name={isFailed ? 'alert-circle' : 'video'} />
-                      <span>{job.cancelled ? 'Cancelled' : isFailed ? 'Generation paused' : 'Your video is processing'}</span>
+                      {isRetrying ? (
+                        <div className="sf-commercials__progress-overlay" role="status" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status}`}>
+                          <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
+                          <strong className="sf-commercials__progress-percent">{displayProgress}<small>%</small></strong>
+                          <span className="sf-commercials__progress-heading">Resuming your commercial</span>
+                          <span className="sf-commercials__progress-stage">{status || 'Preparing your commercial'}</span>
+                          <div className="sf-commercials__progress-track" aria-hidden="true"><div style={{ width: `${displayProgress}%` }} /></div>
+                          <small className="sf-commercials__progress-disclaimer">Estimated progress · saved scenes are reused</small>
+                        </div>
+                      ) : <><UiIcon name={isFailed ? 'alert-circle' : 'video'} />
+                        <span>{job.cancelled ? 'Cancelled' : isFailed ? 'Generation paused' : 'Your video is processing'}</span></>}
                     </div>
                   )}
                   <div className="sf-commercials__history-copy">
@@ -430,8 +472,8 @@ export default function AICommercials({ initialTab = 'create' }) {
                       <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
-                    {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" disabled={!!retryingId} onClick={() => retryFinalization(job)}>
-                      {retryingId === job.generationId ? 'Resuming...' : job.finalizationRetryAvailable ? 'Retry finishing' : 'Resume commercial'}
+                    {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" className="sf-commercials__retry-button" disabled={!!retryingId || isSubmitting} onClick={() => retryFinalization(job)}>
+                      <UiIcon name="refresh-cw" /> {isRetrying ? `Resuming · ${displayProgress}%` : job.finalizationRetryAvailable ? 'Retry finishing video' : 'Retry commercial'}
                     </button>}
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <small>Reuses saved scenes. {job.requiredCredits || 4} credits are charged only when the video is finished.</small>}
                     {job.commercialRecoveryRequired && <small>Please contact support to recover this commercial safely. No credits were charged.</small>}
