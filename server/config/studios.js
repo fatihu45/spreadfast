@@ -34,8 +34,13 @@ function quote(mode, env = process.env) {
   const enabled = (env.STUDIO_ENABLED_MODES || '').split(',').includes(mode);
   const assetsReady = !config.approval || presets(env).length > 0;
   const voiceReady = mode !== 'auto_voiceover' || !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && env.ELEVENLABS_COMMERCIAL_LICENSE === 'true');
-  return { mode, ...config, credits, available: enabled && profitable && assetsReady && voiceReady,
-    reason: !enabled ? 'Coming soon' : !profitable ? 'Pricing review in progress' : !assetsReady ? 'Model collection is being prepared' : !voiceReady ? 'Voiceover is being prepared' : '', estimatedCostUsd: config.estimate };
+  const configured = env.STUDIO_WORKER_ENABLED === 'true' && !!(env.FAL_KEY && env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
+  const plannerReady = (!mode.startsWith('commercial_') && mode !== 'auto_voiceover') || !!env.OPENROUTER_API_KEY;
+  const knownModels = !mode.startsWith('commercial_') || (!env.COMMERCIAL_IMAGE_MODEL || env.COMMERCIAL_IMAGE_MODEL === MODELS.image) &&
+    (!env.COMMERCIAL_STANDARD_VIDEO_MODEL || env.COMMERCIAL_STANDARD_VIDEO_MODEL === 'fal-ai/veo3.1/fast/image-to-video') &&
+    (!env.COMMERCIAL_PREMIUM_VIDEO_MODEL || env.COMMERCIAL_PREMIUM_VIDEO_MODEL === 'fal-ai/veo3.1/image-to-video');
+  return { mode, ...config, credits, available: enabled && profitable && assetsReady && voiceReady && configured && plannerReady && knownModels,
+    reason: !enabled ? 'Coming soon' : !profitable ? 'Pricing review in progress' : !assetsReady ? 'Model collection is being prepared' : !voiceReady ? 'Voiceover is being prepared' : !configured || !plannerReady ? 'Provider setup in progress' : !knownModels ? 'Provider pricing review required' : '', estimatedCostUsd: config.estimate };
 }
 function requireMode(mode, env = process.env) {
   const result = quote(mode, env);
