@@ -1,6 +1,6 @@
 # SpreadFast — AI-Powered Advertising Platform
 
-SpreadFast helps businesses create AI-powered video ads and promote their brands through creator campaigns.
+SpreadFast helps businesses create AI-powered video ads from just a product image
 
 ## Project Structure
 
