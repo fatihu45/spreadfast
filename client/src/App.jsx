@@ -47,7 +47,7 @@ function AdminRoute({ children }) {
   
   // Check if user is admin (compare with env variable)
   const adminEmail = process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com';
-  if (user.email !== adminEmail) {
+  if (!user.isAdmin && user.role !== 'admin' && user.email !== adminEmail) {
     // Redirect based on user role
     if (user.role === 'promoter') {
       return <Navigate to="/promoter-dashboard" />;

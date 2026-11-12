@@ -114,6 +114,8 @@ function calculateQuickAdAnalytics({ users, purchases, generations }, env = proc
     failedGenerations: generationRows.filter(g => g.status === 'failed').length,
     pendingGenerations: generationRows.filter(g => g.status === 'pending').length,
     expiredGenerations: generationRows.filter(g => g.status === 'pending' && timestamp(g.expiresAt) > 0 && timestamp(g.expiresAt) < now).length,
+    recoverableAds: generationRows.filter(g => g.status === 'failed' && !g.deletedAt && (g.media?.publicId || g.videoRequestId || (g.sceneAssets || []).some(s => s.videoPublicId))).length,
+    oldPendingPayments: payments.filter(p => p.status === 'pending' && timestamp(p.createdAt) > 0 && timestamp(p.createdAt) < now - 1800000).length,
     brandingFailures: completed.filter(g => g.brandingStatus === 'failed').length,
     availableCredits: accounts.reduce((sum, u) => sum + whole(u.quickAdCredits), 0)
   };
@@ -128,7 +130,7 @@ async function getQuickAdAnalytics(DB, env = process.env) {
   const records = await DB.withTransaction(async tx => ({
     users: await tx.User.find({}, { id: 1, name: 1, email: 1, role: 1, quickAdCredits: 1, createdAt: 1 }),
     purchases: await tx.PaystackTransaction.find({ purpose: PURPOSE }, { id: 1, userId: 1, buyerRole: 1, email: 1, reference: 1, purpose: 1, planId: 1, amount: 1, credits: 1, creditsApplied: 1, status: 1, verifiedAt: 1, createdAt: 1 }),
-    generations: await tx.QuickAdGeneration.find({}, { id: 1, userId: 1, status: 1, style: 1, provider: 1, creditUsed: 1, creditsUsed: 1, creditCost: 1, freePreview: 1, completedAt: 1, expiresAt: 1, brandingStatus: 1 })
+    generations: await tx.QuickAdGeneration.find({}, { id: 1, userId: 1, status: 1, style: 1, provider: 1, creditUsed: 1, creditsUsed: 1, creditCost: 1, freePreview: 1, completedAt: 1, expiresAt: 1, brandingStatus: 1, 'media.publicId': 1, videoRequestId: 1, 'sceneAssets.videoPublicId': 1, deletedAt: 1 })
   }));
   return calculateQuickAdAnalytics(records, env);
 }

@@ -110,7 +110,8 @@ function canDownloadGeneration(generation, user) {
   return generation.creditUsed === true && generation.downloadable === true;
 }
 function publicGeneration(generation, user) {
-  const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+  const recoveryAvailable = require('./quickAdRecovery').recoverable(generation);
+  const result = { success: true, recoveryAvailable, provider: generation.provider || 'fal', creditsUsed: generation.creditsUsed || (generation.creditUsed ? generation.creditCost || 1 : 0), generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     createdAt: generation.createdAt, completedAt: generation.completedAt,
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
@@ -125,6 +126,8 @@ function publicGeneration(generation, user) {
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
   if (generation.provider === 'ai-commercials' && generation.commercialDetails) {
+    result.completedScenes = (generation.sceneAssets || []).filter(scene => scene.videoPublicId).length;
+    result.totalScenes = 3;
     result.productName = generation.commercialDetails.productName;
     result.brandName = generation.commercialDetails.brandName;
     result.contact = generation.commercialDetails.contact;

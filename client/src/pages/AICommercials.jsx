@@ -74,6 +74,9 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [displayProgress, setDisplayProgress] = useState(0);
   const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
   const [jobs, setJobs] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [retryingId, setRetryingId] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
@@ -85,12 +88,15 @@ export default function AICommercials({ initialTab = 'create' }) {
   useEffect(() => {
     if (!isSubmitting && !retryingId) return undefined;
     const stage = activeJob?.stage || 'queued';
-    const target = COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
+    const target = stage === 'completed' ? 100 : stage === 'finalizing' ? 91
+      : Number.isInteger(activeJob?.completedScenes) && ['creating_scene', 'creating_video'].includes(stage)
+        ? Math.min(88, 18 + activeJob.completedScenes * 23 + (stage === 'creating_video' ? 15 : 5))
+        : COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
     const interval = window.setInterval(() => {
-      setDisplayProgress(current => Math.min(target, current + (target - current > 15 ? 2 : 1)));
+      setDisplayProgress(current => Math.max(current, Math.min(target, current + (target - current > 15 ? 2 : 1))));
     }, 220);
     return () => window.clearInterval(interval);
-  }, [isSubmitting, retryingId, activeJob?.stage]);
+  }, [isSubmitting, retryingId, activeJob?.stage, activeJob?.completedScenes]);
 
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
@@ -118,13 +124,13 @@ export default function AICommercials({ initialTab = 'create' }) {
     if (!token) return;
     const request = ++historyRequestRef.current;
     try {
-      const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations?all=true&page=${historyPage}&limit=20&type=${historyFilter}`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include'
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not read your ads.');
-      if (request === historyRequestRef.current) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      if (request === historyRequestRef.current) { setJobs(Array.isArray(data.generations) ? data.generations : []); setHasMore(data.hasMore === true); }
     } catch (historyError) {
       setError(historyError.message || 'Could not load your previous ads.');
     }
@@ -160,12 +166,12 @@ export default function AICommercials({ initialTab = 'create' }) {
       if (checking) return;
       checking = true;
       try {
-        const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
+        const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(retryingId)}`, {
           headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
         });
         const data = await response.json();
-        const job = data.jobs?.find(item => item.generationId === retryingId);
-        if (!stopped && response.ok && data.success && job) {
+        const job = data;
+        if (!stopped && response.ok && job.generationId === retryingId) {
           setActiveJob(job);
           setStatus(stageLabel(job.stage));
         }
@@ -176,6 +182,21 @@ export default function AICommercials({ initialTab = 'create' }) {
     const timer = window.setInterval(check, 2000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [retryingId, token]);
+
+  async function retrySavedVideo(job) {
+    if (retryingId) return;
+    setRetryingId(job.generationId); setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId)}/${job.brandingRetryAvailable ? 'branding/retry' : 'retry'}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Recovery failed. Please retry.');
+      setNotice('Saved video recovered. No new AI generation was purchased.');
+      await loadCredits();
+    } catch (failure) { setError(failure.message); }
+    finally { setRetryingId(null); await loadHistory(); }
+  }
 
   async function downloadJob(job) {
     try {
@@ -229,7 +250,7 @@ export default function AICommercials({ initialTab = 'create' }) {
     const title = job.title || job.productName || 'this ad';
     if (!window.confirm(`Delete "${title}" from My Ads? This cannot be undone.`)) return;
     try {
-      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId || job.id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include'
@@ -255,7 +276,7 @@ export default function AICommercials({ initialTab = 'create' }) {
     // Long-running AI jobs may finish after the initial page load; keep history fresh.
     const timer = window.setInterval(() => loadHistory(), 5000);
     return () => window.clearInterval(timer);
-  }, [tab, token]);
+  }, [tab, token, historyPage, historyFilter]);
 
   const handlePhotoChange = (input) => {
     const files = Array.from(input?.files || []);
@@ -420,13 +441,24 @@ export default function AICommercials({ initialTab = 'create' }) {
       <button type="button" role="tab" aria-selected={tab === 'history'} className={tab === 'history' ? 'is-active' : ''} onClick={() => setTab('history')}>My Ads</button>
     </div>
 
+    {tab !== 'history' && balance.quickAdPreviewAvailable && <Card><strong>Try Quick Ad first</strong><p>Your account includes a Quick Ad trial. Create a short video before buying credits for a commercial.</p><Link to={quickAdsHome(user?.role)}>Create your trial Quick Ad</Link></Card>}
+
     {tab === 'history' ? (
       <Card className="sf-commercials__empty">
+        <label>Ad type <select value={historyFilter} onChange={event => { setHistoryFilter(event.target.value); setHistoryPage(1); }}>
+          <option value="all">All ads</option><option value="quick">Quick Ads</option><option value="fashion">Fashion</option><option value="commercial">Commercials</option>
+        </select></label>
+        <div className="sf-commercials__history-actions">
+          <Button disabled={historyPage === 1} onClick={() => setHistoryPage(page => page - 1)}>Previous</Button>
+          <span>Page {historyPage}</span>
+          <Button disabled={!hasMore} onClick={() => setHistoryPage(page => page + 1)}>Next</Button>
+        </div>
         {(notice || error) && <p className={error ? "sf-commercials__notice sf-commercials__notice--error" : "sf-commercials__notice"} role="status">{error || notice}</p>}
         {jobs.length > 0 ? (
           <div className="sf-commercials__history-list">
             {jobs.map(job => {
-              const rawTitle = job.title || job.productName || 'AI commercial';
+              const isCommercial = !job.provider || job.provider === 'ai-commercials';
+              const rawTitle = job.title || job.productName || (isCommercial ? 'AI commercial' : job.style === 'fashion_studio' ? 'Fashion video' : 'Quick Ad');
               const title = String(rawTitle).replace(/[_-]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
               const rawStatus = String(job.status || job.stage || 'processing').toLowerCase();
               const isCompleted = rawStatus === 'completed' || rawStatus === 'complete';
@@ -464,12 +496,14 @@ export default function AICommercials({ initialTab = 'create' }) {
                       <i aria-hidden="true" /> {job.cancellationRequested ? 'Cancelling...' : job.cancelled ? 'Cancelled' : stageLabel(job.stage || job.status)}
                     </span>
                     <small>{(job.style === 'auto' ? 'AI commercial' : String(job.style || 'Brand campaign').replace(/[_-]+/g, ' '))}{dateLabel ? ` · ${dateLabel}` : ''}</small>
+                    <small>{job.creditsUsed || 0} credits used{isFailed ? ' · No charge for this failed attempt' : ''}</small>
+                    {(job.recoveryAvailable || job.brandingRetryAvailable) && <button type="button" disabled={!!retryingId} onClick={() => retrySavedVideo(job)}>{retryingId === job.generationId ? 'Finishing saved video...' : job.brandingRetryAvailable ? 'Retry branding' : 'Recover saved video'}</button>}
                     {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
                     <div className="sf-commercials__history-actions">
                       {isCompleted && job.downloadable
                         ? <button type="button" className="sf-commercials__icon-button" onClick={() => downloadJob(job)} aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></button>
                         : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
-                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => isCommercial ? editJob(job) : window.location.assign(`${quickAdsHome(user?.role)}#quick-ad-history-title`)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" className="sf-commercials__retry-button" disabled={!!retryingId || isSubmitting} onClick={() => retryFinalization(job)}>
@@ -477,7 +511,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                     </button>}
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <small>Reuses saved scenes. {job.requiredCredits || 4} credits are charged only when the video is finished.</small>}
                     {job.commercialRecoveryRequired && <small>Please contact support to recover this commercial safely. No credits were charged.</small>}
-                    {rawStatus === 'pending' && <button type="button" disabled={cancellingId === job.generationId || job.cancellationRequested} onClick={() => cancelJob(job)}>{job.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
+                    {isCommercial && rawStatus === 'pending' && <button type="button" disabled={cancellingId === job.generationId || job.cancellationRequested} onClick={() => cancelJob(job)}>{job.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
                     {isCompleted && !videoUrl ? (
                       <span className="sf-commercials__history-result">Video link unavailable</span>
                     ) : null}

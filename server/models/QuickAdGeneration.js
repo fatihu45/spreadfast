@@ -56,6 +56,9 @@ const schema = new mongoose.Schema({
   expiresAt: { type: Date, required: true },
   completedAt: Date,
   deletedAt: Date,
+  autoRecoveryAttempted: Boolean,
+  brandingRetryUntil: Date,
+  brandingAttemptId: String,
   failureCode: String
 }, { timestamps: true });
 schema.index({ userId: 1, idempotencyKey: 1 }, { unique: true });

@@ -27,11 +27,7 @@ function cleanText(value, maxLength = 500) {
 }
 
 function safeFailureReason(error) {
-  // Provider errors can embed signed URLs or query-string credentials.
-  return String(error?.message || 'Unknown commercial error')
-    .replace(/https?:\/\/\S+/g, '[redacted-url]')
-    .replace(/(api[_-]?key|secret|token|signature)\s*[:=]\s*\S+/gi, '$1=[redacted]')
-    .slice(0, 300);
+  return error?.quickAdSafe ? 'Account or request validation failed.' : 'Provider or processing request failed.';
 }
 
 function isValidImage(file) {
@@ -141,6 +137,7 @@ function createAiCommercialsRouter({
         success: true,
         ...summary,
         freePreviewAvailable: false,
+        quickAdPreviewAvailable: summary.freePreviewAvailable,
         requiredCredits: TIER_COST.standard,
         available: summary.quickAdCredits,
         tierCredits: TIER_COST
@@ -153,11 +150,12 @@ function createAiCommercialsRouter({
   router.get('/jobs', async (req, res) => {
     try {
       const db = req.app.locals.db;
+      const page = Math.min(100000, Math.max(1, Math.floor(Number(req.query.page) || 1)));
       const [rows, user] = await Promise.all([
-        db.QuickAdGeneration.find({ userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(50),
+        db.QuickAdGeneration.find({ userId: req.user.id, provider: 'ai-commercials', deletedAt: { $exists: false } }).sort({ createdAt: -1, id: -1 }).skip((page - 1) * 20).limit(21),
         loadUserBalance(req)
       ]);
-      return res.json({ success: true, jobs: rows.map(row => publicGeneration(row, user)) });
+      return res.json({ success: true, hasMore: rows.length > 20, page, jobs: (await Promise.all(rows.slice(0, 20).map(row => require('../services/quickAdRecovery').settleExpired(db, row)))).map(row => publicGeneration(row, user)) });
     } catch (error) {
       return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Could not load ad history.' });
     }
@@ -390,33 +388,28 @@ function createAiCommercialsRouter({
       brandingStatus: branding.mode === 'none' ? 'none' : 'applied' });
   }
 
-  router.post('/jobs/:id/retry', async (req, res) => {
-    const db = req.app.locals.db;
+  async function resumeSavedCommercial(db, userId, id) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('Finalization timed out.')), MAX_GENERATION_MS);
     let claimed;
     let stopWatching = () => {};
     try {
-      const reservation = await claimFinalization(db, { id: req.params.id, userId: req.user.id, leaseMs: MAX_GENERATION_MS + 60000 });
+      const reservation = await claimFinalization(db, { id, userId, leaseMs: MAX_GENERATION_MS + 60000 });
       if (!reservation.reused) { claimed = reservation.generation; stopWatching = watchJob(db, claimed, controller); }
       const completed = reservation.reused ? reservation.generation : await continueCommercial(db, claimed, controller.signal);
-      const user = await loadUserBalance(req);
-      return res.json({ ...publicGeneration(completed, user), reused: reservation.reused });
+      return { ...publicGeneration(completed, await db.User.findOne({ id: userId })), reused: reservation.reused };
     } catch (error) {
       if (controller.signal.reason?.code === 'USER_CANCELLED') error = controller.signal.reason;
-      if (claimed) {
-        try { await failGeneration(db, { userId: req.user.id, id: claimed.id, executionId: claimed.executionId, code: claimed.stage === 'finalizing' ? 'ASSEMBLY_FAILED' : 'GENERATION_FAILED' }); }
-        catch { logger.error('[AI Commercials] Retry cleanup failed', { generationId: claimed.id }); }
-      }
-      logger.error('[AI Commercials] Resume failed', {
-        generationId: claimed?.id, stage: claimed?.stage,
-        code: error.code || 'GENERATION_FAILED',
-        reason: safeFailureReason(error),
-        providerStatus: Number(error.http_code || error.statusCode) || undefined
-      });
-      return res.status(error.statusCode || 502).json({ success: false,
-        message: error.code === 'USER_CANCELLED' ? 'Commercial cancelled. No credits were charged.' : error.quickAdSafe ? error.message : 'Could not finish this commercial. Your saved scenes are safe; no credits were charged. Retry from My Ads.' });
+      if (claimed) await failGeneration(db, { userId, id, executionId: claimed.executionId, code: 'RECOVERY_FAILED' }).catch(() => {});
+      logger.error('[AI Commercials] Resume failed', { generationId: id, stage: claimed?.stage, ...require('../services/safeError').safeError(error), reason: safeFailureReason(error) });
+      throw error;
     } finally { clearTimeout(timer); stopWatching(); }
+  }
+  router.resumeSavedCommercial = resumeSavedCommercial;
+  router.post('/jobs/:id/retry', async (req, res) => {
+    try { res.json(await resumeSavedCommercial(req.app.locals.db, req.user.id, req.params.id)); }
+    catch (error) { res.status(error.statusCode || 502).json({ success: false,
+      message: error.quickAdSafe ? error.message : 'Could not finish this commercial. Saved scenes remain available; no credits were charged. Retry from My Ads.' }); }
   });
 
   router.post('/generate', parseUpload, async (req, res) => {

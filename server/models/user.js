@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
   marketingSubscribed: { type: Boolean, default: false },
   marketingConsentAt: Date,
+  marketingOptedOut: Boolean,
   marketingConsentSource: String,
   tokenVersion: { type: Number, default: 0 },
   quickAdCredits: quickAdCounter(),

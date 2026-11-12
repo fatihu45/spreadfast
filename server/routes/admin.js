@@ -4,12 +4,13 @@ const { feeStats } = require('../services/campaignPricing');
 const { reviewSubmission } = require('../services/reviewSubmission');
 const { reviewWithdrawal } = require('../services/wallet');
 const { getQuickAdAnalytics } = require('../services/quickAdAnalytics');
+const { isAdmin } = require('../services/adminAccess');
 const database = req => req.app.locals.db;
 
 const { authenticateToken } = require('../middleware/auth');
 
 const adminOnly = (req, res, next) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   next();
