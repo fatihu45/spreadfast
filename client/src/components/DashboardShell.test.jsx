@@ -52,7 +52,10 @@ test('profile shows existing account data without navigation and settings remain
   act(() => host.querySelector('[aria-label="Close profile"]').click());
   expect(host.querySelector('dialog').open).toBe(false);
   const settings = [...host.querySelectorAll('button')].filter(b => b.textContent === 'Settings');
-  expect(settings.length).toBe(2); settings.forEach(b => expect(b.disabled).toBe(true));
+  expect(settings.length).toBe(2); settings.forEach(b => expect(b.disabled).toBe(false));
+  act(() => settings[0].click());
+  expect(host.querySelector('dialog').open).toBe(true);
+  expect(host.querySelector('#account-name')).not.toBeNull();
 });
 test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('logout in %s invokes existing auth action and returns home', selector => {
   render('company', '/my-ads');

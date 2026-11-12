@@ -5,6 +5,7 @@ import { AppShell, UserAvatar, Button } from './ui';
 import NavigationItems from './ui/NavigationItems';
 import UiIcon from './ui/UiIcon';
 import './DashboardShell.css';
+import AccountSettings from './AccountSettings';
 
 export default function DashboardShell({ children }) {
   const { user, logout } = useContext(AuthContext);
@@ -25,7 +26,7 @@ export default function DashboardShell({ children }) {
   ];
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
-    { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
+    { id: 'settings', label: 'Settings', onClick: openProfile, icon: <UiIcon name="settings" /> },
     { id: 'logout', label: 'Log out', onClick: handleLogout, icon: <UiIcon name="logout" /> },
   ];
 
@@ -61,6 +62,7 @@ export default function DashboardShell({ children }) {
       <UserAvatar name={user?.name} size="lg" />
       <Link to="/email-preferences" onClick={() => profile.current.close()}>Email preferences</Link>
       <dl><dt>Name</dt><dd>{user?.name || 'Not provided'}</dd><dt>Email</dt><dd>{user?.email || 'Not provided'}</dd><dt>Account type</dt><dd>{isBusiness ? 'Business' : 'Creator'}</dd></dl>
+      <AccountSettings key={user?.id} />
     </dialog>
   </AppShell>;
 }

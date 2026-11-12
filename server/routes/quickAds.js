@@ -340,7 +340,7 @@ function createQuickAdsRouter({
         throw generationError('UNSUPPORTED_FASHION_VIDEO_MODEL');
       }
       stage = 'credits';
-      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL });
+      const reservation = await beginGeneration(DB, { userId: req.user.id, key, style, model: VIDEO_MODEL, executionId: randomUUID() });
       generation = reservation.generation;
       if (reservation.reused) return res.json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
       controller.signal.throwIfAborted();
@@ -349,7 +349,7 @@ function createQuickAdsRouter({
       controller.signal.throwIfAborted();
       stage = 'upload';
       branding = await uploadBranding(cloudinaryClient, branding, logoFile);
-      await DB.QuickAdGeneration.updateOne({ id: generation.id }, { $set: { branding } });
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, executionId: generation.executionId, status: 'pending' }, { $set: { branding } });
       generation.branding = branding;
       const sourceFiles = isFashionStyle ? [frontImage, backImage] : [singleImage];
       const uploadedSourceUrls = [];
@@ -361,11 +361,11 @@ function createQuickAdsRouter({
         uploadedSourceUrls.push(sourceImageUrl);
       }
       const [firstSourceUrl, secondSourceUrl] = uploadedSourceUrls;
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { sourceImageUrl: firstSourceUrl, stage: 'preparing_image' } });
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: { sourceImageUrl: firstSourceUrl, stage: 'preparing_image' } });
       stage = 'creating_scene';
       let fashionBackImage = null;
       if (isFashionStyle) {
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
           sourceBackImageUrl: secondSourceUrl, stage: 'creating_scene'
         } });
         const frontPrompt = buildFashionImagePrompt('front', additionalInstructions);
@@ -378,7 +378,7 @@ function createQuickAdsRouter({
           pollIntervalMs,
           onSubmitted: async id => {
             requestId = id;
-            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
               'fashionImages.front.requestId': id, 'fashionImages.front.model': COMMERCIAL_IMAGE_MODEL
             } });
           }
@@ -386,7 +386,7 @@ function createQuickAdsRouter({
         const frontAsset = await persistCommercialImage(cloudinaryClient, frontCommercial.generatedUrl, generation, controller.signal, 'front');
         nextCommercialImage = { url: frontAsset.url, publicId: frontAsset.publicId,
           model: COMMERCIAL_IMAGE_MODEL, requestId: frontCommercial.requestId };
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
           commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url,
           'fashionImages.front': nextCommercialImage
         } });
@@ -400,7 +400,7 @@ function createQuickAdsRouter({
           pollIntervalMs,
           onSubmitted: async id => {
             requestId = id;
-            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+            await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
               'fashionImages.back.requestId': id, 'fashionImages.back.model': COMMERCIAL_IMAGE_MODEL
             } });
           }
@@ -413,7 +413,7 @@ function createQuickAdsRouter({
           model: COMMERCIAL_IMAGE_MODEL,
           requestId: backCommercial.requestId
         };
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
           'fashionImages.back': fashionBackImage, stage: 'creating_video'
         } });
         requestId = backCommercial.requestId;
@@ -432,7 +432,7 @@ function createQuickAdsRouter({
         if (typeof commercialRequestId !== 'string' || !commercialRequestId.trim()) throw generationError('MISSING_REQUEST_ID');
         requestId = commercialRequestId;
         const commercialImage = { url: null, publicId: null, model: COMMERCIAL_IMAGE_MODEL, requestId: commercialRequestId };
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage, stage: 'creating_scene' } });
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: { commercialImage, stage: 'creating_scene' } });
         while (true) {
           controller.signal.throwIfAborted();
           const status = await fal.queue.status(COMMERCIAL_IMAGE_MODEL, { requestId: commercialRequestId, logs: false, abortSignal: controller.signal });
@@ -450,7 +450,7 @@ function createQuickAdsRouter({
           model: COMMERCIAL_IMAGE_MODEL,
           requestId: commercialRequestId
         };
-        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: { commercialImage: nextCommercialImage, imageUrl: nextCommercialImage.url, sourceImageUrl: firstSourceUrl, stage: 'creating_video' } });
       }
       stage = 'creating_video';
       const safePrompt = buildQuickAdPrompt(style, additionalInstructions);
@@ -462,7 +462,7 @@ function createQuickAdsRouter({
       });
       requestId = queued?.request_id;
       if (typeof requestId !== 'string' || !requestId.trim()) throw generationError('MISSING_REQUEST_ID');
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { requestId, videoRequestId: requestId, stage: 'creating_video' } });
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: { requestId, videoRequestId: requestId, stage: 'creating_video' } });
       while (true) {
         controller.signal.throwIfAborted();
         const status = await fal.queue.status(VIDEO_MODEL, { requestId, logs: false, abortSignal: controller.signal });
@@ -471,7 +471,7 @@ function createQuickAdsRouter({
         await delay(pollIntervalMs, undefined, { signal: controller.signal });
       }
       stage = 'finalizing';
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: { stage: 'finalizing' } });
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: { stage: 'finalizing' } });
       const result = await fal.queue.result(VIDEO_MODEL, { requestId, abortSignal: controller.signal });
       controller.signal.throwIfAborted();
       const videoUrl = result?.data?.video?.url;
@@ -481,7 +481,7 @@ function createQuickAdsRouter({
       // Persist the protected source before optional branding so a Cloudinary failure never
       // discards a paid fal result or forces the user to generate the ad again.
       recoverableMedia = { ...media, originalOutputUrl: media.outputUrl };
-      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id }, { $set: {
+      await DB.QuickAdGeneration.updateOne({ id: generation.id, userId: req.user.id, executionId: generation.executionId, status: 'pending' }, { $set: {
         media: recoverableMedia, imageUrl: nextCommercialImage.url,
         brandingStatus: branding.mode === 'none' ? 'none' : 'pending', stage: 'finalizing'
       } });
@@ -492,7 +492,7 @@ function createQuickAdsRouter({
         controller.signal.throwIfAborted();
       }
       stage = 'completion';
-      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, imageUrl: nextCommercialImage.url, media,
+      generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id, executionId: generation.executionId, imageUrl: nextCommercialImage.url, media,
         brandingStatus: branding.mode === 'none' ? 'none' : 'applied' });
       if (res.destroyed) return;
       return res.set('Cache-Control', 'no-store').json(publicGeneration(generation, await DB.User.findOne({ id: req.user.id })));
@@ -500,23 +500,13 @@ function createQuickAdsRouter({
       logFailure(logger, { stage, style, error, timedOut, disconnected: res.destroyed,
         model: stage === 'creating_scene' ? COMMERCIAL_IMAGE_MODEL
           : ['creating_video', 'finalizing'].includes(stage) ? VIDEO_MODEL : undefined });
-      // The video and image already exist. Finish with the protected original and expose a
-      // branding-only retry, rather than allowing a full retry to submit more fal jobs.
+      // Keep paid provider assets for recovery, but do not charge for incomplete branding.
       if (stage === 'branding_render' && recoverableMedia && generation?.status === 'pending') {
-        try {
-          generation = await finishGeneration(DB, { userId: req.user.id, id: generation.id,
-            imageUrl: nextCommercialImage?.url, media: recoverableMedia, brandingStatus: 'failed' });
-          if (res.destroyed) return;
-          const user = await DB.User.findOne({ id: req.user.id });
-          return res.set('Cache-Control', 'no-store').json({ ...publicGeneration(generation, user),
-            brandingRetryAvailable: true,
-            message: 'Your video is ready, but its logo or business name could not be added. Retry branding without generating or paying for the video again.' });
-        } catch (recoveryError) {
-          logFailure(logger, { stage: 'branding_recovery', style, error: recoveryError, model: VIDEO_MODEL });
-        }
+        await DB.QuickAdGeneration.updateOne({ id: generation.id, status: 'pending', executionId: generation.executionId },
+          { $set: { brandingStatus: 'failed' } }).catch(() => {});
       }
       if (generation?.status === 'pending') {
-        try { await failGeneration(DB, { userId: req.user.id, id: generation.id, code: timedOut ? 'TIMEOUT' : 'GENERATION_FAILED' }); }
+        try { await failGeneration(DB, { userId: req.user.id, id: generation.id, executionId: generation.executionId, code: timedOut ? 'TIMEOUT' : 'GENERATION_FAILED' }); }
         catch { logFailure(logger, { stage: 'credit-cleanup', style, error: generationError('CREDIT_CLEANUP_FAILED'), model: VIDEO_MODEL }); }
       }
       if (res.destroyed) return;

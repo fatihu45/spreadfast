@@ -24,6 +24,9 @@ export default function QuickAd() {
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
   const navigate = useNavigate();
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [recoveringId, setRecoveringId] = useState(null);
   const [branding, setBranding] = useState({ mode: 'none' });
   const [editingBranding, setEditingBranding] = useState(false);
   const [editBranding, setEditBranding] = useState({ mode: 'none' });
@@ -155,19 +158,31 @@ export default function QuickAd() {
     }
   }, [location.hash, historyStatus]);
 
-  async function loadHistory() {
+  async function loadHistory(page = 1) {
+    if (!Number.isSafeInteger(page) || page < 1) page = 1;
     if (!canGenerate || !token) return;
     setHistoryStatus('loading');
     setHistoryError('');
     try {
-      const { data } = await axios.get(quickAdsUrl('/generations'), { headers: quickAdsAuth(token), timeout: 20000 });
+      const { data } = await axios.get(quickAdsUrl(page === 1 ? '/generations' : `/generations?page=${page}`), { headers: quickAdsAuth(token), timeout: 20000 });
       if (!data?.success || !Array.isArray(data.generations)) throw new Error('Invalid Quick Ads history response');
+      setHistoryPage(page); setHistoryHasMore(data.hasMore === true);
       setHistory(data.generations.filter(item => !deletedHistoryIds.current.has(item.generationId)));
       setHistoryStatus('loaded');
     } catch {
       setHistoryError('We could not load your Quick Ads. Please try again.');
       setHistoryStatus('error');
     }
+  }
+
+  async function retrySavedVideo(item) {
+    if (recoveringId) return;
+    setRecoveringId(item.generationId); setHistoryActionError('');
+    try {
+      const { data } = await axios.post(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}/${item.brandingRetryAvailable ? 'branding/retry' : 'retry'}`), {}, { headers: quickAdsAuth(token), timeout: 660000 });
+      showResult(data); setNotice('Saved video recovered successfully.');
+    } catch (failure) { setHistoryActionError(failure.response?.data?.message || 'Recovery could not finish. Please retry.'); }
+    finally { setRecoveringId(null); loadHistory(historyPage); }
   }
 
   async function deleteHistoryItem(item) {
@@ -559,7 +574,7 @@ export default function QuickAd() {
     </div>
     <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
       <div className="quick-ad-history-header">
-        <h2 id="quick-ad-history-title">My Quick Ads</h2>
+        <h2 id="quick-ad-history-title">My Quick Ads</h2><div><Button variant="secondary" disabled={historyPage === 1} onClick={() => loadHistory(historyPage - 1)}>Previous</Button><span> Page {historyPage} </span><Button variant="secondary" disabled={!historyHasMore} onClick={() => loadHistory(historyPage + 1)}>Next</Button></div>
         {historyStatus === 'loading' && history.length > 0 && <span className="quick-ad-history-loading" role="status">Refreshing...</span>}
       </div>
       {!canGenerate && <div className="quick-ad-empty-state">Quick Ads history is available to company and promoter accounts.</div>}
@@ -579,6 +594,7 @@ export default function QuickAd() {
                 <span className={'quick-ad-history-status is-' + (item.status || 'unknown')}>{item.status === 'completed' ? 'Ready' : item.status === 'pending' ? 'Processing' : item.status || 'Status unavailable'}</span>
               </div>
               <div className="quick-ad-history-actions">
+                {(item.recoveryAvailable || item.brandingRetryAvailable) && <Button size="sm" disabled={!!recoveringId || generating} onClick={() => retrySavedVideo(item)}>{recoveringId === item.generationId ? 'Recovering...' : item.brandingRetryAvailable ? 'Retry branding' : 'Recover saved video'}</Button>}
                 {item.status === 'completed' && <Button size="sm" variant="secondary" aria-label="Edit video branding" title="Edit branding" disabled={saving || brandingSaving || generating || !!pendingKey} onClick={() => editHistoryBranding(item)}><UiIcon name="edit" /></Button>}
                 {item.downloadable && <Button size="sm" variant="secondary" aria-label="Download video" title={saving ? 'Saving video...' : 'Download video'} disabled={saving} onClick={() => downloadHistoryItem(item)}><UiIcon name="download" /></Button>}
                 <Button size="sm" variant="secondary" className="quick-ad-history-delete" aria-label={deletingId === item.generationId ? 'Deleting video...' : 'Delete video'} title="Delete video" disabled={item.status === 'pending' || !!deletingId || brandingSaving} onClick={() => deleteHistoryItem(item)}><UiIcon name="trash" /></Button>

@@ -14,7 +14,7 @@ function fixture() {
   const files = {'users.json': [{id: 'company', email: 'company@example.test'}, {id:'creator', walletBalance: 1200}],
     'campaigns.json': [], 'transactions.json': [], 'submissions.json': []};
   let nextId = 0;
-  const context = { safeError: require('../services/safeError').safeError, ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
+  const context = { ...require('../services/adminAccess'), ...require('../services/accountIdentity'), authLimit: () => () => {}, safeError: require('../services/safeError').safeError, ...pricing, reviewSubmission, requestWithdrawal, reviewWithdrawal,
     passwordChanged: require('../services/emailNotifications').passwordChanged,
     QUICK_AD_PAYMENT_PURPOSE: quickAdPayments.PURPOSE, assertCampaignPayment: quickAdPayments.assertCampaignPayment,
     console: {log(){},warn(){},error(){}},
@@ -200,6 +200,7 @@ test('mounted admin routes use recorded revenue and enforce net approval', async
     if(name==='../services/campaignPricing') return pricing;
     if(name==='../services/reviewSubmission') return {reviewSubmission};
     if(name==='../services/wallet') return {reviewWithdrawal};
+    if(name==='../services/adminAccess') return require('../services/adminAccess');
     if(name==='../services/quickAdAnalytics') return require('../services/quickAdAnalytics');
     throw Error('Unexpected dependency '+name);
   }};
@@ -335,9 +336,9 @@ test('legacy paid webhook retries recover the same campaign without changing its
 });
 
 test('password reset increments the session version without changing wallet balances',async()=>{
- const f=fixture();const user=f.files['users.json'][1];user.tokenVersion=2;user.resetPasswordTokenHash=f.context.crypto.createHash('sha256').update('reset-test').digest('hex');user.resetPasswordExpires=new Date(Date.now()+60000).toISOString();
+ const f=fixture();const user=f.files['users.json'][1];user.tokenVersion=2;user.resetPasswordTokenHash=f.context.crypto.createHash('sha256').update('a'.repeat(64)).digest('hex');user.resetPasswordExpires=new Date(Date.now()+60000).toISOString();
  f.context.bcrypt={hash:async()=> 'replacement-test-hash'};
- assert.equal((await f.call('post','/api/auth/reset-password',{token:'reset-test',newPassword:'replacement-password'})).body.success,true);
+ assert.equal((await f.call('post','/api/auth/reset-password',{token:'a'.repeat(64),newPassword:'replacement-password'})).body.success,true);
  assert.equal(f.files['users.json'][1].tokenVersion,3);assert.equal(f.files['users.json'][1].walletBalance,1200);
 });
 

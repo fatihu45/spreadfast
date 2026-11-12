@@ -77,8 +77,8 @@ test('FAQ accordion retains its answers and accessible expansion state', () => {
 });
 
 test.each([
-  [{ role: 'company' }, '/company/quick-ads', 'Open Quick Ads'],
-  [{ role: 'promoter' }, '/promoter/quick-ads', 'Open Quick Ads'],
+  [{ role: 'company' }, '/ai-commercials', 'Create Ad'],
+  [{ role: 'promoter' }, '/ai-commercials', 'Create Ad'],
   [{ role: 'company', email: process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com' }, '/admin-portal', 'Admin Dashboard'],
 ])('signed-in header opens the account home for %j', (user, destination, label) => {
   render(user);

@@ -16,7 +16,7 @@ beforeEach(() => {
   credits = 0; jobs = [];
   global.fetch = jest.fn(async url => ({ ok: true, json: async () => url.endsWith('/credits')
     ? { success: true, quickAdCredits: credits, freePreviewAvailable: true }
-    : { success: true, jobs } }));
+    : { success: true, jobs, generations: jobs } }));
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); global.fetch = previousFetch; jest.restoreAllMocks(); });
@@ -139,4 +139,40 @@ test('partial jobs show Retry commercial and never start a new generation', asyn
   await act(async () => button('Retry commercial').click());
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/partial-1/retry'), expect.objectContaining({ method: 'POST' }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});
+
+test('unified history displays Quick Ads and recovers saved videos without generating again', async () => {
+  jobs = [{ generationId: 'quick-saved', provider: 'fal', style: 'studio', status: 'failed', recoveryAvailable: true, creditsUsed: 0 }];
+  await render('history');
+  expect(container.textContent).toContain('Quick Ad');
+  expect(container.textContent).toContain('0 credits used');
+  await act(async () => button('Recover saved video').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/quick-ads/generations/quick-saved/retry'), expect.objectContaining({ method: 'POST' }));
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});
+
+test('history can request older ads without dropping the studio filter', async () => {
+  const normal = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.includes('/generations?')
+    ? { ok: true, json: async () => ({ success: true, generations: jobs, hasMore: true }) }
+    : normal(url, options));
+  await render('history');
+  await act(async () => button('Next').click());
+  expect(global.fetch.mock.calls.some(([url]) => url.includes('page=2&limit=20&type=all'))).toBe(true);
+});
+
+test('retry progress looks up the selected ad directly, including older history pages', async () => {
+  jobs = [{ generationId: 'older-ad', status: 'failed', commercialRetryAvailable: true, requiredCredits: 4 }];
+  const normal = global.fetch;
+  let finish;
+  global.fetch = jest.fn((url, options) => {
+    if (url.endsWith('/jobs/older-ad/retry')) return new Promise(resolve => { finish = resolve; });
+    if (url.endsWith('/generations/older-ad')) return Promise.resolve({ ok: true, json: async () => ({ success: true, generationId: 'older-ad', status: 'pending', stage: 'finalizing' }) });
+    return normal(url, options);
+  });
+  await render('history');
+  await act(async () => button('Retry commercial').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/generations/older-ad'), expect.objectContaining({ headers: { Authorization: 'Bearer session' } }));
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/api/ai-commercials/jobs'))).toBe(false);
+  await act(async () => finish({ ok: true, json: async () => ({ success: true }) }));
 });
