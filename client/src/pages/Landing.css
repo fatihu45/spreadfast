@@ -273,3 +273,10 @@
 .sf-editorial-hero figcaption>span{font-size:9px;letter-spacing:.14em}.sf-editorial-hero figcaption>strong{font-size:26px;font-weight:550;letter-spacing:-.035em}.sf-editorial-hero figcaption>small{font-size:10px;color:#d4e3da}
 .sf-editorial-hero__strip{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding-top:3px}.sf-editorial-hero__strip img{display:block;width:100%;height:110px;object-fit:cover}
 @media(max-width:759px){.sf-editorial-hero{border-radius:22px}.sf-editorial-hero__main{height:300px}.sf-editorial-hero__strip img{height:85px}.sf-editorial-hero figcaption{padding:22px}.sf-editorial-hero figcaption>strong{font-size:23px}}
+
+/* Keep the entire fashion look visible; captions never cover the model. */
+.sf-editorial-hero{background:#eee7dc}
+.sf-editorial-hero__main{height:auto;aspect-ratio:3/2;object-fit:contain}
+.sf-editorial-hero figcaption{position:static;background:#fff;color:rgb(var(--sf-ink));padding:20px 24px}
+.sf-editorial-hero figcaption>small{color:rgb(var(--sf-muted))}
+@media(max-width:759px){.sf-editorial-hero__main{height:auto}.sf-editorial-hero figcaption{padding:18px 20px}}
