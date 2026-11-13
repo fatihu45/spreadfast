@@ -15,3 +15,9 @@ Shared direction: ads-marketing asset for SpreadFast; landscape 3:2, centered su
 - `commercial.webp`: An unbranded amber perfume bottle on a dark emerald glossy pedestal, cinematic sunlight and botanical shadows.
 - `mannequin.webp`: An emerald embroidered Nigerian kaftan on an invisible mannequin; no person or visible stand, complete garment and sleeves, warm ivory studio.
 - `social.webp`: An unbranded glass bottle of orange juice with suspended orange slices and a delicate juice splash, warm ivory studio.
+
+## People-led commercial revision
+
+`client/public/studios/commercial-story.webp`: newly generated cinematic campaign still, used on the AI Commercial card and empty preview, plus the hero's supporting image strip. The fashion photograph is now the main hero image; its caption sits below the picture to keep the full outfit unobstructed. This is illustrative artwork, not a playable video or a customer result.
+
+Prompt: Photorealistic premium 3:2 television-commercial still. An adult Nigerian female presenter in ivory clothing introducing a bottled orange drink toward the camera in a beautifully designed Lagos-inspired café, with two adult Nigerian friends sharing a natural moment behind her. Orange juice and oranges on the counter, emerald interior accents, warm cinematic sunlight, realistic skin, shallow depth of field, medium-wide composition, mobile-safe faces. No product-only packshot, film crew, text, logo, watermark, collage, interface or fake play button. Built-in image generation; optimized to 1200 × 800 WebP, quality 86.

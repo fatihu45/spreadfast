@@ -76,7 +76,7 @@ export default function LandingPage() {
           <Container className="landing-hero-grid">
             <div className="landing-hero-copy">
               <p className="landing-eyebrow"><span aria-hidden="true" />AI-powered advertising</p>
-              <h1 id="landing-title">Ai advertisement,<br className="landing-title-break" /> made <span className="landing-title-accent">simple.</span></h1>
+              <h1 id="landing-title">AI advertising,<br className="landing-title-break" /> Made <span className="landing-title-accent">simple</span></h1>
               <p className="landing-hero-description">
                 Create stunning video advertisements for fashion, cars, shoes, bags, and more. No expensive cameras, editing skills, or production teams required. Studio availability is shown below.
               </p>
