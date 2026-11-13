@@ -511,7 +511,7 @@ export default function AICommercials({ initialTab = 'create' }) {
           <aside className="sf-commercials__preview">
             <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> {isSubmitting ? 'Creating commercial' : 'Ad details'}</span></div>
             <div className={`sf-commercials__preview-stage${isSubmitting ? ' is-generating' : ''}`}>
-              {photo ? <img src={photo} alt="Product preview" /> : <figure className="sf-example-preview"><img src="/studios/commercial.webp" alt="Illustrative perfume campaign in an emerald studio" /><figcaption><strong>Your commercial starts here</strong><span>Illustrative concept · Upload a photo to tell your story.</span></figcaption></figure>}
+              {photo ? <img src={photo} alt="Product preview" /> : <figure className="sf-example-preview"><img src="/studios/commercial-story.webp" alt="Illustrative video commercial with a Nigerian presenter introducing a drink" /><figcaption><strong>Your commercial starts here</strong><span>Illustrative concept · Upload a photo to tell your story.</span></figcaption></figure>}
               {isSubmitting ? (
                 <div className="sf-commercials__progress-overlay" role="status" aria-live="off" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status || 'Preparing your commercial'}`}>
                   <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
