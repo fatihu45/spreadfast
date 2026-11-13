@@ -265,3 +265,11 @@
 .sf-landing .landing-fashion-feature h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.1; letter-spacing: -0.04em; margin: 16px 0; }
 .sf-landing .landing-fashion-feature p { line-height: 1.65; margin-bottom: 24px; }
 @media (max-width: 640px) { .sf-landing .landing-fashion-feature { grid-template-columns: 1fr; gap: 20px; padding: 24px; } .sf-landing .landing-fashion-feature img { height: 240px; } }
+
+/* Photographic studio expansion hero. */
+.sf-editorial-hero{margin:0;position:relative;border-radius:28px;overflow:hidden;background:#102d22;box-shadow:0 24px 70px rgb(15 36 53 / .1);isolation:isolate}
+.sf-editorial-hero__main{display:block;width:100%;height:400px;object-fit:cover}
+.sf-editorial-hero figcaption{position:absolute;top:0;left:0;right:0;padding:28px;background:linear-gradient(rgba(5,25,16,.65),transparent);display:flex;flex-direction:column;gap:8px;color:white}
+.sf-editorial-hero figcaption>span{font-size:9px;letter-spacing:.14em}.sf-editorial-hero figcaption>strong{font-size:26px;font-weight:550;letter-spacing:-.035em}.sf-editorial-hero figcaption>small{font-size:10px;color:#d4e3da}
+.sf-editorial-hero__strip{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding-top:3px}.sf-editorial-hero__strip img{display:block;width:100%;height:110px;object-fit:cover}
+@media(max-width:759px){.sf-editorial-hero{border-radius:22px}.sf-editorial-hero__main{height:300px}.sf-editorial-hero__strip img{height:85px}.sf-editorial-hero figcaption{padding:22px}.sf-editorial-hero figcaption>strong{font-size:23px}}
