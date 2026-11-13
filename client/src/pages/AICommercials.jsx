@@ -5,6 +5,7 @@ import { Button, Card } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import { quickAdsHome } from '../utils/quickAdsApi';
 import './AICommercials.css';
+import './StudioPolish.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const TIER_COST = { standard: 4, premium: 7 };
@@ -487,8 +488,8 @@ export default function AICommercials({ initialTab = 'create' }) {
             <section className="sf-commercials__panel">
               <div className="sf-commercials__step"><span>2</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
               <div className="sf-commercials__tiers">
-                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{balance.tierCredits?.standard || TIER_COST.standard} credits</b></button>
-                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{balance.tierCredits?.premium || TIER_COST.premium} credits</b></button>
+                <button type="button" aria-pressed={tier === 'standard'} onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{balance.tierCredits?.standard || TIER_COST.standard} credits</b></button>
+                <button type="button" aria-pressed={tier === 'premium'} onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{balance.tierCredits?.premium || TIER_COST.premium} credits</b></button>
               </div>
             </section>
 
@@ -510,7 +511,7 @@ export default function AICommercials({ initialTab = 'create' }) {
           <aside className="sf-commercials__preview">
             <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> {isSubmitting ? 'Creating commercial' : 'Ad details'}</span></div>
             <div className={`sf-commercials__preview-stage${isSubmitting ? ' is-generating' : ''}`}>
-              {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a photo and tell us what you want to advertise.</p></div>}
+              {photo ? <img src={photo} alt="Product preview" /> : <figure className="sf-example-preview"><img src="/studios/commercial.webp" alt="Illustrative perfume campaign in an emerald studio" /><figcaption><strong>Your commercial starts here</strong><span>Illustrative concept · Upload a photo to tell your story.</span></figcaption></figure>}
               {isSubmitting ? (
                 <div className="sf-commercials__progress-overlay" role="status" aria-live="off" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status || 'Preparing your commercial'}`}>
                   <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
@@ -520,7 +521,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                   <div className="sf-commercials__progress-track" aria-hidden="true"><div style={{ width: `${displayProgress}%` }} /></div>
                   <small className="sf-commercials__progress-disclaimer">Estimated progress · final video will appear in My Ads</small>
                 </div>
-              ) : <span className="sf-commercials__duration">22 sec commercial</span>}
+              ) : <span className="sf-commercials__duration">Up to 24 sec commercial</span>}
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>

@@ -128,7 +128,7 @@ export default function LandingPage() {
             </div>
             <LandingVideoCarousel />
             <div className="landing-fashion-feature">
-              <img src="/fashion-studio-kaftan.png" alt="Navy kaftan showing the type of outfit you can showcase with Fashion Studio" width="1024" height="1536" loading="lazy" />
+              <img src="/studios/mannequin.webp" alt="Illustrative emerald kaftan on an invisible mannequin" width="1200" height="800" loading="lazy" />
               <div><p className="landing-eyebrow">Fashion Studio · inside Quick Ad</p><h2>Your collection. In motion.</h2>
                 <p>Turn front and back outfit photos into a rotating invisible-mannequin video. Add specifications to guide the details, then preview before sharing.</p>
                 <Link to="/quick-ad" className="sf-control sf-button sf-button--secondary">Explore Fashion Studio <UiIcon name="arrow" /></Link>

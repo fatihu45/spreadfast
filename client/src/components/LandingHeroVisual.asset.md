@@ -1,10 +1,17 @@
-# Landing hero asset
+# Studio imagery
 
-Mode: built-in imagegen.
+The hero, studio cards, workspace introductions, Quick Ad style choices and empty previews now use seven new assets in `client/public/studios/`. The existing SpreadFast logo and actual sample videos are retained. The images are illustrative campaign concepts, not completed customer ads or selectable fashion model reference photos.
 
-Saved project asset: `client/public/spreadfast-creator.png` (1024 × 1536 PNG).
-Used by `LandingHeroVisual.jsx`. This is illustrative imagery, not a real account or testimonial.
+Generated with the built-in image generation tool, then resized to 1200 × 800 WebP (quality 86). All seven files together are approximately 440 KB. No existing decorative artwork was used as a generation reference.
 
-Final prompt:
+## Prompt set
 
-Use case: photorealistic-natural. Asset type: portrait photo displayed inside a narrow smartphone mockup on the SpreadFast landing page. Create an editorial lifestyle photograph of an adult Nigerian female social-media creator in her late 20s, natural dark braided hair, friendly confident expression, wearing a simple cream top, holding an unbranded small amber skincare bottle near her shoulder as she records authentic advertising content. Vertical 2:3 composition, waist-up, face centered in the upper half, comfortable breathing room above head, hands anatomically natural. Warm bright neutral home studio, soft daylight, subtle leafy green plant blurred behind her, premium natural photography, realistic skin texture. This is illustrative marketing imagery, not a real user or testimonial. No phone frame, no UI, no logos, no text, no watermark, no engagement metrics.
+Shared direction: ads-marketing asset for SpreadFast; landscape 3:2, centered subject with generous breathing room; premium minimalist commercial photography, realistic textures, controlled lighting, subtle shadows; no text, typography, logos, watermark or UI.
+
+- `quick.webp`: A ceramic bowl of Nigerian jollof rice with grilled chicken and plantain, fresh ingredients, warm ivory seamless background.
+- `fashion.webp`: A Nigerian woman wearing a flowing emerald modest tailored dress and matching headwrap, relaxed full-length editorial pose in an ivory architectural studio.
+- `auto.webp`: An unbranded graphite luxury SUV, entire vehicle in a front three-quarter view, pale architectural studio and softly curved walls.
+- `product.webp`: A cognac leather handbag and cream leather shoes on a limestone plinth in a warm white studio.
+- `commercial.webp`: An unbranded amber perfume bottle on a dark emerald glossy pedestal, cinematic sunlight and botanical shadows.
+- `mannequin.webp`: An emerald embroidered Nigerian kaftan on an invisible mannequin; no person or visible stand, complete garment and sleeves, warm ivory studio.
+- `social.webp`: An unbranded glass bottle of orange juice with suspended orange slices and a delicate juice splash, warm ivory studio.

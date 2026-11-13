@@ -9,13 +9,14 @@ import QuickAdBranding, { appendBranding } from '../components/QuickAdBranding';
 import QuickAdHistoryVideo from '../components/QuickAdHistoryVideo';
 import './QuickAd.css';
 import './QuickAdCredits.css';
+import './StudioPolish.css';
 
 const styles = [
-  { id: 'food', name: 'Food Burst', description: 'Make food look fresh and irresistible.', image: '/dynamic_grilled_salmon_bowl_with_lemon_splash.png', caption: 'Fresh energy' },
-  { id: 'reveal', name: 'Product Reveal', description: 'A cinematic product reveal.', image: '/luxury_amber_perfume_spotlight.png', caption: 'In the spotlight' },
-  { id: 'studio', name: 'Clean Studio', description: 'Simple, premium product motion.', image: '/luxury_skincare_bottle_in_soft_beige_studio.png', caption: 'Less. But better.' },
-  { id: 'social', name: 'Attention Grabber', description: 'Fast movement made for social media.', image: '/energetic_citrus_juice_splash.png', caption: 'Make them look.' },
-  { id: 'fashion_studio', name: 'Fashion Studio', description: 'Front & back photos into a clean fashion ad.', image: '/fashion-studio-kaftan.png', caption: 'Front to back.' },
+  { id: 'food', name: 'Food Burst', description: 'Make food look fresh and irresistible.', image: '/studios/quick.webp', caption: 'Fresh energy' },
+  { id: 'reveal', name: 'Product Reveal', description: 'A cinematic product reveal.', image: '/studios/commercial.webp', caption: 'In the spotlight' },
+  { id: 'studio', name: 'Clean Studio', description: 'Simple, premium product motion.', image: '/studios/product.webp', caption: 'Less. But better.' },
+  { id: 'social', name: 'Attention Grabber', description: 'Fast movement made for social media.', image: '/studios/social.webp', caption: 'Make them look.' },
+  { id: 'fashion_studio', name: 'Fashion Studio', description: 'Front & back photos into a clean fashion ad.', image: '/studios/mannequin.webp', caption: 'Front to back.' },
 ];
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
@@ -524,7 +525,7 @@ export default function QuickAd({ dedicatedFashion = false }) {
             onError={() => setNotice(!downloadable ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
             : previewImage ? <img className="quick-ad-stage-image" src={previewImage} alt={stageImage ? 'Commercial scene preview' : 'Selected product preview'}
               onError={() => { if (stageImage) setStageImage(''); }} />
-              : <div className="quick-ad-placeholder"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>Your preview starts here</strong><p>Upload a product photo to see it in your creative workspace.</p></div>}
+              : <figure className="sf-example-preview"><img src={styles.find(style=>style.id===styleId)?.image} alt={isFashionStyle ? "Illustrative invisible mannequin garment presentation" : "Illustrative product campaign concept"} /><figcaption><strong>Your preview starts here</strong><span>Illustrative concept · Upload your photo to make it yours.</span></figcaption></figure>}
           {stageImage && !ready && <span className="quick-ad-scene-tag">Commercial scene</span>}
           {generating && <div className="quick-ad-processing-label"><span className="quick-ad-processing-sparkle"><UiIcon name="star" /></span><span>{stageLabel}</span></div>}
         </div>
