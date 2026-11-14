@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
-import { quickAdsHome } from '../utils/quickAdsApi';
 import './AICommercials.css';
 import './StudioPolish.css';
 
@@ -380,7 +379,7 @@ export default function AICommercials({ initialTab = 'create' }) {
         <p>Product photos and a few words. We handle the story, visuals and finishing.</p>
       </div>
       <div className="sf-commercials__actions">
-        <Link to={quickAdsHome(user?.role)} className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link>
+        <Link to="/create" className="sf-commercials__secondary">← All studios</Link>
         <Link to="/quickads/credits" className="sf-commercials__credit"><UiIcon name="wallet" /> Buy credits</Link>
       </div>
     </header>

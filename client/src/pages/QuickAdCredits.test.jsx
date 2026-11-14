@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-unnecessary-act -- React DOM createRoot requires act; this suite does not use Testing Library. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -29,16 +30,16 @@ afterEach(() => { act(() => root.unmount()); container.remove(); if (previousApi
 test.each(['company', 'promoter'])('%s loads backend prices and sends only plan ID', async role => {
   await render('/quickads/credits', role);
   expect(container.querySelectorAll('.quick-ad-plan')).toHaveLength(4);
-  expect(container.textContent).toContain('4 credits · 4 Quick Ads');
-  expect(container.textContent).toContain('8 credits · 8 Quick Ads');
-  expect(container.textContent).toContain('16 credits · 16 Quick Ads');
-  expect(container.textContent).toContain('6 Quick Ads credits');
+  expect(container.textContent).toContain('4 credits');
+  expect(container.textContent).toContain('8 credits');
+  expect(container.textContent).toContain('16 credits');
+  expect(container.textContent).toContain('6 credits');
   axios.post.mockRejectedValue(new Error('provider detail'));
   await act(async () => button('Get Starter').click());
   expect(axios.post).toHaveBeenCalledWith('https://api.example/api/quick-ads/credits/initialize', { planId: 'starter' }, expect.objectContaining({ headers: { Authorization: 'Bearer session' } }));
   expect(container.textContent).toContain('Payment could not be started');
   expect(container.textContent).not.toContain('provider detail');
-  expect(container.textContent).toContain('6 Quick Ads credits');
+  expect(container.textContent).toContain('6 credits');
 });
 test.each(['company', 'promoter'])('%s callback uses backend balance and returns to own dashboard', async role => {
   await render('/quickads/credits?reference=qa_test', role);
@@ -55,7 +56,7 @@ test('failed verification never awards credits locally and can retry the same re
   axios.get.mockImplementation(url => url.includes('/verify/') && failed ? Promise.reject(new Error('secret')) : normal(url));
   await render('/quickads/credits?reference=qa_test');
   expect(container.textContent).toContain("We couldn't confirm your payment");
-  expect(container.textContent).toContain('6 Quick Ads credits');
+  expect(container.textContent).toContain('6 credits');
   expect(container.textContent).not.toContain('Payment successful');
   failed = false; await act(async () => button('Retry confirmation').click());
   expect(container.textContent).toContain('Your balance: 9 credits');

@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-unnecessary-act -- React DOM createRoot requires act; this suite does not use Testing Library. */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act as legacyAct } from 'react-dom/test-utils';
@@ -43,7 +44,7 @@ test('business navigation opens My Ads with one active item', () => {
   expect(nav.querySelectorAll('[aria-current="page"]').length).toBe(1);
   expect(nav.querySelector('[aria-current="page"]').textContent).toBe('My Ads');
 });
-test('profile shows existing account data without navigation and settings remain disabled', () => {
+test('profile shows existing account data without navigation or unavailable settings', () => {
   render('promoter', '/my-ads');
   act(() => host.querySelector('.sf-mobile-navigation button').click());
   expect(host.querySelector('dialog').open).toBe(true);
@@ -52,7 +53,7 @@ test('profile shows existing account data without navigation and settings remain
   act(() => host.querySelector('[aria-label="Close profile"]').click());
   expect(host.querySelector('dialog').open).toBe(false);
   const settings = [...host.querySelectorAll('button')].filter(b => b.textContent === 'Settings');
-  expect(settings.length).toBe(2); settings.forEach(b => expect(b.disabled).toBe(true));
+  expect(settings).toHaveLength(0);
 });
 test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('logout in %s invokes existing auth action and returns home', selector => {
   render('company', '/my-ads');

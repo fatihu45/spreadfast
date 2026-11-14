@@ -97,15 +97,15 @@ export default function QuickAdCredits() {
   const processing = ['loading', 'checkout', 'confirming'].includes(phase);
   return <section className="quick-ad quick-ad-credits">
     <header className="quick-ad-heading">
-      <span className="quick-ad-badge">SpreadFast Quick Ads</span>
-      <h1>Quick Ads Credits</h1>
+      <span className="quick-ad-badge">SpreadFast Studios</span>
+      <h1>Credits</h1>
       <p>Create professional ads whenever you need them.</p>
     </header>
     {!eligibleAccount && <Alert>A company or promoter account is required to purchase Quick Ads credits.</Alert>}
     {location.state?.outOfCredits && !paid && <Alert>You're out of Quick Ads credits.</Alert>}
     <div className="quick-ad-credit-summary" aria-live="polite">
-      <strong>{!eligibleAccount ? 'Company or promoter account required' : balance === null ? 'Loading balance...' : `${balance} Quick Ads ${balance === 1 ? 'credit' : 'credits'}`}</strong>
-      <span>1 credit = 1 Quick Ad generation</span>
+      <strong>{!eligibleAccount ? 'Company or promoter account required' : balance === null ? 'Loading balance...' : `${balance} ${balance === 1 ? 'credit' : 'credits'}`}</strong>
+      <span>Quick Ad starts at 1 credit. Each studio shows its cost before you generate.</span>
     </div>
     {phase === 'checkout' && <Alert>Opening secure Paystack checkout...</Alert>}
     {phase === 'confirming' && <Alert>Confirming your payment...</Alert>}
@@ -126,10 +126,10 @@ export default function QuickAdCredits() {
     </Alert>}
     <div className="quick-ad-plan-grid" id="quick-ad-plans">
       {plans.map(plan => <article key={plan.id} className={'quick-ad-plan' + (plan.recommended ? ' is-recommended' : '')}>
-        {plan.recommended && <span className="quick-ad-badge">A good place to start</span>}
+        {plan.recommended && <span className="quick-ad-badge">Recommended</span>}
         <h2>{plan.name}</h2><strong className="quick-ad-plan-price">{money(plan.price)}</strong>
-        <p>{plan.credits} {plan.credits === 1 ? 'credit' : 'credits'} · {plan.credits} Quick {plan.credits === 1 ? 'Ad' : 'Ads'}</p>
-        <p className="quick-ad-plan-value">{money(plan.price / plan.credits, 2)} per ad</p>
+        <p>{plan.credits} {plan.credits === 1 ? 'credit' : 'credits'}</p>
+        <p className="quick-ad-plan-value">{money(plan.price / plan.credits, 2)} per credit</p>
         <Button fullWidth disabled={!eligibleAccount || processing} onClick={() => purchase(plan.id)}>{plan.cta}</Button>
       </article>)}
     </div>

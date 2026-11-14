@@ -5,6 +5,7 @@ import { AppShell, UserAvatar, Button } from './ui';
 import NavigationItems from './ui/NavigationItems';
 import UiIcon from './ui/UiIcon';
 import './DashboardShell.css';
+import './DashboardExperience.css';
 
 export default function DashboardShell({ children }) {
   const { user, logout } = useContext(AuthContext);
@@ -22,7 +23,6 @@ export default function DashboardShell({ children }) {
   ];
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
-    { id: 'settings', label: 'Settings', disabled: true, title: 'Settings are not available yet', icon: <UiIcon name="settings" /> },
     { id: 'logout', label: 'Log out', onClick: handleLogout, icon: <UiIcon name="logout" /> },
   ];
 
@@ -31,7 +31,7 @@ export default function DashboardShell({ children }) {
     const target = ['#company-campaigns', '#create-campaign'].includes(location.hash)
       ? document.getElementById(location.hash.slice(1)) : null;
     if (target) { target.scrollIntoView({ block: 'start' }); target.focus({ preventScroll: true }); }
-    else if (location.pathname === '/company' && !location.hash) window.scrollTo({ top: 0 });
+    else if (!location.hash) window.scrollTo({ top: 0 });
   }, [location.pathname, location.hash, location.key]);
 
   const brand = <Link to="/" aria-label="SpreadFast home" className="sf-dashboard-logo">
