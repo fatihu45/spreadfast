@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
@@ -428,6 +428,7 @@ export default function QuickAd({ dedicatedFashion = false }) {
   }
 
   return <section className="quick-ad" aria-labelledby="quick-ad-title">
+    {!dedicatedFashion && <Link className="sf-studio-back" to="/create">← All studios</Link>}
     <header className="quick-ad-heading">
       <div className="quick-ad-heading-line">
         <h1 id="quick-ad-title">{dedicatedFashion ? 'Invisible Mannequin' : 'Quick Ads'}</h1>
