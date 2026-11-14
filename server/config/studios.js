@@ -4,8 +4,8 @@ const STUDIO_CREDIT_COSTS = Object.freeze({ quick_ad: 1, fashion_mannequin: 1, f
 const MODES = Object.freeze({
   quick_ad: { studio: 'quick', duration: 5, images: 1, video: MODELS.quick, estimate: .43 },
   fashion_mannequin: { studio: 'fashion', duration: 5, images: 2, video: MODELS.quick, estimate: .51 },
-  fashion_model_5s: { studio: 'fashion', duration: 5, images: 2, video: MODELS.motion, estimate: .495, approval: true },
-  fashion_model_10s: { studio: 'fashion', duration: 10, images: 2, video: MODELS.motion, estimate: .915, approval: true },
+  fashion_model_5s: { studio: 'fashion', duration: 5, images: 1, video: MODELS.motion, estimate: .495, approval: true },
+  fashion_model_10s: { studio: 'fashion', duration: 10, images: 1, video: MODELS.motion, estimate: .915, approval: true },
   product_studio: { studio: 'product', duration: 5, images: 5, video: MODELS.quick, estimate: .43 },
   auto_cinematic: { studio: 'auto', duration: 10, images: 5, video: MODELS.motion, estimate: 1 },
   auto_voiceover: { studio: 'auto', duration: 15, images: 5, video: MODELS.motion, estimate: 1.54 },
@@ -13,11 +13,12 @@ const MODES = Object.freeze({
   commercial_premium: { studio: 'commercial', duration: 24, estimate: 9.84 }
 });
 function presets(env = process.env) {
-  // Only explicitly licensed adult model photographs, supplied by the operator.
-  return ['hausa_male','hausa_female','yoruba_male','yoruba_female','igbo_male','igbo_female'].map(id => ({
-    id, label: id.replace('_', ' '), image: env[`STUDIO_MODEL_${id.toUpperCase()}`] || '',
-    modest: id.startsWith('hausa')
-  })).filter(p => /^https:\/\/res\.cloudinary\.com\//.test(p.image));
+  return require('./fashionModels.json').map(model => {
+    const override = env[`STUDIO_MODEL_${model.id.toUpperCase()}`];
+    return /^https:\/\/res\.cloudinary\.com\//.test(override || '')
+      ? { ...model, image: override, assetKey: undefined }
+      : { ...model };
+  });
 }
 function quote(mode, env = process.env) {
   const config = MODES[mode];

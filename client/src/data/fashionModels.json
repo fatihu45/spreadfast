@@ -1,0 +1,44 @@
+[
+  {
+    "id": "hausa_female",
+    "label": "Amina",
+    "description": "With hijab",
+    "image": "/studios/models/amina-v1.webp",
+    "assetKey": "amina-v1"
+  },
+  {
+    "id": "hausa_male",
+    "label": "Umar",
+    "description": "Short beard",
+    "image": "/studios/models/umar-v1.webp",
+    "assetKey": "umar-v1"
+  },
+  {
+    "id": "yoruba_female",
+    "label": "Tola",
+    "description": "Low bun",
+    "image": "/studios/models/tola-v1.webp",
+    "assetKey": "tola-v1"
+  },
+  {
+    "id": "yoruba_male",
+    "label": "Tunde",
+    "description": "Clean shaven",
+    "image": "/studios/models/tunde-v1.webp",
+    "assetKey": "tunde-v1"
+  },
+  {
+    "id": "igbo_female",
+    "label": "Ada",
+    "description": "Braided hair",
+    "image": "/studios/models/ada-v1.webp",
+    "assetKey": "ada-v1"
+  },
+  {
+    "id": "igbo_male",
+    "label": "Emeka",
+    "description": "Full beard",
+    "image": "/studios/models/emeka-v1.webp",
+    "assetKey": "emeka-v1"
+  }
+]

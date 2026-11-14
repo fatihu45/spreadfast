@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const cloudinaryDefault = require('cloudinary').v2;
+const { resolveModelReference } = require('./fashionModels');
 const { MODELS } = require('../config/studios');
 const { providerUrl, imagePrompt, motionPrompt, narration } = require('./studioInputs');
 const { runQueuedFalJob } = require('./aiCommercialProviders');
@@ -80,7 +81,11 @@ function createProcessor({ cloudinary = cloudinaryDefault, getFal, queue = runQu
     let images = [];
     if (modelFashion) {
       await save({ stage: 'generating_images' });
-      const url = await stageAsset('tryon', MODELS.tryon, { model_image: providerUrl(input.modelImage), garment_image: sources[0], category: 'auto', mode: 'quality', num_samples: 1, output_format: 'png' }, 'imageGeneration', .075);
+      if (!assets.modelReference) {
+        assets.modelReference = { url: await resolveModelReference(cloudinary, input) };
+        await save({ studioAssets: assets });
+      }
+      const url = await stageAsset('tryon', MODELS.tryon, { model_image: providerUrl(assets.modelReference.url), garment_image: sources[0], category: 'auto', mode: 'quality', num_samples: 1, output_format: 'png' }, 'imageGeneration', .075);
       images = [url];
       await save({ imageUrl: url });
       if (!job.approvedAt) { await save({ stage: 'awaiting_approval', workerUntil: new Date(0) }); return; }

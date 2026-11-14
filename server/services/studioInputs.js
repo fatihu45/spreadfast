@@ -22,7 +22,9 @@ function validate(body, files, models = []) {
     const selected = models.find(p => p.id === body.modelId);
     if (!selected) reject('Choose an available model.');
     if (!['studio','outdoor'].includes(body.background) || !['pose','walk'].includes(body.motion)) reject('Choose a background and motion.');
-    result.modelId = selected.id; result.modelImage = selected.image;
+    result.modelId = selected.id;
+    if (selected.assetKey) result.modelAssetKey = selected.assetKey;
+    else result.modelImage = selected.image;
     result.background = body.background; result.motion = body.motion;
     // Try-on keeps the selected photograph background; no unverified editing stage.
     if (body.background !== 'studio') reject('Only the selected model’s studio background is currently supported.');
@@ -54,7 +56,7 @@ function imagePrompt(input, index = 0) {
 function motionPrompt(input) {
   if (input.mode === 'quick_ad' || input.mode === 'fashion_mannequin') return require('../routes/quickAds').buildQuickAdPrompt(input.mode === 'fashion_mannequin' ? 'fashion_studio' : input.style,input.instructions);
   if (input.mode === 'fashion_mannequin') return `${accuracy} Smooth controlled 180 degree front-to-back garment rotation from opening to ending image. Fixed camera, white studio, no person.`;
-  if (input.modelId) return `${accuracy} Adult fashion model ${input.motion === 'walk' ? 'walks slowly two steps' : 'poses with subtle natural movement'}. Keep the outfit and background unchanged. No new accessories.`;
+  if (input.modelId) return `${accuracy} Adult fashion model ${input.motion === 'walk' ? 'walks slowly two steps' : 'poses with subtle natural movement'}. Keep the same face, body proportions, outfit and background as the approved opening image throughout. Preserve garment colour, cut, embroidery, seams, buttons and fabric. No wardrobe changes or new accessories.`;
   return `${accuracy} ${input.style === 'rotation' ? 'Gentle limited camera orbit; only show supplied views.' : 'Slow cinematic camera push-in and subtle parallax.'} Keep subject stable. No generated text or speech.`;
 }
 function narration(input) {
