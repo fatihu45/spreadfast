@@ -74,7 +74,7 @@ New:
 - `STUDIO_ENABLED_MODES` is an explicit comma-separated list from the pricing catalog. Start with modes approved for launch. Until set, new modes remain Coming soon. Enabling durable Quick Ad/mannequin requires including `quick_ad`/`fashion_mannequin`; otherwise their legacy pipeline remains usable.
 - `USD_NGN_RATE`, `STUDIO_MIN_MARGIN` (fraction), `STUDIO_OVERHEAD_USD`, optionally `STUDIO_PAYMENT_FEE_RATE`.
 - Optional `STUDIO_CREDITS_FASHION_MODEL_5S`, `_FASHION_MODEL_10S`, `_PRODUCT_STUDIO`, `_AUTO_CINEMATIC`, `_AUTO_VOICEOVER`, `_COMMERCIAL_STANDARD`, `_COMMERCIAL_PREMIUM` (full `STUDIO_CREDITS_` prefix for every name).
-- `STUDIO_MODEL_HAUSA_MALE`, `STUDIO_MODEL_HAUSA_FEMALE`, `STUDIO_MODEL_YORUBA_MALE`, `STUDIO_MODEL_YORUBA_FEMALE`, `STUDIO_MODEL_IGBO_MALE`, `STUDIO_MODEL_IGBO_FEMALE`: licensed adult model photographs on Cloudinary. Slots without assets are absent from the picker.
+- `STUDIO_MODEL_HAUSA_MALE`, `STUDIO_MODEL_HAUSA_FEMALE`, `STUDIO_MODEL_YORUBA_MALE`, `STUDIO_MODEL_YORUBA_FEMALE`, `STUDIO_MODEL_IGBO_MALE`, `STUDIO_MODEL_IGBO_FEMALE`: optional operator-supplied adult model photograph overrides on Cloudinary. Six original AI-generated adult models are bundled by default.
 - `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_COMMERCIAL_LICENSE=true` for a verified commercially licensed account/voice. No voice cloning is implemented.
 
 No secrets were added. Node 24 was used for local verification. No new runtime packages were required. Vercel deployment for `feat/spreadfast-studios` is explicitly disabled. Do not merge or deploy this branch without approval.
@@ -150,3 +150,7 @@ Deletion removes the record from active history and denies subsequent normal pre
 - `server/tests/aiCommercialProviders.test.js`
 - `server/tests/aiCommercials.test.js`
 - `server/tests/studios.test.js`
+
+### Built-in fashion collection
+
+Amina, Umar, Tola, Tunde, Ada and Emeka have versioned full-body reference images in `server/assets/fashion-models` and small web previews in `client/public/studios/models`. Keep old versions for in-flight jobs; use a new version key when changing a face. The server resolves only catalog IDs, uploads the fixed reference to Cloudinary, and pins its URL in the job. The garment remains the separate FASHN garment input. Video generation uses only the approved try-on image. No live provider generation was run as part of this update; verify garment fidelity in staging before enabling the modes. Existing pricing, worker and provider readiness gates remain in force.
