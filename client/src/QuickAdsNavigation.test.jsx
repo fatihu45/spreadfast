@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-unnecessary-act -- React DOM createRoot requires act; this suite does not use Testing Library. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import axios from 'axios';
@@ -100,7 +101,7 @@ test('legacy redirect waits for existing authentication loading to finish', () =
 
 test.each(['company', 'promoter'])('%s credits direct route retains dashboard navigation and refresh support', role => {
   render('/quickads/credits', role);
-  expect(container.querySelector('h1').textContent).toBe('Quick Ads Credits');
+  expect(container.querySelector('h1').textContent).toBe('Credits');
   expect(navs()[0].querySelector('[aria-current="page"]').textContent).toBe('Credits');
   expect(deployment.routes).toContainEqual({ src: '^/quickads/credits/?$', dest: '/app-shell.html', headers: { 'X-Robots-Tag': 'noindex, nofollow' } });
 });
