@@ -27,6 +27,18 @@ router.get('/quick-ads/analytics', auth, async (req, res) => {
   }
 });
 
+// Reuse the verified, transactional credit-award path; never manually adjust a balance.
+router.post('/quick-ads/payments/:reference/verify', auth, async (req, res) => {
+  try {
+    const { verifyQuickAdPayment } = require('../services/quickAdPayments');
+    const result = await verifyQuickAdPayment(database(req), req.params.reference, undefined, req.app.locals.paystackConfig);
+    res.set('Cache-Control', 'no-store').json(result);
+  } catch (error) {
+    res.status(error.quickAdSafe ? error.statusCode : 503).json({ success: false,
+      message: error.quickAdSafe ? error.message : 'Payment verification is unavailable. Please try again.' });
+  }
+});
+
 // ==================== STATS ====================
 router.get('/all-stats', auth, async (req, res) => {
   try {

@@ -192,7 +192,7 @@ test('mounted admin routes use recorded revenue and enforce net approval', async
   const f=reviewFixture();
   f.files['transactions.json']=[{pricing:pricing.quoteCampaign(20000),status:'completed'}];
   const routes={};
-  const router=Object.fromEntries(['get','patch','delete'].map(method=>[method,(route,...handlers)=>{routes[method+' '+route]=handlers.at(-1);} ]));
+  const router=Object.fromEntries(['get','post','patch','delete'].map(method=>[method,(route,...handlers)=>{routes[method+' '+route]=handlers.at(-1);} ]));
   const context={console:{error(){}},process:{env:{}},module:{exports:{}},require:name=>{
     if(name==='express') return {Router:()=>router};
     if(name==='mongoose') return {model:name=>f.context.DB[name]};
