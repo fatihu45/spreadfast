@@ -40,6 +40,20 @@ export default function AdminQuickAdsAnalytics({ details = false }) {
   const [data, setData] = useState(null);
   const [phase, setPhase] = useState('loading');
   const [reload, setReload] = useState(0);
+  const [verifying, setVerifying] = useState(null);
+  const [verificationMessage, setVerificationMessage] = useState('');
+  async function verifyPayment(reference) {
+    setVerifying(reference);
+    setVerificationMessage('');
+    try {
+      const result = await apiCallAuth(`/api/admin/quick-ads/payments/${encodeURIComponent(reference)}/verify`, token, 'POST');
+      setVerificationMessage(result.success
+        ? (['failed', 'abandoned'].includes(result.status) ? `Paystack confirmed this checkout is ${result.status}. No credits were added.` : 'Payment verified. Credits have been applied once.')
+        : result.message || 'Payment could not be verified.');
+      setReload(value => value + 1);
+    } catch { setVerificationMessage('Payment verification is unavailable. Please try again.'); }
+    finally { setVerifying(null); }
+  }
   useEffect(() => {
     let active = true;
     setPhase('loading');
@@ -57,10 +71,11 @@ export default function AdminQuickAdsAnalytics({ details = false }) {
 
   return <section className="sf-stack sf-admin-quick-analytics" aria-label="AI advertising analytics">
     <div className="sf-admin-record-heading"><p className="sf-small sf-muted">All-time totals unless marked 30 days.</p><Button variant="secondary" size="sm" disabled={phase === 'loading'} onClick={() => setReload(value => value + 1)}>Refresh analytics</Button></div>
+    {verificationMessage && <p role="status">{verificationMessage}</p>}
     {phase === 'loading' && <><p role="status">Loading AI advertising analytics...</p><div className="sf-admin-stats">{metrics.map(([key, label]) => <StatCard key={key} label={label} loading />)}</div></>}
     {phase === 'error' && <Alert tone="error"><p>Analytics could not be loaded. Retry to retrieve current figures.</p><Button variant="secondary" onClick={() => setReload(value => value + 1)}>Retry analytics</Button></Alert>}
     {phase === 'ready' && <>
-      {(data.growth.expiredGenerations > 0 || data.growth.recoverableAds > 0 || data.growth.oldPendingPayments > 0) && <Alert tone="warning"><strong>Needs attention</strong><p>{data.growth.expiredGenerations || 0} expired jobs · {data.growth.recoverableAds || 0} failed ads with saved assets · {data.growth.oldPendingPayments || 0} payments awaiting confirmation for over 30 minutes.</p><p>Unconfirmed payments may be abandoned checkouts; verify their references before adjusting credits.</p></Alert>}
+      {(data.growth.expiredGenerations > 0 || data.growth.recoverableAds > 0 || data.growth.oldPendingPayments > 0) && <Alert tone="warning"><strong>Needs attention</strong><p>{data.growth.expiredGenerations || 0} expired jobs · {data.growth.recoverableAds || 0} failed ads with saved assets · {data.growth.oldPendingPayments || 0} payments awaiting confirmation for over 30 minutes.</p><p>Unconfirmed payments may be abandoned checkouts. Open Payments & Usage and select Verify payment to check Paystack. Saved ads receive one automatic recovery attempt; remaining failures need review.</p></Alert>}
       <div className="sf-admin-stats">{metrics.map(([key, label, format]) => <StatCard key={key} label={label} value={format(data.analytics[key])} />)}</div>
       <p className="sf-small sf-muted">Updated {date(data.asOf)}. Credit sales are shared across all products and are not subscription revenue or profit. Historical records do not identify test payments, so these totals may include them. Deleted ads remain counted when their generation record is retained.</p>
       {data.analytics.creditsRemaining < 0 && <Alert tone="warning">Paid usage exceeds recorded purchases. Review credit adjustments and payment records.</Alert>}
@@ -85,8 +100,8 @@ export default function AdminQuickAdsAnalytics({ details = false }) {
       <Card as="section" aria-labelledby="admin-quick-transactions">
         <h2 id="admin-quick-transactions" className="sf-heading">Credit purchases</h2>
         <p className="sf-small sf-muted sf-admin-quick-note">Latest {data.transactionLimit || 50} purchases. Only verified, credited payments contribute to revenue; unpaid amounts are shown as —.</p>
-        {data.transactions.length ? <Table label="Quick Ads purchases" headers={['Account', 'Account type', 'User email', 'Plan purchased', 'Amount paid', 'Credits purchased', 'Paystack reference', 'Payment status', 'Payment date']}>
-          {data.transactions.map(row => <tr key={row.reference}><td>{row.businessName}</td><td>{accountType(row.buyerRole)}</td><td>{row.email || '—'}</td><td>{row.planName}</td><td>{row.amountPaid === null ? '—' : money(row.amountPaid)}</td><td>{number.format(row.creditsPurchased)}</td><td>{row.reference}</td><td><Badge tone={row.status === 'completed' ? 'success' : row.status === 'pending' ? 'warning' : 'neutral'}>{row.status}</Badge></td><td>{date(row.paymentDate)}</td></tr>)}
+        {data.transactions.length ? <Table label="Quick Ads purchases" headers={['Account', 'Account type', 'User email', 'Plan purchased', 'Amount paid', 'Credits purchased', 'Paystack reference', 'Payment status', 'Payment date', 'Action']}>
+          {data.transactions.map(row => <tr key={row.reference}><td>{row.businessName}</td><td>{accountType(row.buyerRole)}</td><td>{row.email || '—'}</td><td>{row.planName}</td><td>{row.amountPaid === null ? '—' : money(row.amountPaid)}</td><td>{number.format(row.creditsPurchased)}</td><td>{row.reference}</td><td><Badge tone={row.status === 'completed' ? 'success' : row.status === 'pending' ? 'warning' : 'neutral'}>{row.status}</Badge></td><td>{date(row.paymentDate)}</td><td>{row.status !== 'completed' && <Button size="sm" variant="secondary" disabled={!!verifying} onClick={() => verifyPayment(row.reference)}>{verifying === row.reference ? 'Verifying…' : 'Verify payment'}</Button>}</td></tr>)}
         </Table> : <EmptyState title="No Quick Ads purchases yet" description="Credit purchases will appear here when companies or promoters begin checkout." />}
       </Card>
       <Card as="section" aria-labelledby="admin-quick-usage">

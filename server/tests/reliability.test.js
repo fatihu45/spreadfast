@@ -7,7 +7,7 @@ const { normalizeEmail, validPassword, findEmailUser } = require('../services/ac
 const { authLimit } = require('../middleware/authLimits');
 const { claimRecovery, settleExpired } = require('../services/quickAdRecovery');
 const { finishGeneration } = require('../services/quickAdCredits');
-const { reconcileGeneration } = require('../services/generationWatchdog');
+const { reconcileGeneration, reconcileBatch } = require('../services/generationWatchdog');
 const { eligible } = require('../services/emailMarketing');
 const { isAdmin } = require('../services/adminAccess');
 const { createAccountRouter } = require('../routes/account');
@@ -105,4 +105,22 @@ test('unified history paginates, filters studios and excludes other accounts', a
   assert.ok(commercials.generations.every(g => g.provider === 'ai-commercials'));
   const quick = await (await fetch(base + '/generations')).json();
   assert.ok(quick.generations.every(g => Number(g.generationId.split('-')[1]) % 2 === 0));
+});
+
+test('watchdog batch includes previously failed saved jobs without resubmitting AI work', async () => {
+  const DB = quickAdsDb([user()]); await DB.QuickAdGeneration.create(job());
+  const find = DB.QuickAdGeneration.find;
+  const queries = [];
+  DB.QuickAdGeneration.find = query => {
+    queries.push(query);
+    return find({ status: query.status });
+  };
+  let calls = 0;
+  const recover = { quick: async () => { calls++; }, commercial: async () => assert.fail('wrong recovery') };
+  await reconcileBatch(DB, recover);
+  await reconcileBatch(DB, recover);
+  assert.equal(calls, 1);
+  assert.equal(queries[1].status, 'failed');
+  assert.deepEqual(queries[1].autoRecoveryAttempted, { $exists: false });
+  assert.deepEqual(queries[1].deletedAt, { $exists: false });
 });

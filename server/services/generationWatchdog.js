@@ -11,18 +11,32 @@ async function reconcileGeneration(DB, record, recover) {
   try { await (commercial ? recover.commercial : recover.quick)(DB, job.userId, job.id); }
   catch { /* Remains available for an owner-initiated retry; no repeated background spend. */ }
 }
+async function reconcileBatch(DB, recover) {
+  const expired = await DB.QuickAdGeneration.find({ status: 'pending', expiresAt: { $lte: new Date() }, deletedAt: { $exists: false } }).sort({ expiresAt: 1 }).limit(25);
+  for (const row of expired) await reconcileGeneration(DB, row, recover);
+  // Include jobs that failed before their lease expired, including previous restarts.
+  // Filter for saved provider work so unrecoverable jobs cannot starve the queue.
+  const failed = await DB.QuickAdGeneration.find({ status: 'failed', deletedAt: { $exists: false }, autoRecoveryAttempted: { $exists: false },
+    $or: [
+      { provider: { $ne: 'ai-commercials' }, 'media.publicId': { $type: 'string', $ne: '' } },
+      { provider: { $ne: 'ai-commercials' }, videoRequestId: { $type: 'string', $ne: '' } },
+      { provider: 'ai-commercials', freePreview: false, sceneAssets: { $size: 3 },
+        ...Object.fromEntries([0, 1, 2].flatMap(i => ['videoPublicId', 'imageUrl'].map(field => [`sceneAssets.${i}.${field}`, { $type: 'string', $ne: '' }]))) }
+    ]
+  }).sort({ updatedAt: 1 }).limit(25);
+  for (const row of failed) await reconcileGeneration(DB, row, recover);
+}
 function startGenerationWatchdog(DB, connected, recover) {
   let busy = false;
   const tick = async () => {
     if (busy || !connected()) return;
     busy = true;
     try {
-      const rows = await DB.QuickAdGeneration.find({ status: 'pending', expiresAt: { $lte: new Date() }, deletedAt: { $exists: false } }).sort({ expiresAt: 1 }).limit(25);
-      for (const row of rows) await reconcileGeneration(DB, row, recover);
+      await reconcileBatch(DB, recover);
     } catch { console.error('[Generation recovery] Reconciliation unavailable'); }
     finally { busy = false; }
   };
   const timer = setInterval(tick, 60000); timer.unref();
   return () => clearInterval(timer);
 }
-module.exports = { startGenerationWatchdog, reconcileGeneration };
+module.exports = { startGenerationWatchdog, reconcileGeneration, reconcileBatch };

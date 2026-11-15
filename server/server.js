@@ -113,6 +113,7 @@ const getPaystackConfig = () => {
 };
 
 const paystackConfig = getPaystackConfig();
+app.locals.paystackConfig = paystackConfig;
 console.log(`✅ Paystack initialized in ${paystackConfig.mode} mode`);
 
 // ==================== FILE UPLOAD CONFIGURATION ====================
