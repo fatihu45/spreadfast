@@ -441,8 +441,6 @@ export default function AICommercials({ initialTab = 'create' }) {
       <button type="button" role="tab" aria-selected={tab === 'history'} className={tab === 'history' ? 'is-active' : ''} onClick={() => setTab('history')}>My Ads</button>
     </div>
 
-    {tab !== 'history' && balance.quickAdPreviewAvailable && <Card><strong>Try Quick Ad first</strong><p>Your account includes a Quick Ad trial. Create a short video before buying credits for a commercial.</p><Link to={quickAdsHome(user?.role)}>Create your trial Quick Ad</Link></Card>}
-
     {tab === 'history' ? (
       <Card className="sf-commercials__empty">
         <label>Ad type <select value={historyFilter} onChange={event => { setHistoryFilter(event.target.value); setHistoryPage(1); }}>
