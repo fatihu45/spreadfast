@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 // Public marketing copies, independent of private generation history.
-export default function LandingSampleVideo({ name, label, autoPlay = false, directory = '/quick-ad-samples' }) {
+export default function LandingSampleVideo({ name, label, autoPlay = true, directory = '/quick-ad-samples' }) {
   const ref = useRef(null);
   const inView = useRef(false);
   const [loaded, setLoaded] = useState(false);
@@ -15,7 +15,7 @@ export default function LandingSampleVideo({ name, label, autoPlay = false, dire
     const video = ref.current;
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const saveData = navigator.connection?.saveData;
-    if (!window.IntersectionObserver) { setLoaded(true); return undefined; }
+    if (!window.IntersectionObserver) { inView.current = true; setLoaded(true); return undefined; }
     const observer = new IntersectionObserver(entries => {
       const visible = entries[0].isIntersecting;
       inView.current = visible;
@@ -31,11 +31,7 @@ export default function LandingSampleVideo({ name, label, autoPlay = false, dire
     <video ref={ref} src={loaded ? `${directory}/${name}.mp4` : undefined}
       poster={`${directory}/${name}.jpg`} aria-label={label}
       muted playsInline controls loop preload="none"
-      onError={() => setFailed(true)} onPlay={event => {
-        document.querySelectorAll('.landing-sample-media video').forEach(video => {
-          if (video !== event.currentTarget && !video.paused) video.pause();
-        });
-      }} />
+      onError={() => setFailed(true)} />
     {failed && <a className="landing-sample-fallback" href={`${directory}/${name}.mp4`}>Open video</a>}
   </div>;
 }

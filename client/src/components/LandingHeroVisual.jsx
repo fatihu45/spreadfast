@@ -7,13 +7,13 @@ function CheckIcon() {
 // Illustrative artwork only: no real profile, campaign or performance data.
 export default function LandingHeroVisual() {
   return (
-    <figure className="landing-visual" role="img" aria-label="Illustrative product ad preview surrounded by social platform symbols.">
+    <figure className="landing-visual" role="img" aria-label="AI-generated creator presenting a skincare product.">
       <div className="landing-visual-art" aria-hidden="true">
         <div className="landing-visual-halo" />
         <div className="landing-visual-shape landing-visual-shape--back" />
         <div className="landing-visual-shape landing-visual-shape--front" />
         <div className="landing-phone">
-          <img src="/luxury_skincare_bottle_in_soft_beige_studio.png" width="1024" height="1536" alt="" decoding="async" fetchPriority="high" />
+          <img src="/creator-product-hero.webp" width="768" height="1152" alt="" decoding="async" fetchPriority="high" />
           <div className="landing-phone-notch" />
           <span className="landing-phone-topline">Your product spotlight</span>
           <div className="landing-phone-caption">
