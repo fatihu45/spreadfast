@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
@@ -56,6 +56,9 @@ function validateImageFile(file, label = 'Image') {
 export default function AICommercials({ initialTab = 'create' }) {
   const { token, user } = useContext(AuthContext);
   const [tab, setTab] = useState(initialTab);
+  const [brandingEnabled, setBrandingEnabled] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
+  const creditsDialogRef = useRef(null);
   const [productName, setProductName] = useState('');
   const [brandName, setBrandName] = useState('');
   const [contact, setContact] = useState('');
@@ -101,7 +104,21 @@ export default function AICommercials({ initialTab = 'create' }) {
   const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
 
-  async function loadCredits() {
+  useEffect(() => {
+    if (!showCredits) return undefined;
+    const dialog = creditsDialogRef.current;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [showCredits]);
+
+  const loadCredits = useCallback(async () => {
     if (!token) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/credits`, {
@@ -118,7 +135,13 @@ export default function AICommercials({ initialTab = 'create' }) {
     } catch (loadError) {
       setError(loadError.message || 'We could not load your credits.');
     }
-  }
+  }, [token, requiredCredits]);
+
+  // Keep the draft here while checkout runs in another tab.
+  useEffect(() => {
+    window.addEventListener('focus', loadCredits);
+    return () => window.removeEventListener('focus', loadCredits);
+  }, [loadCredits]);
 
   async function loadHistory() {
     if (!token) return;
@@ -268,7 +291,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
   useEffect(() => {
     loadCredits();
-  }, [token, tier]);
+  }, [loadCredits]);
 
   useEffect(() => {
     if (tab !== 'history') return undefined;
@@ -348,12 +371,13 @@ export default function AICommercials({ initialTab = 'create' }) {
       setError('Please log in before generating a commercial.');
       return;
     }
-    if (!photoFile) {
-      setError('Upload a product photo before generating.');
+    if (!canAfford) {
+      setError('');
+      setShowCredits(true);
       return;
     }
-    if (!canAfford) {
-      setError(`You need at least ${requiredCredits} credits for this tier. Buy more credits to continue.`);
+    if (!photoFile) {
+      setError('Upload a product photo before generating.');
       return;
     }
 
@@ -367,13 +391,13 @@ export default function AICommercials({ initialTab = 'create' }) {
 
     try {
       const formData = new FormData();
-      formData.append('productName', productName.trim());
-      formData.append('brandName', brandName.trim());
-      formData.append('contact', contact.trim());
+      formData.append('productName', brandingEnabled ? productName.trim() : '');
+      formData.append('brandName', brandingEnabled ? brandName.trim() : '');
+      formData.append('contact', brandingEnabled ? contact.trim() : '');
       formData.append('specifications', specifications.trim());
       formData.append('tier', tier);
       photoFiles.forEach(file => formData.append('productImage', file));
-      if (logoFile) formData.append('logo', logoFile);
+      if (brandingEnabled && logoFile) formData.append('logo', logoFile);
 
       if (!submissionKeyRef.current) {
         submissionKeyRef.current = (window.crypto && typeof window.crypto.randomUUID === 'function')
@@ -392,6 +416,14 @@ export default function AICommercials({ initialTab = 'create' }) {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
+        if (data.code === 'NO_QUICK_AD_CREDITS') {
+          submissionKeyRef.current = null;
+          await loadCredits();
+          setStatus('');
+          setIsSubmitting(false);
+          setShowCredits(true);
+          return null;
+        }
         // A definite server response means this attempt ended; a network exception below
         // deliberately keeps the key so a retry cannot accidentally start a second paid job.
         if (response.status !== 409 || ['GENERATION_FAILED', 'USER_CANCELLED', 'GENERATION_EXPIRED', 'GENERATION_DELETED'].includes(data.code)) submissionKeyRef.current = null;
@@ -546,15 +578,20 @@ export default function AICommercials({ initialTab = 'create' }) {
                 <textarea id="commercial-specs" value={specifications} onChange={e => setSpecifications(e.target.value.slice(0,500))} maxLength={500} rows={4} placeholder="e.g. Advertise my Arabian tea with a warm, elegant feel. Show it being poured and end with an invitation to order. Keep the packaging unchanged." aria-describedby="commercial-specs-help commercial-specs-count" />
                 <div className="sf-commercials__spec-footer"><span>Your product stays the focus</span><span id="commercial-specs-count">{specifications.length}/500</span></div>
               </div>
-              <details className="sf-commercials__branding-options">
-                <summary>Product name and branding <span>Optional</span></summary>
+              <div className="sf-commercials__branding-options">
+                <div className="sf-commercials__branding-toggle">
+                  <div><strong id="commercial-branding-label">Product name and branding</strong><span>Optional</span></div>
+                  <button type="button" role="switch" aria-checked={brandingEnabled} aria-labelledby="commercial-branding-label" aria-controls="commercial-branding-fields" className="sf-commercials__switch" onClick={() => setBrandingEnabled(enabled => !enabled)}><span /></button>
+                </div>
+                <div id="commercial-branding-fields" hidden={!brandingEnabled}>
               <div className="sf-commercials__fields">
                 <label>Product name<input value={productName} onChange={e => setProductName(e.target.value)} placeholder="e.g. Signature leather bag" maxLength={100} /></label>
                 <label>Brand name<input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100} /></label>
                 <label>Contact / call to action<input value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120} /></label>
               </div>
               <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional brand mark for your final commercial.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => handleLogoChange(e.target)} /></label></div>
-              </details>
+                </div>
+              </div>
             </section>
 
             <section className="sf-commercials__panel">
@@ -571,11 +608,10 @@ export default function AICommercials({ initialTab = 'create' }) {
               <small>{user?.role ? `Available credits: ${balance.quickAdCredits || 0}` : 'Log in to view your credit balance'}</small>
             </div>
 
-            <Button fullWidth size="lg" disabled={isSubmitting || !canAfford} onClick={handleSubmit}>
+            <Button fullWidth size="lg" disabled={isSubmitting} onClick={handleSubmit}>
               <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${requiredCredits} credits`}
             </Button>
             {isSubmitting && activeJob?.status === 'pending' && <button type="button" className="sf-commercials__secondary" disabled={!!cancellingId || activeJob.cancellationRequested} onClick={() => cancelJob(activeJob)}>{activeJob.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
-            {!canAfford && <p className="sf-commercials__footnote">You have {balance.quickAdCredits || 0} credits available. Buy more to generate this ad.</p>}
             <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>
           </div>
 
@@ -595,17 +631,28 @@ export default function AICommercials({ initialTab = 'create' }) {
               ) : <span className="sf-commercials__duration">22 sec commercial</span>}
             </div>
             <div className="sf-commercials__preview-details">
-              <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
-              <div><span>BRAND</span><strong>{brandName || 'Your brand'}</strong></div>
+              <div><span>PRODUCT</span><strong>{(brandingEnabled && productName) || 'Your product'}</strong></div>
+              <div><span>BRAND</span><strong>{(brandingEnabled && brandName) || 'Your brand'}</strong></div>
               <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · 4 credits` : `Premium · 7 credits`}</strong></div>
             </div>
-            {logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
+            {brandingEnabled && logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
             {photoFiles.length > 0 && <small className="sf-commercials__file-meta">{photoFiles.length} product photo{photoFiles.length > 1 ? 's' : ''} · {toFileSizeLabel(photoFiles.reduce((sum, file) => sum + file.size, 0))}</small>}
-            {logoFile && <small className="sf-commercials__file-meta">Logo: {toFileSizeLabel(logoFile.size)}</small>}
+            {brandingEnabled && logoFile && <small className="sf-commercials__file-meta">Logo: {toFileSizeLabel(logoFile.size)}</small>}
           </aside>
         </div>
       </>
     )}
+    {showCredits && <dialog ref={creditsDialogRef} className="sf-commercials__credits-dialog" aria-labelledby="commercial-credits-title" aria-describedby="commercial-credits-description" onCancel={() => setShowCredits(false)} onClick={event => { if (event.target === event.currentTarget) setShowCredits(false); }}>
+      <div className="sf-commercials__credits-content">
+        <span className="sf-commercials__credits-icon" aria-hidden="true"><UiIcon name="wallet" /></span>
+        <h2 id="commercial-credits-title">A few credits away</h2>
+        <p id="commercial-credits-description">Your {tier === 'premium' ? 'Premium' : 'Standard'} commercial needs {requiredCredits} credits. Add credits when you’re ready to bring it to life.</p>
+        <div className="sf-commercials__credit-summary"><span>Available<strong>{balance.quickAdCredits || 0}</strong></span><span>Needed<strong>{Math.max(0, requiredCredits - Number(balance.quickAdCredits || 0))} more</strong></span></div>
+        <a className="sf-commercials__buy-credits" href="/quickads/credits" target="_blank" rel="noopener noreferrer" onClick={() => setShowCredits(false)}>Buy credits <UiIcon name="arrow-right" /></a>
+        <small>Checkout opens in a new tab. Your draft stays here.</small>
+        <button type="button" className="sf-commercials__credits-dismiss" onClick={() => setShowCredits(false)}>Keep editing</button>
+      </div>
+    </dialog>}
   </main>;
 }
 
