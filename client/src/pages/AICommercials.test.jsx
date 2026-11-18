@@ -14,6 +14,8 @@ async function render(initialTab = 'create') {
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   credits = 0; jobs = [];
+  HTMLDialogElement.prototype.showModal = jest.fn(function () { this.setAttribute('open', ''); });
+  HTMLDialogElement.prototype.close = jest.fn(function () { this.removeAttribute('open'); });
   global.fetch = jest.fn(async url => ({ ok: true, json: async () => url.endsWith('/credits')
     ? { success: true, quickAdCredits: credits, freePreviewAvailable: true }
     : { success: true, jobs, generations: jobs } }));
@@ -21,9 +23,13 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); global.fetch = previousFetch; jest.restoreAllMocks(); });
 
-test('commercial UI requires credits even if an older server advertises a free preview', async () => {
+test('commercial UI offers credit purchase even if an older server advertises a free preview', async () => {
   await render();
-  expect(button('Generate commercial').disabled).toBe(true);
+  expect(button('Generate commercial').disabled).toBe(false);
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(container.querySelector('dialog').textContent).toContain('more');
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
   expect(container.textContent).not.toMatch(/free preview/i);
   expect(container.textContent).toContain('4 credits');
   expect(container.textContent).toContain('7 credits');
@@ -35,7 +41,11 @@ test('four credits allow Standard but do not allow Premium', async () => {
   await render();
   expect(button('Generate commercial').disabled).toBe(false);
   await act(async () => button('Premium').click());
-  expect(button('Generate commercial').disabled).toBe(true);
+  expect(button('Generate commercial').disabled).toBe(false);
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(container.querySelector('dialog').textContent).toContain('more');
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
 
 test('edit preserves flattened contact and specifications and delete removes the card', async () => {
@@ -85,7 +95,7 @@ test('simple creation sends a photo and brief without a style or required brandi
   await render();
   expect(container.textContent).not.toMatch(/Choose your creative direction|Scene-by-scene creation|Idle/);
   expect(container.textContent).toContain('Available credits: 4');
-  expect(container.querySelector('details').open).toBe(false);
+  expect(container.querySelector('[role="switch"]').getAttribute('aria-checked')).toBe('false');
   const upload = container.querySelector('.sf-commercials__upload input');
   Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
   await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
@@ -175,4 +185,66 @@ test('retry progress looks up the selected ad directly, including older history 
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/generations/older-ad'), expect.objectContaining({ headers: { Authorization: 'Bearer session' } }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/api/ai-commercials/jobs'))).toBe(false);
   await act(async () => finish({ ok: true, json: async () => ({ success: true }) }));
+});
+
+
+test('credit popup preserves the brief, links to checkout and restores focus', async () => {
+  await render();
+  const generate = button('Generate commercial');
+  generate.focus();
+  await act(async () => generate.click());
+  const link = container.querySelector('dialog a');
+  expect(link.getAttribute('href')).toBe('/quickads/credits');
+  expect(link.target).toBe('_blank');
+  expect(document.body.style.overflow).toBe('hidden');
+  await act(async () => button('Keep editing').click());
+  expect(container.querySelector('dialog')).toBeNull();
+  expect(document.activeElement).toBe(generate);
+  expect(document.body.style.overflow).toBe('');
+});
+
+test('branding switch keeps entered values but omits them and the logo when off', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(() => 'blob:image'); URL.revokeObjectURL = jest.fn();
+  await render();
+  const toggle = container.querySelector('[role="switch"]');
+  const fields = container.querySelector('#commercial-branding-fields');
+  expect(fields.hidden).toBe(true);
+  await act(async () => toggle.click());
+  expect(fields.hidden).toBe(false);
+  const input = fields.querySelector('input');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Tea');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  for (const upload of [container.querySelector('.sf-commercials__upload input'), fields.querySelector('input[type="file"]')]) {
+    Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
+    await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  }
+  await act(async () => toggle.click());
+  expect(fields.hidden).toBe(true);
+  await act(async () => toggle.click());
+  expect(input.value).toBe('Tea');
+  await act(async () => toggle.click());
+  await act(async () => button('Generate commercial').click());
+  const request = global.fetch.mock.calls.find(([url]) => url.endsWith('/generate'));
+  expect(request[1].body.get('productName')).toBe('');
+  expect(request[1].body.get('logo')).toBeNull();
+});
+
+test('server credit rejection opens purchase without sending user to history', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(() => 'blob:image'); URL.revokeObjectURL = jest.fn();
+  const normal = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation((url, options) => url.endsWith('/generate')
+    ? Promise.resolve({ ok: false, status: 403, json: async () => ({ success: false, code: 'NO_QUICK_AD_CREDITS' }) }) : normal(url, options));
+  await render();
+  const upload = container.querySelector('.sf-commercials__upload input');
+  Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
+  await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  credits = 0;
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(button('Generate commercial').disabled).toBe(false);
+  expect(container.querySelector('.sf-commercials__upload img')).not.toBeNull();
 });
