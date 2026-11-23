@@ -4,12 +4,13 @@ const { feeStats } = require('../services/campaignPricing');
 const { reviewSubmission } = require('../services/reviewSubmission');
 const { reviewWithdrawal } = require('../services/wallet');
 const { getQuickAdAnalytics } = require('../services/quickAdAnalytics');
+const { isAdmin } = require('../services/adminAccess');
 const database = req => req.app.locals.db;
 
 const { authenticateToken } = require('../middleware/auth');
 
 const adminOnly = (req, res, next) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   next();
@@ -23,6 +24,18 @@ router.get('/quick-ads/analytics', auth, async (req, res) => {
   } catch {
     console.error('[Quick Ads analytics] Could not read financial analytics');
     res.status(503).json({ success: false, message: 'Quick Ads analytics could not be loaded. Please try again.' });
+  }
+});
+
+// Reuse the verified, transactional credit-award path; never manually adjust a balance.
+router.post('/quick-ads/payments/:reference/verify', auth, async (req, res) => {
+  try {
+    const { verifyQuickAdPayment } = require('../services/quickAdPayments');
+    const result = await verifyQuickAdPayment(database(req), req.params.reference, undefined, req.app.locals.paystackConfig);
+    res.set('Cache-Control', 'no-store').json(result);
+  } catch (error) {
+    res.status(error.quickAdSafe ? error.statusCode : 503).json({ success: false,
+      message: error.quickAdSafe ? error.message : 'Payment verification is unavailable. Please try again.' });
   }
 });
 

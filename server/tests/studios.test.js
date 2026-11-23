@@ -57,3 +57,35 @@ test('unknown bundled model asset cannot read arbitrary files',async()=>{
  const {resolveModelReference}=require('../services/fashionModels');
  await assert.rejects(resolveModelReference({}, {modelId:'hausa_female',modelAssetKey:'../../secret'}),/Unknown model/);
 });
+
+test('FASHN CDN results are accepted without trusting lookalike hosts', () => {
+  assert.equal(providerUrl('https://cdn.fashn.ai/result.png'), 'https://cdn.fashn.ai/result.png');
+  for (const url of ['https://cdn.fashn.ai.evil.test/result', 'https://evil.cdn.fashn.ai/result', 'http://cdn.fashn.ai/result', 'https://user@cdn.fashn.ai/result']) assert.throws(() => providerUrl(url));
+});
+test('finalization resumes stored media without paying for missing image checkpoints', async () => {
+  const { db, id } = await seed();
+  await db.QuickAdGeneration.updateOne({ id }, { $set: { media: { publicId: 'saved', outputUrl: 'https://res.cloudinary.com/demo/saved.mp4' }, studioAssets: {} } });
+  const { process, calls } = processor();
+  await runOne(db, id, process);
+  assert.equal(calls.length, 0);
+  assert.equal((await db.QuickAdGeneration.findOne({ id })).status, 'completed');
+  assert.equal((await db.User.findOne({ id: 'owner' })).quickAdCredits, 19);
+});
+test('generic recovery never bypasses a studio voiceover', () => {
+  const { recoverable } = require('../services/quickAdRecovery');
+  assert.equal(recoverable({ provider: 'studios', status: 'failed', media: { publicId: 'saved' } }), false);
+});
+test('vehicle views follow uploaded order and showcase details are optional', () => {
+  const result = validate({ mode: 'auto_cinematic', sourceViews: '["interior","front"]' }, [file, file]);
+  assert.deepEqual(result.sourceViews, ['interior', 'front']);
+  assert.throws(() => validate({ mode: 'auto_cinematic', sourceViews: '["front"]' }, [file, file]));
+  assert.throws(() => validate({ mode: 'auto_voiceover' }, [file, file]), /manufacturer/);
+});
+test('voiceover includes optional facts and detects overlong scripts before submission', () => {
+  const { narrationSummary } = require('../services/studioInputs');
+  const vehicle = { year: '2020', manufacturer: 'Toyota', vehicleModel: 'Camry', price: '₦20m', mileage: '40000 km', features: 'Sunroof', contact: '08012345678' };
+  const summary = narrationSummary({ vehicle });
+  for (const fact of Object.values(vehicle)) assert.ok(summary.script.includes(fact));
+  assert.equal(summary.withinLimit, true);
+  assert.equal(narrationSummary({ vehicle: { ...vehicle, features: 'Long description '.repeat(40) } }).withinLimit, false);
+});

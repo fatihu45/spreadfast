@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const axios = require('axios');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -32,6 +32,10 @@ const { PURPOSE: QUICK_AD_PAYMENT_PURPOSE, assertCampaignPayment, verifyQuickAdP
 const { campaignView } = require('./services/campaignView');
 const { safeError } = require('./services/safeError');
 const app = express();
+const { isAdmin } = require('./services/adminAccess');
+const { normalizeEmail, validPassword, findEmailUser } = require('./services/accountIdentity');
+const { authLimit } = require('./middleware/authLimits');
+app.set('trust proxy', 1);
 
 // ==================== MIDDLEWARE ====================
 const allowedOrigins = [
@@ -66,6 +70,7 @@ app.use('/api', (req, res, next) => {
 // ==================== ROUTES AFTER CORS ====================
 const adminRoutes = require('./routes/admin');
 app.use('/api/admin', adminRoutes);
+app.use('/api/account', require('./routes/account').createAccountRouter());
 
 // ==================== RESEND EMAIL ====================
 let resend = null;
@@ -108,6 +113,7 @@ const getPaystackConfig = () => {
 };
 
 const paystackConfig = getPaystackConfig();
+app.locals.paystackConfig = paystackConfig;
 console.log(`✅ Paystack initialized in ${paystackConfig.mode} mode`);
 
 // ==================== FILE UPLOAD CONFIGURATION ====================
@@ -183,18 +189,21 @@ const localDB = {
     },
     updateOne: (query, update) => {
       let data = readJSON('users.json');
+      let matchedCount = 0;
       data = data.map(item => {
         if (!matchQuery([item], query).length) return item;
+        matchedCount++;
         const next = { ...item };
         for (const [key, value] of Object.entries(update)) {
           if (key === '$inc') for (const [field, increment] of Object.entries(value)) next[field] = (next[field] || 0) + increment;
           else if (key === '$push') for (const [field, entry] of Object.entries(value)) next[field] = [...(next[field] || []), entry];
+          else if (key === '$set') Object.assign(next, value);
           else next[key] = value;
         }
         return next;
       });
       writeJSON('users.json', data);
-      return Promise.resolve({ nModified: 1 });
+      return Promise.resolve({ nModified: matchedCount, matchedCount, modifiedCount: matchedCount });
     }
   },
   Campaign: {
@@ -351,6 +360,7 @@ function matchQuery(data, query) {
         const [parent, child] = key.split('.');
         return child ? !(item[parent] || []).some(entry => entry[child] === val.$ne) : item[key] !== val.$ne;
       }
+      if (val && typeof val === 'object' && '$regex' in val) return new RegExp(val.$regex, val.$options || '').test(item[key] || '');
       return item[key] === val;
     })
   );
@@ -697,23 +707,30 @@ require('./services/studioWorker').startStudioWorker(DB, isMongoConnected);
 aiCommercialsRoute.startWorker(DB,isMongoConnected);
 app.use('/api/quick-ads', quickAdsRoute);
 app.use('/api/ai-commercials', aiCommercialsRoute);
+const recoveryMedia = require('./routes/quickAdMedia').createQuickAdMediaRouter({ cloudinaryClient: cloudinary });
+require('./services/generationWatchdog').startGenerationWatchdog(DB, isMongoConnected, {
+  quick: recoveryMedia.recoverSavedVideo, commercial: aiCommercialsRoute.resumeSavedCommercial
+});
 const { createQuickAdPaymentsRouter } = require('./routes/quickAdPayments');
 app.use('/api/quick-ads', createQuickAdPaymentsRouter({ paystackConfig }));
 
 // ==================== AUTH ROUTES ====================
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimit({ name: 'register', max: 10 }), async (req, res) => {
   try {
-    const { name, email, password, role, socialMedia } = req.body;
+    const { password, role, socialMedia } = req.body;
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const email = normalizeEmail(req.body.email);
+    if (!email || !name || name.length > 100 || !validPassword(password)) return res.status(400).json({ success: false, message: 'Enter a valid name and email, and a password of at least 8 characters (maximum 72 UTF-8 bytes).' });
     if (role && !['promoter', 'company'].includes(role)) return res.status(400).json({success: false, message: 'Choose a promoter or business account.'});
     if (typeof email !== 'string' || typeof password !== 'string' || typeof name !== 'string') return res.status(400).json({success: false, message: 'Valid name, email and password required'});
-    console.log('Register attempt:', { name, email, role });
+    // Do not log account credentials or registration details.
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password required' });
     }
 
     if (process.env.ADMIN_EMAIL && email.trim().toLowerCase() === process.env.ADMIN_EMAIL.trim().toLowerCase()) return res.status(400).json({success: false, message: 'This email is reserved. Please contact support.'});
-    const existingUser = await DB.User.findOne({ email });
+    const existingUser = await findEmailUser(DB.User, email);
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
@@ -759,19 +776,21 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Register error:', safeError(error));
-    res.status(500).json({ success: false, message: 'Registration failed: ' + error.message });
+    res.status(error.code === 11000 || error.statusCode === 409 ? 409 : 500).json({ success: false, message: error.code === 11000 || error.statusCode === 409 ? 'This email is already registered or needs account support.' : 'Registration failed. Please try again.' });
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimit({ name: 'login', max: 30 }), async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const password = req.body.password;
+    if (!email || typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > 4096) return res.status(400).json({ success: false, message: 'Enter a valid email and password.' });
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    const user = await DB.User.findOne({ email });
+    const user = await findEmailUser(DB.User, email);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -792,7 +811,7 @@ app.post('/api/auth/login', async (req, res) => {
       success: true,
       message: 'Login successful',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, walletBalance: user.walletBalance }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isAdmin: isAdmin(user), walletBalance: user.walletBalance }
     });
   } catch (error) {
     console.error('Login error:', safeError(error));
@@ -808,7 +827,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     }
     res.json({
       success: true,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, walletBalance: user.walletBalance }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isAdmin: isAdmin(user), walletBalance: user.walletBalance }
     });
   } catch (error) {
     console.error('Get user error:', safeError(error));
@@ -816,9 +835,9 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', authLimit({ name: 'forgot-password', max: 5 }), async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body.email);
     if (!email) {
       return res.status(400).json({ success: false, message: 'Email required' });
     }
@@ -828,7 +847,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       message: 'If that email is registered, a reset link has been sent.'
     };
 
-    const user = await DB.User.findOne({ email });
+    const user = await findEmailUser(DB.User, email);
     if (!user) {
       // Same response whether or not the user exists — prevents email enumeration
       return res.json(genericResponse);
@@ -853,14 +872,14 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 });
 
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', authLimit({ name: 'reset-password', max: 10 }), async (req, res) => {
   try {
     const { token, newPassword } = req.body;
-    if (!token || !newPassword) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || typeof newPassword !== 'string') {
       return res.status(400).json({ success: false, message: 'Token and new password required' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    if (!validPassword(newPassword)) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters and at most 72 UTF-8 bytes' });
     }
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -872,11 +891,12 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await DB.User.updateOne(
-      { id: user.id },
+    const changed = await DB.User.updateOne(
+      { id: user.id, resetPasswordTokenHash: tokenHash },
       { password: hashedPassword, resetPasswordTokenHash: null, resetPasswordExpires: null, $inc: {tokenVersion: 1} }
     );
 
+    if (changed.matchedCount === 0) return res.status(400).json({ success: false, message: 'Reset link was already used.' });
     await passwordChanged(DB, user);
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
@@ -1348,7 +1368,7 @@ app.get('/api/campaigns/:campaignId/submissions', authenticateToken, async (req,
   try {
     const campaign = await DB.Campaign.findOne({id: req.params.campaignId});
     if (!campaign) return res.status(404).json({success: false, message: 'Campaign not found'});
-    if (campaign.companyId !== req.user.id && req.user.email !== process.env.ADMIN_EMAIL) return res.status(403).json({success: false, message: 'Campaign owner access required'});
+    if (campaign.companyId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({success: false, message: 'Campaign owner access required'});
     const submissions = await DB.Submission.find({ campaignId: req.params.campaignId });
     res.json({ success: true, submissions });
   } catch (error) {
@@ -1443,12 +1463,12 @@ app.post('/api/withdrawals', authenticateToken, async (req, res) => {
 
 // ==================== ADMIN ROUTES ====================
 app.get('/api/admin/check', authenticateToken, (req, res) => {
-  const isAdmin = req.user.email === process.env.ADMIN_EMAIL;
-  res.json({ success: true, isAdmin });
+  const admin = isAdmin(req.user);
+  res.json({ success: true, isAdmin: admin });
 });
 
 app.get('/api/admin/users', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1460,7 +1480,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/admin/campaigns', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1472,7 +1492,7 @@ app.get('/api/admin/campaigns', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/admin/submissions', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1489,7 +1509,7 @@ app.get('/api/admin/submissions', authenticateToken, async (req, res) => {
 });
 
 app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1518,7 +1538,7 @@ app.patch('/api/admin/submissions/:submissionId', authenticateToken, async (req,
 });
 
 app.get('/api/admin/withdrawals', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1530,7 +1550,7 @@ app.get('/api/admin/withdrawals', authenticateToken, async (req, res) => {
 });
 
 app.patch('/api/admin/withdrawals/:withdrawalId', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) return res.status(403).json({success: false, message: 'Admin access required'});
+  if (!isAdmin(req.user)) return res.status(403).json({success: false, message: 'Admin access required'});
   try {
     const withdrawal = await reviewWithdrawal(DB, req.params.withdrawalId, req.body.status);
     res.json({success: true, message: 'Withdrawal reviewed', withdrawal});
@@ -1538,7 +1558,7 @@ app.patch('/api/admin/withdrawals/:withdrawalId', authenticateToken, async (req,
 });
 
 app.post('/api/admin/withdrawals/:withdrawalId/review', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) return res.status(403).json({success: false, message: 'Admin access required'});
+  if (!isAdmin(req.user)) return res.status(403).json({success: false, message: 'Admin access required'});
   try {
     const withdrawal = await reviewWithdrawal(DB, req.params.withdrawalId, req.body.status);
     res.json({success: true, message: 'Withdrawal reviewed', withdrawal});
@@ -1546,7 +1566,7 @@ app.post('/api/admin/withdrawals/:withdrawalId/review', authenticateToken, async
 });
 
 app.delete('/api/admin/campaigns/:campaignId', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1560,7 +1580,7 @@ app.delete('/api/admin/campaigns/:campaignId', authenticateToken, async (req, re
 });
 
 app.patch('/api/admin/campaigns/:campaignId', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {
@@ -1583,7 +1603,7 @@ app.patch('/api/admin/campaigns/:campaignId', authenticateToken, async (req, res
 });
 
 app.get('/api/admin/all-stats', authenticateToken, async (req, res) => {
-  if (req.user.email !== process.env.ADMIN_EMAIL) {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Admin access required' });
   }
   try {

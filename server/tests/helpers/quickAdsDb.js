@@ -3,7 +3,14 @@
 function quickAdsDb(users = []) {
   let state = { User: structuredClone(users), QuickAdGeneration: [], PaystackTransaction: [], Withdrawal: [], EmailNotification: [] };
   let tail = Promise.resolve();
-  const matches = (row, query) => Object.entries(query).every(([key, value]) => value && typeof value === 'object' && '$exists' in value ? (row[key] !== undefined) === value.$exists : row[key] === value);
+  const matches = (row, query) => Object.entries(query).every(([key, value]) => {
+    if (value && typeof value === 'object') {
+      if ('$exists' in value) return (row[key] !== undefined) === value.$exists;
+      if ('$ne' in value) return row[key] !== value.$ne;
+      if ('$regex' in value) return new RegExp(value.$regex, value.$options || '').test(row[key] || '');
+    }
+    return row[key] === value;
+  });
   const buildCursor = rows => {
     const data = Array.from(rows);
     const chain = data;

@@ -30,6 +30,7 @@ function slotFor(now, settings) {
   return date.toISOString().slice(0,10); // At most one slot per Lagos date, even after an hour change.
 }
 function eligible(user, audience = 'all') {
+  if (user.marketingOptedOut === true) return false;
   const allowed = audience === 'registered'
     ? user.marketingSubscribed === true || (!user.marketingConsentAt && !user.marketingConsentSource)
     : user.marketingSubscribed === true;
@@ -75,7 +76,7 @@ async function deliverCampaign({ models, User, resend, campaign, pace, scheduled
   try {
     const segment = checked(await resend.segments.create({ name: `SpreadFast ${slot} ${campaign.id}` })); await pace();
     await Campaign.updateOne({ _id: campaign._id }, { $set: { segmentId: segment.id } });
-    const users = await User.find(campaign.audience === 'registered' ? { role: { $in: ['company', 'promoter'] } } : { marketingSubscribed: true }).select('id name email role status marketingSubscribed marketingConsentAt marketingConsentSource').lean();
+    const users = await User.find(campaign.audience === 'registered' ? { role: { $in: ['company', 'promoter'] } } : { marketingSubscribed: true }).select('id name email role status marketingSubscribed marketingOptedOut marketingConsentAt marketingConsentSource').lean();
     const seen = new Set(); let count = 0;
     for (const user of users) {
       const fresh = await User.findOne({ id: user.id });

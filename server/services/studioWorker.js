@@ -79,7 +79,10 @@ function createProcessor({ cloudinary = cloudinaryDefault, getFal, queue = runQu
     }
     const modelFashion = !!input.modelId;
     let images = [];
-    if (modelFashion) {
+    if (job.media?.publicId) {
+      // Finalization recovery must never return to a paid generation stage.
+      images = [job.imageUrl];
+    } else if (modelFashion) {
       await save({ stage: 'generating_images' });
       if (!assets.modelReference) {
         assets.modelReference = { url: await resolveModelReference(cloudinary, input) };
@@ -101,7 +104,7 @@ function createProcessor({ cloudinary = cloudinaryDefault, getFal, queue = runQu
     }
     const clipCount = input.mode.startsWith('auto_') ? images.length : 1;
     const clips = [];
-    for (let i = 0; i < clipCount; i++) {
+    for (let i = 0; !job.media?.publicId && i < clipCount; i++) {
       await save({ stage: 'generating_video' });
       const duration = modelFashion ? job.outputDurationSeconds : 5;
       const modern = job.model === MODELS.motion;
@@ -175,12 +178,14 @@ function startStudioWorker(DB, connected, env = process.env) {
     if (busy || stopped || !connected()) return;
     busy = true;
     try {
-      const rows = await DB.QuickAdGeneration.find({ provider: 'studios', status: 'pending' }).sort({ createdAt: 1 }).limit(100);
-      for (const row of rows) {
-        if (stopped) break;
-        if (new Date(row.expiresAt).getTime() <= Date.now()) await failGeneration(DB, { userId: row.userId, id: row.id, code: 'LEASE_EXPIRED' });
-        else if (await runOne(DB,row.id)) break;
-      }
+      const now = new Date();
+      const expired = await DB.QuickAdGeneration.find({ provider: 'studios', status: 'pending', expiresAt: { $lte: now } }).sort({ expiresAt: 1 }).limit(25);
+      for (const row of expired) await failGeneration(DB, { userId: row.userId, id: row.id, code: 'LEASE_EXPIRED' });
+      // Approval pauses and leased jobs must not fill the runnable window.
+      const rows = await DB.QuickAdGeneration.find({ provider: 'studios', status: 'pending', deletedAt: { $exists: false }, studioInput: { $exists: true },
+        stage: { $ne: 'awaiting_approval' }, expiresAt: { $gt: now },
+        $or: [{ workerUntil: { $exists: false } }, { workerUntil: { $lte: now } }] }).sort({ createdAt: 1 }).limit(2);
+      if (!stopped) await Promise.all(rows.map(row => runOne(DB, row.id)));
     } catch { console.error('[Studios] Worker tick unavailable'); }
     finally { busy = false; }
   };

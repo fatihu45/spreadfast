@@ -1,5 +1,21 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Button } from './ui';
+import './StudioControls.css';
+
+export function BrandingSwitch({ value, onChange, disabled = false }) {
+  const lastChoice = useRef({ mode: 'name', name: '' });
+  const id = useId();
+  const enabled = value.mode !== 'none';
+  useEffect(() => { if (enabled) lastChoice.current = value; }, [enabled, value]);
+  return <section className="sf-branding-switch">
+    <div className="sf-branding-switch__heading"><span id={id}>Add branding<small>Business name or logo</small></span>
+      <button type="button" className="sf-toggle" role="switch" aria-label="Add branding" aria-checked={enabled}
+        aria-controls={`${id}-options`} disabled={disabled}
+        onClick={() => onChange(enabled ? { ...value, mode: 'none' } : lastChoice.current)} />
+    </div>
+    {enabled && <div id={`${id}-options`}><QuickAdBranding expanded value={value} onChange={onChange} disabled={disabled} /></div>}
+  </section>;
+}
 
 export function appendBranding(form, value) {
   const mode = value.mode || 'none';
@@ -27,17 +43,17 @@ export default function QuickAdBranding({ value, onChange, disabled, expanded = 
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size || file.size > 2 * 1024 * 1024) {
       setError('Choose a PNG, JPG, or WEBP logo up to 2 MB.'); return;
     }
-    setError(''); onChange({ mode: 'logo', file });
+    setError(''); onChange({ ...value, mode: 'logo', file });
   }
   return <details className="quick-ad-branding" open={expanded || undefined}>
     <summary>{title}<span>Optional</span></summary>
     <div className="quick-ad-branding-body">
       <div className="quick-ad-branding-choices" role="group" aria-label="Branding type">
-        <button type="button" disabled={disabled} aria-pressed={value.mode === 'name'} onClick={() => { setError(''); onChange({ mode: 'name', name: '' }); }}>Business name</button>
-        <button type="button" disabled={disabled} aria-pressed={value.mode === 'logo'} onClick={() => { setError(''); onChange({ mode: 'logo' }); }}>Upload logo</button>
+        <button type="button" disabled={disabled} aria-pressed={value.mode === 'name'} onClick={() => { setError(''); onChange({ ...value, mode: 'name' }); }}>Business name</button>
+        <button type="button" disabled={disabled} aria-pressed={value.mode === 'logo'} onClick={() => { setError(''); onChange({ ...value, mode: 'logo' }); }}>Upload logo</button>
       </div>
       {value.mode === 'name' && <label className="quick-ad-branding-name" htmlFor={id}>Business name
-        <input id={id} type="text" maxLength={40} value={value.name || ''} placeholder="Your business name" disabled={disabled} onChange={event => onChange({ mode: 'name', name: event.target.value })} />
+        <input id={id} type="text" maxLength={40} value={value.name || ''} placeholder="Your business name" disabled={disabled} onChange={event => onChange({ ...value, mode: 'name', name: event.target.value })} />
       </label>}
       {value.mode === 'logo' && <div className="quick-ad-branding-logo">
         {(logoPreview || value.logoUrl) && <img src={logoPreview || value.logoUrl} alt="Your logo" />}

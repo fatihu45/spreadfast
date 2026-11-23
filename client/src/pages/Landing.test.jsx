@@ -22,6 +22,8 @@ function render(user = null) {
 }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
+  jest.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);

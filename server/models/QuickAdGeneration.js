@@ -73,6 +73,9 @@ const schema = new mongoose.Schema({
   providerCosts: mongoose.Schema.Types.Mixed,
   estimatedTotalCost: Number,
   providerReportedTotalCost: { type: Number, default: null },
+  autoRecoveryAttempted: Boolean,
+  brandingRetryUntil: Date,
+  brandingAttemptId: String,
   failureCode: String
 }, { timestamps: true });
 schema.index({ userId: 1, idempotencyKey: 1 }, { unique: true });

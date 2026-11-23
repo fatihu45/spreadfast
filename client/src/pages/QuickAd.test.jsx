@@ -87,20 +87,19 @@ test('sends authenticated multipart once and renders an inline playable result',
 
 test('fashion enables generation with both outfit photos and sends the pair without an ordinary product', async () => {
   await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{token:'session-token',user:{id:'company-1',role:'company'}}}><QuickAd key="fashion" dedicatedFashion /></AuthContext.Provider></MemoryRouter>));
-  act(() => Simulate.change(container.querySelector('input[value="fashion_studio"]')));
   const front = new File(['front'], 'front.png', { type: 'image/png' });
   const back = new File(['back'], 'back.png', { type: 'image/png' });
   const choose = (label, file) => act(() => Simulate.change(container.querySelector(`input[aria-label="${label}"]`), { target: { files: [file], value: '' } }));
   choose('Upload front outfit photo', front);
-  expect(button('Generate Quick Ad').disabled).toBe(true);
+  expect(button('Generate video').disabled).toBe(true);
   expect(container.querySelector('.quick-ad-stage-image').src).toBe('blob:preview');
   choose('Upload back outfit photo', back);
-  expect(button('Generate Quick Ad').disabled).toBe(false);
+  expect(button('Generate video').disabled).toBe(false);
   click(button('Remove'));
-  expect(button('Generate Quick Ad').disabled).toBe(true);
+  expect(button('Generate video').disabled).toBe(true);
   choose('Upload front outfit photo', front);
   axios.post.mockResolvedValue({ data: { ...paidResult, style: 'fashion_studio' } });
-  await act(async () => button('Generate Quick Ad').click());
+  await act(async () => button('Generate video').click());
   const [, form] = axios.post.mock.calls[0];
   expect(form.get('frontImage')).toBe(front);
   expect(form.get('backImage')).toBe(back);
@@ -254,8 +253,11 @@ test('promoters with an exhausted preview and zero credits cannot submit another
   axios.get.mockResolvedValue({ data: { success: true, quickAdCredits: 0, freePreviewAvailable: false } });
   await act(async () => root.render(<MemoryRouter><AuthContext.Provider value={{ token: 'session-token', user: { id: 'creator-1', role: 'promoter' } }}><QuickAd /></AuthContext.Provider></MemoryRouter>));
   expect(container.textContent).toContain('0 credits available');
-  expect(button('Generate Quick Ad')).toBeUndefined();
-  expect(button('Buy Credits').disabled).toBe(false);
+  expect(button('Generate Quick Ad').disabled).toBe(false);
+  HTMLDialogElement.prototype.showModal = jest.fn();
+  HTMLDialogElement.prototype.close = jest.fn();
+  click(button('Generate Quick Ad'));
+  expect(container.querySelector('dialog').textContent).toContain('credits');
   photo();
   expect(axios.post).not.toHaveBeenCalled();
 });
@@ -318,7 +320,8 @@ test('history shows real generation details and keeps free previews non-download
 });
 
 test('branding stays collapsed by default and sends the selected business name with generation', async () => {
-  expect(container.querySelector('.quick-ad-branding').open).toBe(false);
+  expect(container.querySelector('.quick-ad-branding')).toBeNull();
+  click(container.querySelector('[role="switch"]'));
   photo(); click(button('Business name'));
   const name = container.querySelector('.quick-ad-branding-name input');
   act(() => Simulate.change(name, { target: { value: 'Arewa Tailors' } }));
@@ -329,11 +332,11 @@ test('branding stays collapsed by default and sends the selected business name w
 });
 
 test('invalid logos are rejected and valid logo replacement is optional', () => {
-  photo(); click(button('Upload logo'));
+  photo(); click(container.querySelector('[role="switch"]')); click(button('Upload logo'));
   const input = container.querySelector('input[aria-label="Upload branding logo"]');
   act(() => Simulate.change(input, { target: { files: [new File(['bad'], 'logo.svg', { type: 'image/svg+xml' })], value: '' } }));
   expect(container.textContent).toContain('Choose a PNG, JPG, or WEBP logo up to 2 MB.');
-  click(button('Remove branding'));
+  click(container.querySelector('[role="switch"]'));
   expect(container.querySelector('input[aria-label="Upload branding logo"]')).toBeNull();
 });
 
