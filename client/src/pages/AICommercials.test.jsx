@@ -14,16 +14,22 @@ async function render(initialTab = 'create') {
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   credits = 0; jobs = [];
+  HTMLDialogElement.prototype.showModal = jest.fn(function () { this.setAttribute('open', ''); });
+  HTMLDialogElement.prototype.close = jest.fn(function () { this.removeAttribute('open'); });
   global.fetch = jest.fn(async url => ({ ok: true, json: async () => url.endsWith('/credits')
     ? { success: true, quickAdCredits: credits, freePreviewAvailable: true }
-    : { success: true, jobs } }));
+    : { success: true, jobs, generations: jobs } }));
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); global.fetch = previousFetch; jest.restoreAllMocks(); });
 
-test('commercial UI requires credits even if an older server advertises a free preview', async () => {
+test('commercial UI offers credit purchase even if an older server advertises a free preview', async () => {
   await render();
-  expect(button('Generate commercial').disabled).toBe(true);
+  expect(button('Generate commercial').disabled).toBe(false);
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(container.querySelector('dialog').textContent).toContain('more');
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
   expect(container.textContent).not.toMatch(/free preview/i);
   expect(container.textContent).toContain('4 credits');
   expect(container.textContent).toContain('7 credits');
@@ -35,7 +41,11 @@ test('four credits allow Standard but do not allow Premium', async () => {
   await render();
   expect(button('Generate commercial').disabled).toBe(false);
   await act(async () => button('Premium').click());
-  expect(button('Generate commercial').disabled).toBe(true);
+  expect(button('Generate commercial').disabled).toBe(false);
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(container.querySelector('dialog').textContent).toContain('more');
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
 
 test('edit preserves flattened contact and specifications and delete removes the card', async () => {
@@ -72,7 +82,7 @@ test('retry finishing calls only the saved-job endpoint', async () => {
   jobs = [{ generationId: 'saved-1', status: 'failed', productName: 'Bag', requiredCredits: 7, finalizationRetryAvailable: true }];
   await render('history');
   expect(container.textContent).toContain('7 credits are charged only when the video is finished');
-  await act(async () => button('Retry finishing').click());
+  await act(async () => button('Retry finishing video').click());
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/ai-commercials/jobs/saved-1/retry'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
 });
@@ -85,7 +95,7 @@ test('simple creation sends a photo and brief without a style or required brandi
   await render();
   expect(container.textContent).not.toMatch(/Choose your creative direction|Scene-by-scene creation|Idle/);
   expect(container.textContent).toContain('Available credits: 4');
-  expect(container.querySelector('details').open).toBe(false);
+  expect(container.querySelector('[role="switch"]').getAttribute('aria-checked')).toBe('false');
   const upload = container.querySelector('.sf-commercials__upload input');
   Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
   await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
@@ -133,10 +143,108 @@ test('pending history jobs can be cancelled with authentication', async () => {
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/pending-1/cancel'), expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer session' } }));
 });
 
-test('partial jobs show Resume commercial and never start a new generation', async () => {
+test('partial jobs show Retry commercial and never start a new generation', async () => {
   jobs = [{ generationId: 'partial-1', status: 'failed', commercialRetryAvailable: true, requiredCredits: 4 }];
   await render('history');
-  await act(async () => button('Resume commercial').click());
+  await act(async () => button('Retry commercial').click());
   expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/jobs/partial-1/retry'), expect.objectContaining({ method: 'POST' }));
   expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});
+
+test('unified history displays Quick Ads and recovers saved videos without generating again', async () => {
+  jobs = [{ generationId: 'quick-saved', provider: 'fal', style: 'studio', status: 'failed', recoveryAvailable: true, creditsUsed: 0 }];
+  await render('history');
+  expect(container.textContent).toContain('Quick Ad');
+  expect(container.textContent).toContain('0 credits used');
+  await act(async () => button('Recover saved video').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/quick-ads/generations/quick-saved/retry'), expect.objectContaining({ method: 'POST' }));
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/generate'))).toBe(false);
+});
+
+test('history can request older ads without dropping the studio filter', async () => {
+  const normal = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.includes('/generations?')
+    ? { ok: true, json: async () => ({ success: true, generations: jobs, hasMore: true }) }
+    : normal(url, options));
+  await render('history');
+  await act(async () => button('Next').click());
+  expect(global.fetch.mock.calls.some(([url]) => url.includes('page=2&limit=20&type=all'))).toBe(true);
+});
+
+test('retry progress looks up the selected ad directly, including older history pages', async () => {
+  jobs = [{ generationId: 'older-ad', status: 'failed', commercialRetryAvailable: true, requiredCredits: 4 }];
+  const normal = global.fetch;
+  let finish;
+  global.fetch = jest.fn((url, options) => {
+    if (url.endsWith('/jobs/older-ad/retry')) return new Promise(resolve => { finish = resolve; });
+    if (url.endsWith('/generations/older-ad')) return Promise.resolve({ ok: true, json: async () => ({ success: true, generationId: 'older-ad', status: 'pending', stage: 'finalizing' }) });
+    return normal(url, options);
+  });
+  await render('history');
+  await act(async () => button('Retry commercial').click());
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/generations/older-ad'), expect.objectContaining({ headers: { Authorization: 'Bearer session' } }));
+  expect(global.fetch.mock.calls.some(([url]) => url.endsWith('/api/ai-commercials/jobs'))).toBe(false);
+  await act(async () => finish({ ok: true, json: async () => ({ success: true }) }));
+});
+
+
+test('credit popup preserves the brief, links to checkout and restores focus', async () => {
+  await render();
+  const generate = button('Generate commercial');
+  generate.focus();
+  await act(async () => generate.click());
+  const link = container.querySelector('dialog a');
+  expect(link.getAttribute('href')).toBe('/quickads/credits');
+  expect(link.target).toBe('_blank');
+  expect(document.body.style.overflow).toBe('hidden');
+  await act(async () => button('Keep editing').click());
+  expect(container.querySelector('dialog')).toBeNull();
+  expect(document.activeElement).toBe(generate);
+  expect(document.body.style.overflow).toBe('');
+});
+
+test('branding switch keeps entered values but omits them and the logo when off', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(() => 'blob:image'); URL.revokeObjectURL = jest.fn();
+  await render();
+  const toggle = container.querySelector('[role="switch"]');
+  const fields = container.querySelector('#commercial-branding-fields');
+  expect(fields.hidden).toBe(true);
+  await act(async () => toggle.click());
+  expect(fields.hidden).toBe(false);
+  const input = fields.querySelector('input');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Tea');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  for (const upload of [container.querySelector('.sf-commercials__upload input'), fields.querySelector('input[type="file"]')]) {
+    Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
+    await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  }
+  await act(async () => toggle.click());
+  expect(fields.hidden).toBe(true);
+  await act(async () => toggle.click());
+  expect(input.value).toBe('Tea');
+  await act(async () => toggle.click());
+  await act(async () => button('Generate commercial').click());
+  const request = global.fetch.mock.calls.find(([url]) => url.endsWith('/generate'));
+  expect(request[1].body.get('productName')).toBe('');
+  expect(request[1].body.get('logo')).toBeNull();
+});
+
+test('server credit rejection opens purchase without sending user to history', async () => {
+  credits = 4;
+  URL.createObjectURL = jest.fn(() => 'blob:image'); URL.revokeObjectURL = jest.fn();
+  const normal = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation((url, options) => url.endsWith('/generate')
+    ? Promise.resolve({ ok: false, status: 403, json: async () => ({ success: false, code: 'NO_QUICK_AD_CREDITS' }) }) : normal(url, options));
+  await render();
+  const upload = container.querySelector('.sf-commercials__upload input');
+  Object.defineProperty(upload, 'files', { value: [new File(['image'], 'tea.png', { type: 'image/png' })] });
+  await act(async () => upload.dispatchEvent(new Event('change', { bubbles: true })));
+  credits = 0;
+  await act(async () => button('Generate commercial').click());
+  expect(container.querySelector('dialog[open]')).not.toBeNull();
+  expect(button('Generate commercial').disabled).toBe(false);
+  expect(container.querySelector('.sf-commercials__upload img')).not.toBeNull();
 });

@@ -60,7 +60,7 @@ async function verifyQuickAdPayment(DB, reference, userId, paystackConfig, http 
     headers: { Authorization: `Bearer ${paystackConfig.secretKey}` }, timeout: 15000
   });
   if (!response.data?.status || response.data.data?.status !== 'success') {
-    if (response.data?.status && response.data.data?.status === 'failed') {
+    if (response.data?.status && ['failed', 'abandoned'].includes(response.data.data?.status)) {
       const charge = response.data.data;
       await DB.withTransaction(async tx => {
         const stored = await tx.PaystackTransaction.findOne({ reference, ...(userId ? { userId } : {}) });
@@ -74,10 +74,11 @@ async function verifyQuickAdPayment(DB, reference, userId, paystackConfig, http 
         }
         const owner = await tx.User.findOne({ id: stored.userId });
         if (!owner) fail('ACCOUNT_NOT_FOUND', 'Account not found.', 404);
-        await tx.PaystackTransaction.updateOne({ reference }, { $set: { status: 'failed' } });
-        await enqueueEmail(tx, 'quick_payment_failed', reference, owner, { amount: stored.amount, reference });
+        await tx.PaystackTransaction.updateOne({ reference }, { $set: { status: charge.status } });
+        if (charge.status === 'failed') await enqueueEmail(tx, 'quick_payment_failed', reference, owner, { amount: stored.amount, reference });
       });
     }
+    if (response.data?.status && ['failed', 'abandoned'].includes(response.data.data?.status)) fail('PAYMENT_UNCONFIRMED', `Paystack reports this checkout as ${response.data.data.status}. No credits were added by this check.`, 409);
     fail('PAYMENT_UNCONFIRMED', 'We could not confirm this payment yet. Please retry confirmation using the same reference.', 409);
   }
   return awardQuickAdCredits(DB, { reference, userId, charge: response.data.data });

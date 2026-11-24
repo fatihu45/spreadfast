@@ -97,7 +97,7 @@ export default function Register() {
         <fieldset hidden={step !== 1} disabled={step !== 1 || loading}>
           <FormField label="Full name" required><Input type="text" autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your full name" /></FormField>
           <FormField label="Email" required><Input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" /></FormField>
-          <div className="sf-signup-password"><FormField label="Password" id="signup-password" required><Input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Create a password" /></FormField>
+          <div className="sf-signup-password"><FormField label="Password" id="signup-password" required><Input type={showPassword ? 'text' : 'password'} autoComplete="new-password" minLength={8} value={password} onChange={event => setPassword(event.target.value)} placeholder="Create a password" /></FormField>
             <Button variant="ghost" size="sm" className="sf-signup-password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-controls="signup-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Hide' : 'Show'}</Button>
           </div>
         </fieldset>

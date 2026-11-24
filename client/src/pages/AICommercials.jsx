@@ -1,7 +1,8 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
+import GenerationProgress from '../components/GenerationProgress';
 import UiIcon from '../components/ui/UiIcon';
 import './AICommercials.css';
 import './StudioPolish.css';
@@ -56,6 +57,12 @@ function validateImageFile(file, label = 'Image') {
 export default function AICommercials({ initialTab = 'create' }) {
   const { token, user } = useContext(AuthContext);
   const [tab, setTab] = useState(initialTab);
+  const [searchParams] = useSearchParams();
+  const resumeId = searchParams.get('job');
+  const [resumePending, setResumePending] = useState(!!resumeId);
+  const [brandingEnabled, setBrandingEnabled] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
+  const creditsDialogRef = useRef(null);
   const [productName, setProductName] = useState('');
   const [brandName, setBrandName] = useState('');
   const [contact, setContact] = useState('');
@@ -74,6 +81,9 @@ export default function AICommercials({ initialTab = 'create' }) {
   const [displayProgress, setDisplayProgress] = useState(0);
   const [balance, setBalance] = useState({ quickAdCredits: 0, requiredCredits: TIER_COST.standard });
   const [jobs, setJobs] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [retryingId, setRetryingId] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
@@ -83,20 +93,37 @@ export default function AICommercials({ initialTab = 'create' }) {
   const historyRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!isSubmitting) return undefined;
+    if (!isSubmitting && !retryingId) return undefined;
     const stage = activeJob?.stage || 'queued';
-    const target = COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
+    const target = stage === 'completed' ? 100 : stage === 'finalizing' ? 91
+      : Number.isInteger(activeJob?.completedScenes) && ['creating_scene', 'creating_video'].includes(stage)
+        ? Math.min(88, 18 + activeJob.completedScenes * 23 + (stage === 'creating_video' ? 15 : 5))
+        : COMMERCIAL_STAGE_PROGRESS[stage] ?? 7;
     const interval = window.setInterval(() => {
-      setDisplayProgress(current => Math.min(target, current + (target - current > 15 ? 2 : 1)));
+      setDisplayProgress(current => Math.max(current, Math.min(target, current + (target - current > 15 ? 2 : 1))));
     }, 220);
     return () => window.clearInterval(interval);
-  }, [isSubmitting, activeJob?.stage]);
+  }, [isSubmitting, retryingId, activeJob?.stage, activeJob?.completedScenes]);
 
   const requiredCredits = useMemo(() => balance.tierCredits?.[tier] || TIER_COST[tier], [tier, balance.tierCredits]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
   const tierAvailable = balance.tierAvailability?.[tier] !== false;
 
-  async function loadCredits() {
+  useEffect(() => {
+    if (!showCredits) return undefined;
+    const dialog = creditsDialogRef.current;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [showCredits]);
+
+  const loadCredits = useCallback(async () => {
     if (!token) return;
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/credits`, {
@@ -113,27 +140,38 @@ export default function AICommercials({ initialTab = 'create' }) {
     } catch (loadError) {
       setError(loadError.message || 'We could not load your credits.');
     }
-  }
+  }, [token, requiredCredits]);
+
+  // Keep the draft here while checkout runs in another tab.
+  useEffect(() => {
+    window.addEventListener('focus', loadCredits);
+    return () => window.removeEventListener('focus', loadCredits);
+  }, [loadCredits]);
 
   async function loadHistory() {
     if (!token) return;
     const request = ++historyRequestRef.current;
     try {
-      const response = await fetch(`${API_URL}/api/ai-commercials/jobs`, {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations?all=true&page=${historyPage}&limit=20&type=${historyFilter}`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include'
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not read your ads.');
-      if (request === historyRequestRef.current) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      if (request === historyRequestRef.current) { setJobs(Array.isArray(data.generations) ? data.generations : []); setHasMore(data.hasMore === true); }
     } catch (historyError) {
       setError(historyError.message || 'Could not load your previous ads.');
     }
   }
 
   async function retryFinalization(job) {
+    if (retryingId || isSubmitting) return;
     setRetryingId(job.generationId);
+    setActiveJob({ ...job, stage: job.finalizationRetryAvailable ? 'finalizing' : 'queued' });
+    setDisplayProgress(0);
+    setStatus(job.finalizationRetryAvailable ? 'Assembling final video' : 'Resuming saved commercial');
     setError('');
+    setNotice('');
     try {
       const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId)}/retry`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
@@ -143,6 +181,48 @@ export default function AICommercials({ initialTab = 'create' }) {
       setNotice('Your commercial is ready. Saved scenes were reused.');
       await loadCredits();
     } catch (retryError) { setError(retryError.message); }
+    finally { setRetryingId(null); setActiveJob(null); await loadHistory(); }
+  }
+
+  // A retry uses the same long-running backend request as first generation.
+  // Read the saved job while that request is in flight to animate real stage changes.
+  useEffect(() => {
+    if (!retryingId || !token) return undefined;
+    let stopped = false;
+    let checking = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(retryingId)}`, {
+          headers: { Authorization: `Bearer ${token}` }, credentials: 'include'
+        });
+        const data = await response.json();
+        const job = data;
+        if (!stopped && response.ok && job.generationId === retryingId) {
+          setActiveJob(job);
+          setStatus(stageLabel(job.stage));
+        }
+      } catch { /* Keep displaying estimated progress if the connection drops. */ }
+      finally { checking = false; }
+    };
+    check();
+    const timer = window.setInterval(check, 2000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [retryingId, token]);
+
+  async function retrySavedVideo(job) {
+    if (retryingId) return;
+    setRetryingId(job.generationId); setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId)}/${job.brandingRetryAvailable ? 'branding/retry' : 'retry'}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Recovery failed. Please retry.');
+      setNotice('Saved video recovered. No new AI generation was purchased.');
+      await loadCredits();
+    } catch (failure) { setError(failure.message); }
     finally { setRetryingId(null); await loadHistory(); }
   }
 
@@ -198,7 +278,7 @@ export default function AICommercials({ initialTab = 'create' }) {
     const title = job.title || job.productName || 'this ad';
     if (!window.confirm(`Delete "${title}" from My Ads? This cannot be undone.`)) return;
     try {
-      const response = await fetch(`${API_URL}/api/ai-commercials/jobs/${encodeURIComponent(job.generationId || job.id)}`, {
+      const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(job.generationId || job.id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include'
@@ -216,7 +296,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
   useEffect(() => {
     loadCredits();
-  }, [token, tier]);
+  }, [loadCredits]);
 
   useEffect(() => {
     if (tab !== 'history') return undefined;
@@ -224,7 +304,7 @@ export default function AICommercials({ initialTab = 'create' }) {
     // Long-running AI jobs may finish after the initial page load; keep history fresh.
     const timer = window.setInterval(() => loadHistory(), 5000);
     return () => window.clearInterval(timer);
-  }, [tab, token]);
+  }, [tab, token, historyPage, historyFilter]);
 
   const handlePhotoChange = (input) => {
     const files = Array.from(input?.files || []);
@@ -278,6 +358,30 @@ export default function AICommercials({ initialTab = 'create' }) {
     return () => { stopped = true; window.clearInterval(timer); };
   }, [isSubmitting, token]);
 
+  useEffect(() => {
+    if (!resumeId || !token) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const check = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(resumeId)}`, {
+          headers: { Authorization: `Bearer ${token}` }, credentials: 'include', signal: controller.signal
+        });
+        const job = await response.json();
+        if (controller.signal.aborted) return;
+        if (!response.ok || !job.success) throw new Error('Could not load this commercial.');
+        setActiveJob(job);
+        setResumePending(job.status === 'pending');
+        if (job.status === 'pending') timer = window.setTimeout(check, 3000);
+        else setTab('history');
+      } catch (error) {
+        if (!controller.signal.aborted) { setError('Could not load saved progress. Open My Ads to try again.'); setResumePending(false); }
+      }
+    };
+    check();
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [resumeId, token]);
+
   const handleLogoChange = (input) => {
     const file = input?.files?.[0] || null;
     const validation = file?.size > 2 * 1024 * 1024 ? 'Logo must be 2 MB or smaller.' : validateImageFile(file, 'Logo');
@@ -291,17 +395,18 @@ export default function AICommercials({ initialTab = 'create' }) {
   };
 
   const handleSubmit = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || resumePending) return;
     if (!token) {
       setError('Please log in before generating a commercial.');
       return;
     }
-    if (!photoFile) {
-      setError('Upload a product photo before generating.');
+    if (!canAfford) {
+      setError('');
+      setShowCredits(true);
       return;
     }
-    if (!canAfford) {
-      setError(`You need at least ${requiredCredits} credits for this tier. Buy more credits to continue.`);
+    if (!photoFile) {
+      setError('Upload a product photo before generating.');
       return;
     }
 
@@ -315,13 +420,13 @@ export default function AICommercials({ initialTab = 'create' }) {
 
     try {
       const formData = new FormData();
-      formData.append('productName', productName.trim());
-      formData.append('brandName', brandName.trim());
-      formData.append('contact', contact.trim());
+      formData.append('productName', brandingEnabled ? productName.trim() : '');
+      formData.append('brandName', brandingEnabled ? brandName.trim() : '');
+      formData.append('contact', brandingEnabled ? contact.trim() : '');
       formData.append('specifications', specifications.trim());
       formData.append('tier', tier);
       photoFiles.forEach(file => formData.append('productImage', file));
-      if (logoFile) formData.append('logo', logoFile);
+      if (brandingEnabled && logoFile) formData.append('logo', logoFile);
 
       if (!submissionKeyRef.current) {
         submissionKeyRef.current = (window.crypto && typeof window.crypto.randomUUID === 'function')
@@ -340,6 +445,14 @@ export default function AICommercials({ initialTab = 'create' }) {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
+        if (data.code === 'NO_QUICK_AD_CREDITS') {
+          submissionKeyRef.current = null;
+          await loadCredits();
+          setStatus('');
+          setIsSubmitting(false);
+          setShowCredits(true);
+          return null;
+        }
         // A definite server response means this attempt ended; a network exception below
         // deliberately keeps the key so a retry cannot accidentally start a second paid job.
         if (response.status !== 409 || ['GENERATION_FAILED', 'USER_CANCELLED', 'GENERATION_EXPIRED', 'GENERATION_DELETED'].includes(data.code)) submissionKeyRef.current = null;
@@ -372,6 +485,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
 
   return <main className="sf-commercials">
+    {resumeId && <section aria-label="Saved commercial progress">{resumePending && activeJob && <GenerationProgress job={activeJob} />}<Link to="/my-ads">Back to My Ads</Link></section>}
     <header className="sf-commercials__header">
       <div>
         <span className="sf-commercials__eyebrow">SPREADFAST AI STUDIO</span>
@@ -391,15 +505,25 @@ export default function AICommercials({ initialTab = 'create' }) {
 
     {tab === 'history' ? (
       <Card className="sf-commercials__empty">
+        <label>Ad type <select value={historyFilter} onChange={event => { setHistoryFilter(event.target.value); setHistoryPage(1); }}>
+          <option value="all">All ads</option><option value="quick">Quick Ads</option><option value="fashion">Fashion</option><option value="commercial">Commercials</option>
+        </select></label>
+        <div className="sf-commercials__history-actions">
+          <Button disabled={historyPage === 1} onClick={() => setHistoryPage(page => page - 1)}>Previous</Button>
+          <span>Page {historyPage}</span>
+          <Button disabled={!hasMore} onClick={() => setHistoryPage(page => page + 1)}>Next</Button>
+        </div>
         {(notice || error) && <p className={error ? "sf-commercials__notice sf-commercials__notice--error" : "sf-commercials__notice"} role="status">{error || notice}</p>}
         {jobs.length > 0 ? (
           <div className="sf-commercials__history-list">
             {jobs.map(job => {
-              const rawTitle = job.title || job.productName || 'AI commercial';
+              const isCommercial = !job.provider || job.provider === 'ai-commercials';
+              const rawTitle = job.title || job.productName || (isCommercial ? 'AI commercial' : job.style === 'fashion_studio' ? 'Fashion video' : 'Quick Ad');
               const title = String(rawTitle).replace(/[_-]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
               const rawStatus = String(job.status || job.stage || 'processing').toLowerCase();
               const isCompleted = rawStatus === 'completed' || rawStatus === 'complete';
               const isFailed = rawStatus === 'failed' || rawStatus === 'error';
+              const isRetrying = retryingId === job.generationId;
               const videoUrl = job.videoUrl || (job.previewPath ? `${API_URL}${job.previewPath}` : '');
               const createdAt = job.completedAt || job.createdAt || job.updatedAt;
               const dateLabel = createdAt && !Number.isNaN(new Date(createdAt).getTime())
@@ -413,8 +537,17 @@ export default function AICommercials({ initialTab = 'create' }) {
                     </div>
                   ) : (
                     <div className={`sf-commercials__history-media sf-commercials__history-media--placeholder ${isFailed ? 'is-failed' : ''}`} aria-label={isFailed ? 'Generation failed' : 'Video is processing'}>
-                      <UiIcon name={isFailed ? 'alert-circle' : 'video'} />
-                      <span>{job.cancelled ? 'Cancelled' : isFailed ? 'Generation paused' : 'Your video is processing'}</span>
+                      {isRetrying ? (
+                        <div className="sf-commercials__progress-overlay" role="status" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status}`}>
+                          <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
+                          <strong className="sf-commercials__progress-percent">{displayProgress}<small>%</small></strong>
+                          <span className="sf-commercials__progress-heading">Resuming your commercial</span>
+                          <span className="sf-commercials__progress-stage">{status || 'Preparing your commercial'}</span>
+                          <div className="sf-commercials__progress-track" aria-hidden="true"><div style={{ width: `${displayProgress}%` }} /></div>
+                          <small className="sf-commercials__progress-disclaimer">Estimated progress · saved scenes are reused</small>
+                        </div>
+                      ) : <><UiIcon name={isFailed ? 'alert-circle' : 'video'} />
+                        <span>{job.cancelled ? 'Cancelled' : isFailed ? 'Generation paused' : 'Your video is processing'}</span></>}
                     </div>
                   )}
                   <div className="sf-commercials__history-copy">
@@ -423,20 +556,22 @@ export default function AICommercials({ initialTab = 'create' }) {
                       <i aria-hidden="true" /> {job.cancellationRequested ? 'Cancelling...' : job.cancelled ? 'Cancelled' : stageLabel(job.stage || job.status)}
                     </span>
                     <small>{(job.style === 'auto' ? 'AI commercial' : String(job.style || 'Brand campaign').replace(/[_-]+/g, ' '))}{dateLabel ? ` · ${dateLabel}` : ''}</small>
+                    <small>{job.creditsUsed || 0} credits used{isFailed ? ' · No charge for this failed attempt' : ''}</small>
+                    {(job.recoveryAvailable || job.brandingRetryAvailable) && <button type="button" disabled={!!retryingId} onClick={() => retrySavedVideo(job)}>{retryingId === job.generationId ? 'Finishing saved video...' : job.brandingRetryAvailable ? 'Retry branding' : 'Recover saved video'}</button>}
                     {job.voiceover && <small>Voiceover: {job.voiceover}</small>}
                     <div className="sf-commercials__history-actions">
                       {isCompleted && job.downloadable
                         ? <button type="button" className="sf-commercials__icon-button" onClick={() => downloadJob(job)} aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></button>
                         : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
-                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => editJob(job)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => isCommercial ? editJob(job) : window.location.assign('/my-ads')} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
-                    {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" disabled={!!retryingId} onClick={() => retryFinalization(job)}>
-                      {retryingId === job.generationId ? 'Resuming...' : job.finalizationRetryAvailable ? 'Retry finishing' : 'Resume commercial'}
+                    {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" className="sf-commercials__retry-button" disabled={!!retryingId || isSubmitting} onClick={() => retryFinalization(job)}>
+                      <UiIcon name="arrow" /> {isRetrying ? `Resuming · ${displayProgress}%` : job.finalizationRetryAvailable ? 'Retry finishing video' : 'Retry commercial'}
                     </button>}
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <small>Reuses saved scenes. {job.requiredCredits || 4} credits are charged only when the video is finished.</small>}
                     {job.commercialRecoveryRequired && <small>Please contact support to recover this commercial safely. No credits were charged.</small>}
-                    {rawStatus === 'pending' && <button type="button" disabled={cancellingId === job.generationId || job.cancellationRequested} onClick={() => cancelJob(job)}>{job.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
+                    {isCommercial && rawStatus === 'pending' && <button type="button" disabled={cancellingId === job.generationId || job.cancellationRequested} onClick={() => cancelJob(job)}>{job.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
                     {isCompleted && !videoUrl ? (
                       <span className="sf-commercials__history-result">Video link unavailable</span>
                     ) : null}
@@ -473,15 +608,20 @@ export default function AICommercials({ initialTab = 'create' }) {
                 <textarea id="commercial-specs" value={specifications} onChange={e => setSpecifications(e.target.value.slice(0,500))} maxLength={500} rows={4} placeholder="e.g. Advertise my Arabian tea with a warm, elegant feel. Show it being poured and end with an invitation to order. Keep the packaging unchanged." aria-describedby="commercial-specs-help commercial-specs-count" />
                 <div className="sf-commercials__spec-footer"><span>Your product stays the focus</span><span id="commercial-specs-count">{specifications.length}/500</span></div>
               </div>
-              <details className="sf-commercials__branding-options">
-                <summary>Product name and branding <span>Optional</span></summary>
+              <div className="sf-commercials__branding-options">
+                <div className="sf-commercials__branding-toggle">
+                  <div><strong id="commercial-branding-label">Product name and branding</strong><span>Optional</span></div>
+                  <button type="button" role="switch" aria-checked={brandingEnabled} aria-labelledby="commercial-branding-label" aria-controls="commercial-branding-fields" className="sf-commercials__switch" onClick={() => setBrandingEnabled(enabled => !enabled)}><span /></button>
+                </div>
+                <div id="commercial-branding-fields" hidden={!brandingEnabled}>
               <div className="sf-commercials__fields">
                 <label>Product name<input value={productName} onChange={e => setProductName(e.target.value)} placeholder="e.g. Signature leather bag" maxLength={100} /></label>
                 <label>Brand name<input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Your business or brand" maxLength={100} /></label>
                 <label>Contact / call to action<input value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number, website or tagline" maxLength={120} /></label>
               </div>
               <div className="sf-commercials__logo"><div><strong>Add your logo</strong><p>Optional brand mark for your final commercial.</p></div><label className="sf-commercials__logo-button">{logo ? 'Logo selected' : 'Choose logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => handleLogoChange(e.target)} /></label></div>
-              </details>
+                </div>
+              </div>
             </section>
 
             <section className="sf-commercials__panel">
@@ -498,7 +638,7 @@ export default function AICommercials({ initialTab = 'create' }) {
               <small>{user?.role ? `Available credits: ${balance.quickAdCredits || 0}` : 'Log in to view your credit balance'}</small>
             </div>
 
-            <Button fullWidth size="lg" disabled={isSubmitting || !canAfford || !tierAvailable} onClick={handleSubmit}>
+            <Button fullWidth size="lg" disabled={isSubmitting || resumePending || !tierAvailable} onClick={handleSubmit}>
               <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${requiredCredits} credits`}
             </Button>
             {isSubmitting && activeJob?.status === 'pending' && <button type="button" className="sf-commercials__secondary" disabled={!!cancellingId || activeJob.cancellationRequested} onClick={() => cancelJob(activeJob)}>{activeJob.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
@@ -523,17 +663,28 @@ export default function AICommercials({ initialTab = 'create' }) {
               ) : <span className="sf-commercials__duration">Up to 24 sec commercial</span>}
             </div>
             <div className="sf-commercials__preview-details">
-              <div><span>PRODUCT</span><strong>{productName || 'Your product'}</strong></div>
-              <div><span>BRAND</span><strong>{brandName || 'Your brand'}</strong></div>
+              <div><span>PRODUCT</span><strong>{(brandingEnabled && productName) || 'Your product'}</strong></div>
+              <div><span>BRAND</span><strong>{(brandingEnabled && brandName) || 'Your brand'}</strong></div>
               <div><span>QUALITY</span><strong>{`${tier === 'standard' ? 'Standard' : 'Premium'} · ${requiredCredits} credits`}</strong></div>
             </div>
-            {logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
+            {brandingEnabled && logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
             {photoFiles.length > 0 && <small className="sf-commercials__file-meta">{photoFiles.length} product photo{photoFiles.length > 1 ? 's' : ''} · {toFileSizeLabel(photoFiles.reduce((sum, file) => sum + file.size, 0))}</small>}
-            {logoFile && <small className="sf-commercials__file-meta">Logo: {toFileSizeLabel(logoFile.size)}</small>}
+            {brandingEnabled && logoFile && <small className="sf-commercials__file-meta">Logo: {toFileSizeLabel(logoFile.size)}</small>}
           </aside>
         </div>
       </>
     )}
+    {showCredits && <dialog ref={creditsDialogRef} className="sf-commercials__credits-dialog" aria-labelledby="commercial-credits-title" aria-describedby="commercial-credits-description" onCancel={() => setShowCredits(false)} onClick={event => { if (event.target === event.currentTarget) setShowCredits(false); }}>
+      <div className="sf-commercials__credits-content">
+        <span className="sf-commercials__credits-icon" aria-hidden="true"><UiIcon name="wallet" /></span>
+        <h2 id="commercial-credits-title">A few credits away</h2>
+        <p id="commercial-credits-description">Your {tier === 'premium' ? 'Premium' : 'Standard'} commercial needs {requiredCredits} credits. Add credits when you’re ready to bring it to life.</p>
+        <div className="sf-commercials__credit-summary"><span>Available<strong>{balance.quickAdCredits || 0}</strong></span><span>Needed<strong>{Math.max(0, requiredCredits - Number(balance.quickAdCredits || 0))} more</strong></span></div>
+        <a className="sf-commercials__buy-credits" href="/quickads/credits" target="_blank" rel="noopener noreferrer" onClick={() => setShowCredits(false)}>Buy credits <UiIcon name="arrow-right" /></a>
+        <small>Checkout opens in a new tab. Your draft stays here.</small>
+        <button type="button" className="sf-commercials__credits-dismiss" onClick={() => setShowCredits(false)}>Keep editing</button>
+      </div>
+    </dialog>}
   </main>;
 }
 

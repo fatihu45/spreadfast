@@ -1,11 +1,12 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import { quickAdsUrl, quickAdsAuth, generationVideoUrl, newGenerationKey, canUseQuickAds } from '../utils/quickAdsApi';
-import QuickAdBranding, { appendBranding } from '../components/QuickAdBranding';
+import QuickAdBranding, { BrandingSwitch, appendBranding } from '../components/QuickAdBranding';
+import CreditPurchaseDialog from '../components/CreditPurchaseDialog';
 import QuickAdHistoryVideo from '../components/QuickAdHistoryVideo';
 import './QuickAd.css';
 import './QuickAdCredits.css';
@@ -20,11 +21,16 @@ const styles = [
 ];
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
-export default function QuickAd({ dedicatedFashion = false }) {
+export default function QuickAd({ dedicatedFashion = false, embedded = false }) {
   const location = useLocation();
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
-  const navigate = useNavigate();
+  const [showCredits, setShowCredits] = useState(false);
+  const [creditRevision, setCreditRevision] = useState(0);
+  const resumeId = new URLSearchParams(location.search).get('job');
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [recoveringId, setRecoveringId] = useState(null);
   const [branding, setBranding] = useState({ mode: 'none' });
   const [editingBranding, setEditingBranding] = useState(false);
   const [editBranding, setEditBranding] = useState({ mode: 'none' });
@@ -62,8 +68,9 @@ export default function QuickAd({ dedicatedFashion = false }) {
   const generating = phase === 'generating';
   const ready = phase === 'ready';
   const downloadable = ready && result?.downloadable === true;
-  const outOfCredits = balance && !balance.freePreviewAvailable && balance.quickAdCredits < 1;
-  const buyCredits = () => navigate('/quickads/credits', { state: { outOfCredits } });
+  const freePreviewAvailable = balance?.freePreviewAvailable && !isFashionStyle;
+  const outOfCredits = balance && !freePreviewAvailable && balance.quickAdCredits < 1;
+  const buyCredits = () => setShowCredits(true);
   const stageSteps = [
     { key: 'preparing_image', label: 'Preparing your product' },
     { key: 'creating_scene', label: 'Building your commercial scene' },
@@ -96,7 +103,30 @@ export default function QuickAd({ dedicatedFashion = false }) {
       catch { if (!controller.signal.aborted) setError('Could not load your credits. Refresh this page to try again.'); }
     })();
     return () => controller.abort();
-  }, [canGenerate, token]);
+  }, [canGenerate, token, creditRevision]);
+  useEffect(() => {
+    const refresh = () => setCreditRevision(value => value + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
+  useEffect(() => {
+    if (!resumeId || !token) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const check = async () => {
+      try {
+        const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(resumeId)}`), { headers: quickAdsAuth(token), signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (data.status === 'completed') showResult(data);
+        else if (data.status === 'pending') {
+          setPhase('generating'); setGenerationStage(data.stage); setStageImage(data.imageUrl || '');
+          timer = setTimeout(check, 2500);
+        } else { setPhase('idle'); setError('This ad could not finish. Open My Ads to retry saved work.'); }
+      } catch { if (!controller.signal.aborted) setError('Could not open this saved ad. Please try again from My Ads.'); }
+    };
+    check();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [resumeId, token]); // eslint-disable-line react-hooks/exhaustive-deps
   function rememberKey(key) {
     setPendingKey(key);
     try { if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); } catch { /* Current-page duplicate protection remains active. */ }
@@ -156,19 +186,31 @@ export default function QuickAd({ dedicatedFashion = false }) {
     }
   }, [location.hash, historyStatus]);
 
-  async function loadHistory() {
+  async function loadHistory(page = 1) {
+    if (!Number.isSafeInteger(page) || page < 1) page = 1;
     if (!canGenerate || !token) return;
     setHistoryStatus('loading');
     setHistoryError('');
     try {
-      const { data } = await axios.get(quickAdsUrl('/generations'), { headers: quickAdsAuth(token), timeout: 20000 });
+      const { data } = await axios.get(quickAdsUrl(page === 1 ? '/generations' : `/generations?page=${page}`), { headers: quickAdsAuth(token), timeout: 20000 });
       if (!data?.success || !Array.isArray(data.generations)) throw new Error('Invalid Quick Ads history response');
+      setHistoryPage(page); setHistoryHasMore(data.hasMore === true);
       setHistory(data.generations.filter(item => !deletedHistoryIds.current.has(item.generationId)));
       setHistoryStatus('loaded');
     } catch {
       setHistoryError('We could not load your Quick Ads. Please try again.');
       setHistoryStatus('error');
     }
+  }
+
+  async function retrySavedVideo(item) {
+    if (recoveringId) return;
+    setRecoveringId(item.generationId); setHistoryActionError('');
+    try {
+      const { data } = await axios.post(quickAdsUrl(`/generations/${encodeURIComponent(item.generationId)}/${item.brandingRetryAvailable ? 'branding/retry' : 'retry'}`), {}, { headers: quickAdsAuth(token), timeout: 660000 });
+      showResult(data); setNotice('Saved video recovered successfully.');
+    } catch (failure) { setHistoryActionError(failure.response?.data?.message || 'Recovery could not finish. Please retry.'); }
+    finally { setRecoveringId(null); loadHistory(historyPage); }
   }
 
   async function deleteHistoryItem(item) {
@@ -371,7 +413,7 @@ export default function QuickAd({ dedicatedFashion = false }) {
         // idempotency key so the user can retry with the same selected product/logo.
         // Keep it on timeouts/network drops because the server may still be working.
         if (!timedOut && [400, 401, 403, 413, 422, 502, 503].includes(status)) rememberKey('');
-        if (failure.response?.data?.code === 'NO_QUICK_AD_CREDITS') { navigate('/quickads/credits', { state: { outOfCredits: true } }); }
+        if (failure.response?.data?.code === 'NO_QUICK_AD_CREDITS') { setShowCredits(true); setCreditRevision(value => value + 1); }
         setError(timedOut
           ? 'Your advert is taking longer than expected and may still be processing. Please check its status before trying again to avoid creating a duplicate advert.'
           : GENERATION_ERROR);
@@ -427,26 +469,26 @@ export default function QuickAd({ dedicatedFashion = false }) {
     }
   }
 
-  return <section className="quick-ad" aria-labelledby="quick-ad-title">
+  return <section className={`quick-ad${embedded ? " is-embedded" : ""}`} aria-label={embedded ? "Create your video" : undefined} aria-labelledby={embedded ? undefined : "quick-ad-title"}>
     {!dedicatedFashion && <Link className="sf-studio-back" to="/create">← All studios</Link>}
-    <header className="quick-ad-heading">
+    {!embedded && <header className="quick-ad-heading">
       <div className="quick-ad-heading-line">
         <h1 id="quick-ad-title">{dedicatedFashion ? 'Invisible Mannequin' : 'Quick Ads'}</h1>
         <span className="quick-ad-studio-badge">AI studio</span>
       </div>
       <p>Turn your product photos into an ad.</p>
       {isFashionStyle && <p className="quick-ad-fashion-hint">Photograph the same outfit from the front and back, fully visible in good lighting.</p>}
-    </header>
+    </header>}
     {canGenerate && <div className="quick-ad-credit-summary">
       <div className="quick-ad-credit-copy">
         <span className="quick-ad-credit-icon"><UiIcon name="wallet" /></span>
         <div><strong>{balance ? `${balance.quickAdCredits} credits available` : 'Loading credits...'}</strong>
-          {balance?.freePreviewAvailable && <span className="quick-ad-free-preview">1 free preview available</span>}
+          {freePreviewAvailable && <span className="quick-ad-free-preview">1 free preview available</span>}
         </div>
       </div>
       <Button variant="secondary" onClick={buyCredits}>Buy Credits</Button>
     </div>}
-    {balance?.freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Buy any credit plan to unlock its download.</p>}
+    {freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Buy any credit plan to unlock its download.</p>}
     {pendingKey && !generating && <Alert>Your last generation needs confirmation. <Button variant="secondary" disabled={saving} onClick={recover}>Check generation</Button></Alert>}
     <div className="quick-ad-layout">
       <div className="quick-ad-editor">
@@ -487,16 +529,16 @@ export default function QuickAd({ dedicatedFashion = false }) {
             </label>
             <p id="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB</p>
           </div>}
-          <QuickAdBranding value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
-          <div className="quick-ad-specifications">
+          <BrandingSwitch value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
+          <details className="quick-ad-specifications sf-studio-extras"><summary>More options</summary>
             <label htmlFor="quick-ad-additional-instructions">Additional instructions <span>Optional</span></label>
             <p id="quick-ad-instructions-hint">Tell the AI what to preserve or pay attention to, such as exact fabric details, product features, colours, or styling. Your uploaded photos remain the source of truth.</p>
             <textarea id="quick-ad-additional-instructions" value={additionalInstructions} onChange={event => setAdditionalInstructions(event.target.value.slice(0, 500))} maxLength={500} rows={3} placeholder="e.g. Keep the exact embroidery and button placement. Do not add pockets or change the sleeve shape." disabled={generating || !!pendingKey || brandingSaving} aria-describedby="quick-ad-instructions-hint quick-ad-instructions-count" />
             <div className="quick-ad-specifications-footer"><span>Works with every ad style</span><span id="quick-ad-instructions-count">{additionalInstructions.length}/500</span></div>
-          </div>
+          </details>
           {error && <Alert tone="error">{error}</Alert>}
         </section>
-        <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
+        {!dedicatedFashion && <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
           <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose your style</h2><p>Find the feeling that fits your product.</p></div></div>
           <fieldset className="quick-ad-templates" disabled={generating || brandingSaving}>
             <legend className="sr-only">Ad style</legend>
@@ -507,15 +549,15 @@ export default function QuickAd({ dedicatedFashion = false }) {
               {styleId === style.id && <span className="quick-ad-selected" aria-hidden="true"><UiIcon name="check" /></span>}
             </label>)}
           </fieldset>
-        </section>
+        </section>}
         <div className="quick-ad-generate">
           <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!hasRequiredPhotos && !outOfCredits) || generating || saving || brandingSaving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
-            {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{outOfCredits ? 'Buy Credits' : balance?.freePreviewAvailable ? 'Create Free Preview' : 'Generate Quick Ad'} <UiIcon name="star" /></>}
+            {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{freePreviewAvailable ? 'Create Free Preview' : dedicatedFashion ? 'Generate video · 1 credit' : 'Generate Quick Ad · 1 credit'} <UiIcon name="star" /></>}
           </Button>
           <p id="quick-ad-generation-note">{canGenerate ? 'Generation can take a few minutes. Keep this page open.' : 'A company or promoter account is required to generate Quick Ads.'}</p>
         </div>
       </div>
-      <aside ref={previewPanel} className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
+      {(!embedded || previewImage || generating || ready) && <aside ref={previewPanel} className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
         <div className="quick-ad-preview-heading">
           <div><h2 id="quick-ad-preview-title">Your creative preview</h2><p>See your product take the spotlight.</p></div>
           <span className={'quick-ad-processing-status' + (generating ? ' is-active' : '')}><i aria-hidden="true" />{generating ? 'Processing' : ready ? 'Ready' : 'Preview'}</span>
@@ -558,11 +600,11 @@ export default function QuickAd({ dedicatedFashion = false }) {
         </div>
         {notice && <Alert>{notice}</Alert>}
         {downloadable && videoUrl && <a className="quick-ad-open-video" href={videoUrl} target="_blank" rel="noopener noreferrer">Open video to watch or save</a>}
-      </aside>
+      </aside>}
     </div>
-    <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
+    {!embedded && <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
       <div className="quick-ad-history-header">
-        <h2 id="quick-ad-history-title">My Quick Ads</h2>
+        <h2 id="quick-ad-history-title">My Quick Ads</h2><div><Button variant="secondary" disabled={historyPage === 1} onClick={() => loadHistory(historyPage - 1)}>Previous</Button><span> Page {historyPage} </span><Button variant="secondary" disabled={!historyHasMore} onClick={() => loadHistory(historyPage + 1)}>Next</Button></div>
         {historyStatus === 'loading' && history.length > 0 && <span className="quick-ad-history-loading" role="status">Refreshing...</span>}
       </div>
       {!canGenerate && <div className="quick-ad-empty-state">Quick Ads history is available to company and promoter accounts.</div>}
@@ -582,6 +624,7 @@ export default function QuickAd({ dedicatedFashion = false }) {
                 <span className={'quick-ad-history-status is-' + (item.status || 'unknown')}>{item.status === 'completed' ? 'Ready' : item.status === 'pending' ? 'Processing' : item.status || 'Status unavailable'}</span>
               </div>
               <div className="quick-ad-history-actions">
+                {(item.recoveryAvailable || item.brandingRetryAvailable) && <Button size="sm" disabled={!!recoveringId || generating} onClick={() => retrySavedVideo(item)}>{recoveringId === item.generationId ? 'Recovering...' : item.brandingRetryAvailable ? 'Retry branding' : 'Recover saved video'}</Button>}
                 {item.status === 'completed' && <Button size="sm" variant="secondary" aria-label="Edit video branding" title="Edit branding" disabled={saving || brandingSaving || generating || !!pendingKey} onClick={() => editHistoryBranding(item)}><UiIcon name="edit" /></Button>}
                 {item.downloadable && <Button size="sm" variant="secondary" aria-label="Download video" title={saving ? 'Saving video...' : 'Download video'} disabled={saving} onClick={() => downloadHistoryItem(item)}><UiIcon name="download" /></Button>}
                 <Button size="sm" variant="secondary" className="quick-ad-history-delete" aria-label={deletingId === item.generationId ? 'Deleting video...' : 'Delete video'} title="Delete video" disabled={item.status === 'pending' || !!deletingId || brandingSaving} onClick={() => deleteHistoryItem(item)}><UiIcon name="trash" /></Button>
@@ -590,7 +633,8 @@ export default function QuickAd({ dedicatedFashion = false }) {
             </article>
           ))}
         </div>}
-    </section>
-    <footer className="quick-ad-footer"><span className="quick-ad-round-icon"><UiIcon name="sun" /></span><div><strong>A little inspiration. A bigger impression.</strong><p>Give your product a moment in the spotlight.</p></div></footer>
+    </section>}
+    {embedded && <Link className="sf-library-primary" to="/my-ads">View your ads</Link>}
+    <CreditPurchaseDialog open={showCredits} onClose={() => setShowCredits(false)} balance={balance?.quickAdCredits || 0} requiredCredits={1} />
   </section>;
 }

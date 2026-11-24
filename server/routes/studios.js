@@ -4,7 +4,7 @@ const cloudinaryDefault = require('cloudinary').v2;
 const { authenticateToken } = require('../middleware/auth');
 const { quickAdAccountOnly } = require('../services/quickAdAccess');
 const { MODES, quote, requireMode, presets } = require('../config/studios');
-const { validate, providerUrl, narration } = require('../services/studioInputs');
+const { validate, providerUrl, narrationSummary, vehicleDetails } = require('../services/studioInputs');
 const { beginGeneration, failGeneration } = require('../services/quickAdCredits');
 const { readBranding, uploadBranding } = require('../services/quickAdBranding');
 const { publicGeneration } = require('../services/quickAdMedia');
@@ -13,6 +13,10 @@ function createStudiosRouter({ authenticate = authenticateToken, cloudinary = cl
   const router = express.Router();
   router.get('/catalog', (req,res) => res.json({ success: true, modes: Object.keys(MODES).map(mode => quote(mode,env)), models: presets(env) }));
   router.use(authenticate, quickAdAccountOnly);
+  router.post('/narration-preview', (req, res) => {
+    try { res.json({ success: true, ...narrationSummary({ vehicle: vehicleDetails(req.body || {}) }) }); }
+    catch (error) { safeError(res, error); }
+  });
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 6, fields: 24, fieldSize: 4096 } }).fields([{ name: 'images', maxCount: 5 }, { name: 'brandingLogo', maxCount: 1 }]);
   const enqueue = async (req,res) => {
     const DB = req.app.locals.db;
@@ -28,7 +32,7 @@ function createStudiosRouter({ authenticate = authenticateToken, cloudinary = cl
       const q = requireMode(req.body.mode, env);
       if (env.STUDIO_WORKER_ENABLED !== 'true' || !env.FAL_KEY) throw Object.assign(new Error('This studio is being prepared.'), {statusCode:503,quickAdSafe:true});
       const input = validate(req.body, req.files?.images || [], presets(env));
-      if (input.mode === 'auto_voiceover' && (narration(input).length > 230 || narration(input).split(/\s+/).length > 32)) throw Object.assign(new Error('Shorten the vehicle and dealership names for a 15-second voiceover.'), {statusCode:400,quickAdSafe:true});
+      if (input.mode === 'auto_voiceover' && !narrationSummary(input).withinLimit) throw Object.assign(new Error('Shorten the sales details to fit a 15-second voiceover (32 words, up to 230 characters).'), {statusCode:400,quickAdSafe:true});
       const recent = await DB.QuickAdGeneration.find({userId:req.user.id,provider:'studios'});
       if (recent.filter(g => new Date(g.createdAt).getTime() > Date.now()-86400000).length >= 5) return res.status(429).json({success:false,message:'Daily generation limit reached. Please try tomorrow.'});
       const branding = readBranding(req.body, req.files?.brandingLogo?.[0]);
@@ -56,12 +60,14 @@ function createStudiosRouter({ authenticate = authenticateToken, cloudinary = cl
   router.enqueue = enqueue;
   router.post('/jobs/:id/retry',async(req,res)=>{
     try {
+      if (env.STUDIO_WORKER_ENABLED !== 'true') throw Object.assign(new Error('Video finishing is temporarily unavailable. Please try again later.'), {statusCode:503,quickAdSafe:true});
       const DB=req.app.locals.db;
       await DB.withTransaction(async tx=>{
         const job=await tx.QuickAdGeneration.findOne({id:req.params.id,userId:req.user.id,provider:'studios'});
         if(!job || job.deletedAt || job.status!=='failed' || !job.media?.publicId || job.studioInput?.mode==='auto_voiceover' && !job.studioAssets?.voice?.applied || (job.finalizationRetries||0)>=2) throw Object.assign(new Error('This job needs support recovery.'),{statusCode:409,quickAdSafe:true});
         const user=await tx.User.findOne({id:req.user.id});
-        if(user.quickAdCredits<job.creditCost || user.quickAdGenerationLock && new Date(user.quickAdGenerationLockExpiresAt).getTime()>Date.now()) throw Object.assign(new Error('Check your credits and wait for any active job.'),{statusCode:409,quickAdSafe:true});
+        if(user.quickAdCredits<job.creditCost) throw Object.assign(new Error('Add credits to finish this saved video.'),{statusCode:403,code:'NO_QUICK_AD_CREDITS',quickAdSafe:true});
+        if(user.quickAdGenerationLock && new Date(user.quickAdGenerationLockExpiresAt).getTime()>Date.now()) throw Object.assign(new Error('Wait for your current ad to finish.'),{statusCode:409,quickAdSafe:true});
         const expiresAt=new Date(Date.now()+86400000);
         await tx.User.updateOne({id:req.user.id},{$set:{quickAdGenerationLock:job.id,quickAdGenerationLockExpiresAt:expiresAt}});
         await tx.QuickAdGeneration.updateOne({id:job.id,userId:req.user.id,status:'failed'},{$set:{status:'pending',stage:'applying_branding',expiresAt,workerUntil:new Date(0),workerAttempts:0},$inc:{finalizationRetries:1}});
@@ -80,9 +86,13 @@ function createStudiosRouter({ authenticate = authenticateToken, cloudinary = cl
   router.post('/jobs/:id/cancel',async(req,res)=>{
     try {
       const DB=req.app.locals.db;
-      const job=await DB.QuickAdGeneration.findOne({id:req.params.id,userId:req.user.id,provider:'studios',stage:'awaiting_approval'});
-      if(!job) return res.status(409).json({success:false,message:'Only an unapproved try-on can be cancelled here.'});
-      await failGeneration(DB,{userId:req.user.id,id:job.id,code:'USER_CANCELLED'});
+      await DB.withTransaction(async tx => {
+        const job=await tx.QuickAdGeneration.findOne({id:req.params.id,userId:req.user.id,provider:'studios',status:'pending',stage:'awaiting_approval'});
+        if(!job) throw Object.assign(new Error('Only an unapproved try-on can be cancelled here.'),{statusCode:409,quickAdSafe:true});
+        await tx.QuickAdGeneration.updateOne({id:job.id,status:'pending',stage:'awaiting_approval'},{$set:{status:'failed',stage:'failed',failureCode:'USER_CANCELLED'}});
+        const user=await tx.User.findOne({id:req.user.id});
+        if(user?.quickAdGenerationLock===job.id) await tx.User.updateOne({id:req.user.id},{$set:{quickAdGenerationLock:null,quickAdGenerationLockExpiresAt:null}});
+      });
       res.json({success:true});
     }catch(error){safeError(res,error);}
   });

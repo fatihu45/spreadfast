@@ -12,6 +12,12 @@ import LandingVideoCarousel from '../components/LandingVideoCarousel';
 import './Landing.css';
 import { StudioCards } from './Studios';
 
+const commercialExamples = [
+  { name: 'footwear', title: 'Footwear', description: 'Original photo of brown leather sandals' },
+  { name: 'haske', title: 'Haske Cargo & Logistics', description: 'Original Haske Cargo & Logistics brand artwork' },
+  { name: 'sarauniya', title: 'Sarauniya’s Essentials Hub', description: 'Original product photos of handmade wooden tableware' },
+];
+
 export default function LandingPage() {
   const { user } = useContext(AuthContext);
   const [openFaq, setOpenFaq] = useState(null);
@@ -50,6 +56,7 @@ export default function LandingPage() {
             className={'landing-navigation' + (menuOpen ? ' is-open' : '')}>
             <div className="landing-section-links">
               <a href="#products" onClick={() => setMenuOpen(false)}>Products</a>
+              <a href="#examples" onClick={() => setMenuOpen(false)}>Examples</a>
               <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <a href="#faq" onClick={() => setMenuOpen(false)}>FAQ</a>
@@ -84,6 +91,10 @@ export default function LandingPage() {
                 <Link to="/create" className="sf-control sf-button sf-button--primary"><UiIcon name="video" /> Create Your First Ad</Link>
                 <a href="#studios" className="sf-control sf-button sf-button--secondary">Explore Studios <UiIcon name="arrow" /></a>
               </div>
+              <dl className="landing-milestones" aria-label="SpreadFast milestones">
+                <div><dt>Users joined</dt><dd>100+</dd></div>
+                <div><dt>Ads created</dt><dd>50+</dd></div>
+              </dl>
               <div className="landing-trust" aria-label="Why SpreadFast">
                 <span><strong>Your product</strong><small>Made for the spotlight</small></span>
                 <span><strong>Pay in naira</strong><small>Buy credits as you need</small></span>
@@ -95,6 +106,36 @@ export default function LandingPage() {
         </section>
 
         <section id="studios"><Container><h2>What are you advertising?</h2><StudioCards marketing /></Container></section>
+        <section id="examples" className="landing-commercial-examples" aria-labelledby="commercial-examples-title">
+          <Container>
+            <div className="landing-section-heading">
+              <h2 id="commercial-examples-title">From a simple upload to a full commercial</h2>
+              <p>See what businesses have made with SpreadFast AI Commercial.</p>
+            </div>
+            <div className="landing-commercial-grid">
+              {commercialExamples.map(({ name, title, description }) => (
+                <article className="landing-commercial-card" key={name}>
+                  <h3>{title}</h3>
+                  <div className="landing-commercial-pair">
+                    <figure>
+                      <div className="landing-commercial-preview">
+                        <img src={`/commercial-samples/${name}-source.webp`} alt={description} loading="lazy" decoding="async" />
+                      </div>
+                      <figcaption>Original upload</figcaption>
+                    </figure>
+                    <span aria-hidden="true"><UiIcon name="arrow" /></span>
+                    <figure>
+                      <div className="landing-commercial-preview">
+                        <LandingSampleVideo name={name} directory="/commercial-samples" label={`${title} AI Commercial excerpt`} />
+                      </div>
+                      <figcaption>Commercial excerpt</figcaption>
+                    </figure>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </Container>
+        </section>
 
         <section id="products" className="landing-quick-ads" aria-labelledby="landing-quick-ads-title">
           <Container>
@@ -129,9 +170,9 @@ export default function LandingPage() {
             <LandingVideoCarousel />
             <div className="landing-fashion-feature">
               <img src="/fashion-studio-kaftan.png" alt="Navy kaftan on an invisible mannequin" width="1672" height="941" loading="lazy" />
-              <div><p className="landing-eyebrow">Fashion Studio · inside Quick Ad</p><h2>Your collection. In motion.</h2>
+              <div><p className="landing-eyebrow">Fashion Studio</p><h2>Your collection. In motion.</h2>
                 <p>Turn front and back outfit photos into a rotating invisible-mannequin video. Add specifications to guide the details, then preview before sharing.</p>
-                <Link to="/quick-ad" className="sf-control sf-button sf-button--secondary">Explore Fashion Studio <UiIcon name="arrow" /></Link>
+                <Link to="/studios/fashion" className="sf-control sf-button sf-button--secondary">Explore Fashion Studio <UiIcon name="arrow" /></Link>
               </div>
             </div>
           </Container>

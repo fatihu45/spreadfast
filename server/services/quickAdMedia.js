@@ -110,12 +110,14 @@ function canDownloadGeneration(generation, user) {
   return generation.creditUsed === true && generation.downloadable === true;
 }
 function publicGeneration(generation, user) {
-  const result = { success: true, generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+  const recoveryAvailable = require('./quickAdRecovery').recoverable(generation);
+  const result = { success: true, recoveryAvailable, provider: generation.provider || 'fal', generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
     studioType: generation.studioType || (generation.provider === 'ai-commercials' ? 'commercial' : generation.style === 'fashion_studio' ? 'fashion' : 'quick'),
     generationMode: generation.generationMode,
+    studioRetryAvailable: generation.provider === 'studios' && generation.status === 'failed' && !generation.deletedAt && !!generation.media?.publicId && (generation.finalizationRetries || 0) < 2 && (generation.generationMode !== 'auto_voiceover' || generation.studioAssets?.voice?.applied === true),
     title: generation.title || generation.commercialDetails?.title || 'Your advertisement',
     duration: generation.outputDurationSeconds || (generation.provider === 'ai-commercials' ? (generation.sceneAssets || []).reduce((sum, s) => sum + (s.durationSeconds || 0), 0) : 5),
-    creditCost: generation.creditCost || 1, creditsUsed: generation.creditsUsed || 0,
+    creditCost: generation.creditCost || 1, creditsUsed: generation.creditsUsed || (generation.creditUsed ? generation.creditCost || 1 : 0),
     createdAt: generation.createdAt, completedAt: generation.completedAt,
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
@@ -130,13 +132,15 @@ function publicGeneration(generation, user) {
     downloadable: canDownloadGeneration(generation, user),
     ...accountSummary(user) };
   if (generation.provider === 'ai-commercials' && generation.commercialDetails) {
+    result.completedScenes = (generation.sceneAssets || []).filter(scene => scene.videoPublicId).length;
+    result.totalScenes = 3;
     result.productName = generation.commercialDetails.productName;
     result.brandName = generation.commercialDetails.brandName;
     result.contact = generation.commercialDetails.contact;
     result.specifications = generation.commercialDetails.specifications;
     result.tier = generation.commercialDetails.tier;
     result.requiredCredits = generation.commercialDetails.requiredCredits;
-    result.title = generation.commercialDetails.title;
+    result.title = generation.title || generation.commercialDetails.title || 'Your advertisement';
     result.voiceover = generation.commercialDetails.voiceover;
     result.endCard = generation.commercialDetails.endCard;
     result.sceneImages = (generation.sceneAssets || []).map(scene => ({

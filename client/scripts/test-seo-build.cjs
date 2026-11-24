@@ -40,6 +40,9 @@ const vc = new VirtualConsole();
 vc.on('error', message => errors.push(String(message)));
 vc.on('jsdomError', error => errors.push(error.message));
 const dom = new JSDOM(homeHtml, { url: 'https://tryspreadfast.com/', runScripts: 'outside-only', virtualConsole: vc, pretendToBeVisual: true });
+// JSDOM has no media playback implementation; model the browser's playback API.
+dom.window.HTMLMediaElement.prototype.play = () => Promise.resolve();
+dom.window.HTMLMediaElement.prototype.pause = () => {};
 const headingBefore = dom.window.document.querySelector('#landing-title');
 for (const script of doc.querySelectorAll('script[src^="/static/js/"]')) dom.window.eval(read(new URL(script.src).pathname));
 setTimeout(() => {

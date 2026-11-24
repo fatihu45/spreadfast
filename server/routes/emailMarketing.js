@@ -1,3 +1,4 @@
+const { isAdmin } = require('../services/adminAccess');
 const express = require('express');
 const multer = require('multer');
 const { MAX_IMAGE_BYTES, TYPES, validateImage, uploadEmailImage } = require('../services/emailImages');
@@ -26,17 +27,17 @@ module.exports = function createEmailMarketingRouter({ models, User, Notificatio
     if (!resend) return res.status(503).json({ success: false, message: 'Email service is not configured.' });
     const subscribed = req.body.subscribed;
     // Opt-out is persisted first; explicit re-subscription only after provider success.
-    if (!subscribed) await User.updateOne({ id: user.id }, { $set: { marketingSubscribed: false } });
+    if (!subscribed) await User.updateOne({ id: user.id }, { $set: { marketingSubscribed: false, marketingOptedOut: true, marketingConsentAt: new Date(), marketingConsentSource: 'account-preferences-v1' } });
     const email = user.email.trim().toLowerCase();
     const found = await resend.contacts.get({ email });
     if (found.error && found.error.statusCode !== 404 && found.error.name !== 'not_found') checked(found);
     if (found.data) checked(await resend.contacts.update({ id: found.data.id, unsubscribed: !subscribed }));
     else if (subscribed) checked(await resend.contacts.create({ email, firstName: user.name || '', unsubscribed: false }));
-    await User.updateOne({ id: user.id }, { $set: { marketingSubscribed: subscribed, marketingConsentAt: new Date(), marketingConsentSource: 'account-preferences-v1' } });
+    await User.updateOne({ id: user.id }, { $set: { marketingSubscribed: subscribed, marketingOptedOut: !subscribed, marketingConsentAt: new Date(), marketingConsentSource: 'account-preferences-v1' } });
     res.json({ success: true, subscribed });
   }));
   router.use('/admin', (req, res, next) => {
-    if (!env.ADMIN_EMAIL || req.user.email !== env.ADMIN_EMAIL) return res.status(403).json({ success: false, message: 'Admin access required.' });
+    if (!isAdmin(req.user, env)) return res.status(403).json({ success: false, message: 'Admin access required.' });
     next();
   });
   const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 0 },

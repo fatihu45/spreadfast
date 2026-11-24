@@ -204,3 +204,47 @@ test('promoter checkout records its authenticated owner and role; verification a
   assert.equal((await f.request('/transactions')).body.transactions.length, 0);
   assert.equal(f.campaigns(), 0);
 });
+
+ test('provider-confirmed abandoned checkouts leave no credits and can later settle once', async () => {
+  const DB = quickAdsDb([user]); await DB.PaystackTransaction.create(purchase());
+  const http = { get: async () => ({ data: { status: true, data: { ...charge('qa_test-reference'), status: 'abandoned' } } }) };
+  await assert.rejects(verifyQuickAdPayment(DB, 'qa_test-reference', undefined, config, http), { code: 'PAYMENT_UNCONFIRMED' });
+  assert.equal((await DB.PaystackTransaction.findOne({ reference: 'qa_test-reference' })).status, 'abandoned');
+  assert.equal((await DB.User.findOne({ id: user.id })).quickAdCredits, 0);
+  await awardQuickAdCredits(DB, { reference: 'qa_test-reference', charge: charge('qa_test-reference') });
+  await verifyQuickAdPayment(DB, 'qa_test-reference', undefined, config, http);
+  assert.equal((await DB.User.findOne({ id: user.id })).quickAdCredits, 4);
+  assert.equal((await DB.PaystackTransaction.findOne({ reference: 'qa_test-reference' })).status, 'completed');
+});
+test('unverified abandoned response cannot change a checkout', async () => {
+  const DB = quickAdsDb([user]); await DB.PaystackTransaction.create(purchase());
+  for (const patch of [{ amount: 1 }, { reference: 'wrong-reference' }, { customer: { email: 'wrong@example.test' } }]) {
+    const http = { get: async () => ({ data: { status: true, data: { ...charge('qa_test-reference'), status: 'abandoned', ...patch } } }) };
+    await assert.rejects(verifyQuickAdPayment(DB, 'qa_test-reference', undefined, config, http), { code: 'PAYMENT_MISMATCH' });
+  }
+  assert.equal((await DB.PaystackTransaction.findOne({ reference: 'qa_test-reference' })).status, 'pending');
+});
+
+test('admin verification rejects customers and unauthenticated requests; repeated checks award once', async t => {
+  const DB = quickAdsDb([user, { id: 'admin', role: 'admin', status: 'active' }]);
+  await DB.PaystackTransaction.create(purchase());
+  let calls = 0;
+  t.mock.method(require('axios'), 'get', async () => {
+    calls++;
+    return { data: { status: true, data: charge('qa_test-reference') } };
+  });
+  const app = express(); app.locals.db = DB; app.locals.paystackConfig = config;
+  app.use('/admin', require('../routes/admin'));
+  const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const request = id => fetch(`http://127.0.0.1:${server.address().port}/admin/quick-ads/payments/qa_test-reference/verify`, {
+    method: 'POST', headers: id ? { Authorization: `Bearer ${jwt.sign({ id }, process.env.JWT_SECRET)}` } : {}
+  });
+  assert.equal((await request()).status, 401);
+  assert.equal((await request(user.id)).status, 403);
+  assert.equal(calls, 0);
+  assert.equal((await request('admin')).status, 200);
+  assert.equal((await request('admin')).status, 200);
+  assert.equal(calls, 1);
+  assert.equal((await DB.User.findOne({ id: user.id })).quickAdCredits, 4);
+});

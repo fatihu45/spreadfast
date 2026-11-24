@@ -122,8 +122,8 @@ async function fixture(t, options = {}) {
       });
       return { status: response.status, body: await response.json() };
     },
-    async retryBranding(id, authorization = `Bearer ${token}`) {
-      const response = await fetch(base + `/api/quick-ads/generations/${id}/branding/retry`, {
+    async retryBranding(id, authorization = `Bearer ${token}`, recovery = false) {
+      const response = await fetch(base + `/api/quick-ads/generations/${id}/${recovery ? 'retry' : 'branding/retry'}`, {
         method: 'POST', headers: { ...(authorization ? { Authorization: authorization } : {}) },
         signal: AbortSignal.timeout(15000)
       });
@@ -468,24 +468,26 @@ test('failed media preparation or generation does not spend credits or preview e
   }
 });
 
-test('logo-render failure keeps the generated video, charges once, and retries branding without fal calls', async t => {
+test('logo-render failure keeps the generated video, does not charge until recovery, and retries branding without fal calls', async t => {
   const f = await fixture(t, { credits: 1, failBrandingOnce: true });
   const body = form();
   body.append('brandingMode', 'logo');
   body.append('brandingLogo', new Blob([png], { type: 'image/png' }), 'logo.png');
   const first = await f.send(body, undefined, 'logo-render-retry-1');
-  assert.equal(first.status, 200);
+  assert.equal(first.status, 502);
+  const saved = (await f.DB.QuickAdGeneration.find({}))[0];
+  first.body = require('../services/quickAdMedia').publicGeneration(saved, await f.DB.User.findOne({ id: 'business-1' }));
   assert.equal(first.body.branding.mode, 'logo');
   assert.equal(first.body.brandingStatus, 'failed');
-  assert.equal(first.body.brandingRetryAvailable, true);
-  assert.equal(first.body.videoUrl, VIDEO_URL);
-  assert.match(first.body.message, /retry branding/i);
+  assert.equal(first.body.recoveryAvailable, true);
+  assert.equal(first.body.videoUrl, undefined);
+  assert.equal(saved.media.outputUrl, VIDEO_URL);
   let account = await f.DB.User.findOne({ id: 'business-1' });
-  assert.equal(account.quickAdCredits, 0);
-  assert.equal(account.quickAdTotalCreditsUsed, 1);
+  assert.equal(account.quickAdCredits, 1);
+  assert.equal(account.quickAdTotalCreditsUsed || 0, 0);
   assert.equal(account.quickAdGenerationLock, null);
   const falSubmits = f.calls.filter(c => c[0] === 'submit').length;
-  const retried = await f.retryBranding(first.body.generationId);
+  const retried = await f.retryBranding(first.body.generationId, undefined, true);
   assert.equal(retried.status, 200);
   assert.equal(retried.body.brandingStatus, 'applied');
   assert.equal(retried.body.brandingRetryAvailable, false);
