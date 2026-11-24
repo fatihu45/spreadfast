@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-unnecessary-act -- React DOM createRoot requires act; this suite does not use Testing Library. */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act as legacyAct } from 'react-dom/test-utils';
@@ -27,7 +28,7 @@ test('creator navigation shows AI tools while preserving a legacy URL', () => {
   render('promoter', '/submit-proof?campaignId=42');
   expect(host.querySelector('output').textContent).toBe('/submit-proof?campaignId=42');
   for (const nav of host.querySelectorAll('.sf-sidebar nav, .sf-mobile-navigation')) {
-    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/ai-commercials', '/promoter/quick-ads', '/my-ads', '/quickads/credits']);
+    expect([...nav.querySelectorAll('a')].map(a => a.getAttribute('href'))).toEqual(['/create', '/my-ads', '/quickads/credits']);
     expect(nav.querySelector('[aria-current="page"]')).toBeNull();
     expect(nav.querySelector('button').textContent).toBe('Profile');
   }
@@ -37,13 +38,13 @@ test('business navigation opens My Ads with one active item', () => {
   render('company', '/company');
   expect(host.querySelector('a[href="/wallet"]')).toBeNull();
   const nav = host.querySelector('.sf-sidebar nav');
-  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Create Ads', 'Quick Ads', 'My Ads', 'Credits']);
+  expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Create', 'My Ads', 'Credits']);
   act(() => [...nav.querySelectorAll('a')].find(a => a.textContent === 'My Ads').click());
   expect(host.querySelector('output').textContent).toBe('/my-ads');
   expect(nav.querySelectorAll('[aria-current="page"]').length).toBe(1);
   expect(nav.querySelector('[aria-current="page"]').textContent).toBe('My Ads');
 });
-test('profile shows existing account data without navigation and settings remain disabled', () => {
+test('profile shows existing account data without navigation or unavailable settings', () => {
   render('promoter', '/my-ads');
   act(() => host.querySelector('.sf-mobile-navigation button').click());
   expect(host.querySelector('dialog').open).toBe(true);
@@ -52,10 +53,7 @@ test('profile shows existing account data without navigation and settings remain
   act(() => host.querySelector('[aria-label="Close profile"]').click());
   expect(host.querySelector('dialog').open).toBe(false);
   const settings = [...host.querySelectorAll('button')].filter(b => b.textContent === 'Settings');
-  expect(settings.length).toBe(2); settings.forEach(b => expect(b.disabled).toBe(false));
-  act(() => settings[0].click());
-  expect(host.querySelector('dialog').open).toBe(true);
-  expect(host.querySelector('#account-name')).not.toBeNull();
+  expect(settings).toHaveLength(0);
 });
 test.each(['.sf-sidebar__footer', '.sf-dashboard-more'])('logout in %s invokes existing auth action and returns home', selector => {
   render('company', '/my-ads');

@@ -88,7 +88,7 @@ test('Veo accepts the six-second scenes and rejects unsupported lengths before s
 test('creative scene validation enforces timing, distinct narration, and complete prompts', () => {
   const { normalizeScenes } = require('../services/aiCommercialProviders');
   const scenes = [1, 2, 3].map(i => ({ imagePrompt: `Image ${i}`, motionPrompt: `Motion ${i}`, narration: `Scene ${i}`, durationSeconds: 99 }));
-  assert.deepEqual(normalizeScenes(scenes).map(s => s.durationSeconds), [6, 8, 8]);
+  assert.deepEqual(normalizeScenes(scenes).map(s => s.durationSeconds), [8, 8, 8]);
   assert.equal(normalizeScenes(scenes)[1].narration, 'Scene 2');
   assert.throws(() => normalizeScenes([{}, ...scenes.slice(1)]), /directions/);
   scenes[0].narration = Array(20).fill('word').join(' ');
@@ -115,7 +115,7 @@ test('Claude receives the photo and customer brief with automatic professional d
   assert.match(request.messages[0].content, /one coherent visual story/);
   assert.match(request.messages[0].content, /never invent a brand or contact/);
   assert.equal(plan.title, 'Product Commercial');
-  assert.deepEqual(plan.scenes.map(s => s.durationSeconds), [6, 8, 8]);
+  assert.deepEqual(plan.scenes.map(s => s.durationSeconds), [8, 8, 8]);
 });
 
 test('saved fal request IDs poll the existing job without paying for another submit', async () => {

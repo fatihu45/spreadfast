@@ -33,7 +33,7 @@ test('commercial UI offers credit purchase even if an older server advertises a 
   expect(container.textContent).not.toMatch(/free preview/i);
   expect(container.textContent).toContain('4 credits');
   expect(container.textContent).toContain('7 credits');
-  expect(container.querySelector('a[href="/promoter/quick-ads"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/create"]')).not.toBeNull();
 });
 
 test('four credits allow Standard but do not allow Premium', async () => {

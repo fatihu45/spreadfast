@@ -4,7 +4,8 @@
     "deploymentEnabled": {
       "seo/technical-audit-2026-10-08": false,
       "seo/fix-hosted-404": false,
-      "seo/explicit-404": false
+      "seo/explicit-404": false,
+      "feat/spreadfast-studios": false
     }
   },
   "buildCommand": "npm run vercel-build",
@@ -153,6 +154,34 @@
     },
     {
       "src": "^/my-ads/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/create/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/studios/fashion/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/studios/auto/?$",
+      "dest": "/app-shell.html",
+      "headers": {
+        "X-Robots-Tag": "noindex, nofollow"
+      }
+    },
+    {
+      "src": "^/studios/product/?$",
       "dest": "/app-shell.html",
       "headers": {
         "X-Robots-Tag": "noindex, nofollow"

@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
-const cors = require('cors');
+const { createCorsAccess } = require('./middleware/corsAccess');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { randomUUID: uuidv4 } = require('node:crypto');
@@ -38,27 +38,7 @@ const { authLimit } = require('./middleware/authLimits');
 app.set('trust proxy', 1);
 
 // ==================== MIDDLEWARE ====================
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://tryspreadfast.com',
-  'https://www.tryspreadfast.com',
-  process.env.CLIENT_URL
-].filter(Boolean);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'Range'],
-  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges']
-}));
+app.use(createCorsAccess());
 app.use(express.json({ verify: (req, res, buffer) => { if (req.originalUrl.split('?')[0] === '/api/payments/webhook') req.rawBody = buffer; } }));
 
 // Reject requests during production outages; never acknowledge financial writes locally.
@@ -702,6 +682,9 @@ const optionalAuthentication = (req, res, next) => req.headers.authorization
   ? authenticateToken(req, res, next) : next();
 const quickAdsRoute = require('./routes/quickAds');
 const aiCommercialsRoute = require('./routes/aiCommercials');
+app.use('/api/studios', require('./routes/studios').createStudiosRouter());
+require('./services/studioWorker').startStudioWorker(DB, isMongoConnected);
+aiCommercialsRoute.startWorker(DB,isMongoConnected);
 app.use('/api/quick-ads', quickAdsRoute);
 app.use('/api/ai-commercials', aiCommercialsRoute);
 const recoveryMedia = require('./routes/quickAdMedia').createQuickAdMediaRouter({ cloudinaryClient: cloudinary });

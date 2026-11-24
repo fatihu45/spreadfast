@@ -18,8 +18,8 @@ async function reconcileBatch(DB, recover) {
   // Filter for saved provider work so unrecoverable jobs cannot starve the queue.
   const failed = await DB.QuickAdGeneration.find({ status: 'failed', deletedAt: { $exists: false }, autoRecoveryAttempted: { $exists: false },
     $or: [
-      { provider: { $ne: 'ai-commercials' }, 'media.publicId': { $type: 'string', $ne: '' } },
-      { provider: { $ne: 'ai-commercials' }, videoRequestId: { $type: 'string', $ne: '' } },
+      { provider: { $nin: ['ai-commercials', 'studios'] }, 'media.publicId': { $type: 'string', $ne: '' } },
+      { provider: { $nin: ['ai-commercials', 'studios'] }, videoRequestId: { $type: 'string', $ne: '' } },
       { provider: 'ai-commercials', freePreview: false, sceneAssets: { $size: 3 },
         ...Object.fromEntries([0, 1, 2].flatMap(i => ['videoPublicId', 'imageUrl'].map(field => [`sceneAssets.${i}.${field}`, { $type: 'string', $ne: '' }]))) }
     ]

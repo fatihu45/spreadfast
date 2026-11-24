@@ -1,0 +1,17 @@
+.sf-model-picker { margin: 16px 0; }
+.sf-model-picker h3 { margin: 0; font-size: 17px; }
+.sf-model-picker p { font-size: 13px; color: rgb(var(--sf-muted)); }
+.sf-model-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.sf-model-grid button { min-width: 0; padding: 0 0 8px; border: 1px solid #e2e9ee; border-radius: 14px; background: #fff; overflow: hidden; color: #0f2435; cursor: pointer; }
+.sf-model-grid button[aria-pressed="true"] { border-color: #008050; box-shadow: 0 0 0 2px #008050; }
+.sf-model-grid img { display: block; width: 100%; height: 116px; object-fit: cover; object-position: center 16%; }
+.sf-model-grid strong, .sf-model-grid small { display: block; padding: 0 3px; }
+.sf-model-grid strong { font-size: 14px; margin-top: 7px; }
+.sf-model-grid small { font-size: 11px; color: #576b7d; }
+.sf-model-summary { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f7f9fa; border-radius: 14px; }
+.sf-model-summary img { object-fit: cover; object-position: top; border-radius: 8px; flex-shrink: 0; }
+.sf-model-summary span { flex: 1; min-width: 0; }
+.sf-model-summary small { display: block; font-size: 12px; color: #576b7d; }
+.sf-model-summary button { min-height: 44px; padding: 6px; background: transparent; border: none; color: #008050; font-weight: 600; cursor: pointer; }
+.sf-model-picker button:focus-visible { outline: 3px solid #008050; outline-offset: 3px; }
+@media(min-width:760px) { .sf-model-grid img { height: 146px; } }

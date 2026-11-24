@@ -44,6 +44,7 @@ async function fixture(t, options = {}) {
     }
   };
   const router = createAiCommercialsRouter({
+    pricing: tier => ({credits:tier === 'premium'?7:4,available:true}),
     cloudinary,
     authenticate: options.realAuth ? undefined : (req, res, next) => { req.user = { id: 'owner', role: 'company' }; next(); },
     createPlan: async input => {
@@ -57,7 +58,7 @@ async function fixture(t, options = {}) {
         purpose: `Scene ${index}`,
         imagePrompt: `Set up scene ${index}`,
         motionPrompt: `Move camera for scene ${index}`,
-        durationSeconds: [6, 8, 8][index - 1],
+        durationSeconds: [8, 8, 8][index - 1],
         narration: `Narration for scene ${index}`
       }))
     }); },
@@ -311,7 +312,7 @@ test('each scene receives its own narration and duration', async t => {
   const f = await fixture(t);
   await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
   const clips = f.calls.filter(c => c[0] === 'video');
-  assert.deepEqual(clips.map(c => c[2]), [6, 8, 8]);
+  assert.deepEqual(clips.map(c => c[2]), [8, 8, 8]);
   clips.forEach((clip, index) => assert.ok(clip[1].includes(`Narration for scene ${index + 1}`)));
 });
 
@@ -419,6 +420,7 @@ test('legacy paid jobs retain stored six-second closing scenes on finalization r
   const f = await fixture(t, { failAssembly: true });
   await fetch(`${f.base}/api/ai-commercials/generate`, { method: 'POST', body: form() });
   const [job] = await f.db.QuickAdGeneration.find({ userId: 'owner' });
+  job.sceneAssets[0].durationSeconds = 6;
   job.sceneAssets[2].durationSeconds = 6;
   await f.db.QuickAdGeneration.updateOne({ id: job.id }, { $set: { sceneAssets: job.sceneAssets } });
   const { claimFinalization } = require('../services/aiCommercialRecovery');

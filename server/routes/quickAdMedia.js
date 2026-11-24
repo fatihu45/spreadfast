@@ -144,30 +144,35 @@ function createQuickAdMediaRouter({ authenticate = authenticateToken, stream = s
       const page = Math.min(100000, Math.max(1, Math.floor(Number(req.query.page) || 1)));
       const skip = (page - 1) * limit;
       const user = await DB.User.findOne({ id: req.user.id });
-      const query = { userId: req.user.id, deletedAt: { $exists: false }, ...(req.query.all === 'true' ? {} : { provider: { $ne: 'ai-commercials' } }) };
-      if (req.query.type === 'commercial') query.provider = 'ai-commercials';
-      if (req.query.type === 'fashion') { query.provider = { $ne: 'ai-commercials' }; query.style = 'fashion_studio'; }
-      if (req.query.type === 'quick') { query.provider = { $ne: 'ai-commercials' }; query.style = { $ne: 'fashion_studio' }; }
+      const unified = req.query.all === 'true' || req.query.studio !== undefined;
+      const query = { userId: req.user.id, deletedAt: { $exists: false }, ...(!unified ? { provider: { $ne: 'ai-commercials' } } : {}) };
+      const studio = req.query.studio || (req.query.type === 'all' ? '' : req.query.type);
+      if (studio) {
+        if (!['quick', 'fashion', 'auto', 'product', 'commercial'].includes(studio)) return res.status(400).json({ success: false, message: 'Invalid studio filter.' });
+        const legacy = studio === 'commercial' ? { provider: 'ai-commercials' } : studio === 'fashion' ? { style: 'fashion_studio' } : studio === 'quick' ? { provider: { $nin: ['ai-commercials', 'studios'] }, style: { $ne: 'fashion_studio' } } : null;
+        if (unified) delete query.provider;
+        query.$or = [{ studioType: studio }, ...(legacy ? [{ studioType: { $exists: false }, ...legacy }] : [])];
+      }
       const found = await DB.QuickAdGeneration.find(query).sort({ createdAt: -1, id: -1 }).skip(skip).limit(limit + 1);
       const rows = await Promise.all(found.slice(0, limit).map(g => settleExpired(DB, g)));
-      if (req.query.all === 'true') return res.set('Cache-Control', 'no-store').json({ success: true, generations: rows.map(g => publicGeneration(g, user)), hasMore: found.length > limit, page });
-      res.set('Cache-Control', 'no-store').json({ success: true, hasMore: found.length > limit, page, generations: rows.map(g => ({
-        recoveryAvailable: recoverable(g),
-        brandingRetryAvailable: g.status === 'completed' && g.brandingStatus === 'failed',
-        generationId: g.id,
-        style: g.style,
-        status: g.status,
-        stage: g.stage || (g.status === 'completed' ? 'completed' : 'queued'),
-        freePreview: !!g.freePreview,
-        creditUsed: !!g.creditUsed,
-        downloadable: canDownloadGeneration(g, user),
-        createdAt: g.createdAt,
-        completedAt: g.completedAt,
-        thumbnail: g.commercialImage?.url || g.imageUrl || null,
-        model: g.model,
-        brandingRevision: g.brandingRevision || 0
-      })) });
+      res.set('Cache-Control', 'no-store').json({ success: true, hasMore: found.length > limit, page,
+        generations: rows.map(g => {
+          const { videoUrl, previewPath, requestId, ...metadata } = publicGeneration(g, user);
+          return { ...metadata, thumbnail: g.commercialImage?.url || g.imageUrl || null,
+            model: g.model, brandingRevision: g.brandingRevision || 0 };
+        }) });
     } catch (error) { safeError(res, error); }
+  });
+  router.patch('/generations/:id', authenticate, quickAdAccountOnly, async (req,res) => {
+    try {
+      const generation = await owned(req);
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+      if (!title || title.length > 100 || /[\u0000-\u001f\u007f]/.test(title)) return res.status(400).json({success:false,message:'Enter a title of 1–100 characters.'});
+      if (generation.status === 'pending') return res.status(409).json({success:false,message:'Wait for generation to finish.'});
+      const result = await req.app.locals.db.QuickAdGeneration.updateOne({id:generation.id,userId:req.user.id,status:generation.status,deletedAt:{$exists:false}},{$set:{title}});
+      if (!result.matchedCount) return res.status(409).json({success:false,message:'This ad changed. Refresh and try again.'});
+      res.json({success:true});
+    } catch(error) { safeError(res,error); }
   });
   // Retain billing/idempotency records and assets used by existing campaigns.
   router.delete('/generations/:id', authenticate, quickAdAccountOnly, async (req, res) => {

@@ -38,7 +38,7 @@ afterEach(() => {
 test.each([null, { role: 'company' }, { role: 'promoter' }])('AI product links work for every audience (%j)', user => {
   render(user);
   const links = [...host.querySelectorAll('.landing-hero-actions a')];
-  expect(links.map(a => a.getAttribute('href'))).toEqual(['/quick-ad', '/ai-commercials']);
+  expect(links.map(a => a.getAttribute('href'))).toEqual(['/create', '#studios']);
   expect(host.textContent).not.toContain('Start a Campaign');
   expect(host.textContent).not.toContain('Earn with SpreadFast');
 });
@@ -52,7 +52,7 @@ test('keeps header destinations, existing support links and working section anch
     expect(document.getElementById(href.slice(1))).not.toBeNull();
   });
   expect(host.querySelectorAll('h1')).toHaveLength(1);
-  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('AI Advertising. Made Simple.');
+  expect(host.querySelector('h1').textContent.replace(/\s+/g, ' ')).toBe('AI advertising, Made simple');
 });
 
 test('mobile navigation opens and closes by Escape with focus restored', () => {
@@ -79,8 +79,8 @@ test('FAQ accordion retains its answers and accessible expansion state', () => {
 });
 
 test.each([
-  [{ role: 'company' }, '/ai-commercials', 'Create Ad'],
-  [{ role: 'promoter' }, '/ai-commercials', 'Create Ad'],
+  [{ role: 'company' }, '/create', 'Create Ad'],
+  [{ role: 'promoter' }, '/create', 'Create Ad'],
   [{ role: 'company', email: process.env.REACT_APP_ADMIN_EMAIL || 'admin@spreadfast.com' }, '/admin-portal', 'Admin Dashboard'],
 ])('signed-in header opens the account home for %j', (user, destination, label) => {
   render(user);

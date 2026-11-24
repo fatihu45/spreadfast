@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { accountSummary, fail } = require('./quickAdCredits');
 
-const recoverable = job => job && !job.deletedAt && job.provider !== 'ai-commercials' &&
+const recoverable = job => job && !job.deletedAt && !['ai-commercials', 'studios'].includes(job.provider) &&
   job.status === 'failed' && !!(job.media?.publicId || job.videoRequestId);
 
 async function settleExpired(DB, job, now = Date.now()) {

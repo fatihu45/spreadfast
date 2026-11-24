@@ -5,6 +5,7 @@ import { AppShell, UserAvatar, Button } from './ui';
 import NavigationItems from './ui/NavigationItems';
 import UiIcon from './ui/UiIcon';
 import './DashboardShell.css';
+import './DashboardExperience.css';
 import AccountSettings from './AccountSettings';
 
 export default function DashboardShell({ children }) {
@@ -16,17 +17,13 @@ export default function DashboardShell({ children }) {
   const openProfile = () => profile.current?.showModal();
   const handleLogout = () => { logout(); navigate('/'); };
   const item = (id, label, to, icon, active) => ({ id, label, to, icon: <UiIcon name={icon} />, active });
-  const quickAdsPath = isBusiness ? '/company/quick-ads' : '/promoter/quick-ads';
   const navigation = [
-    item('create-ads', 'Create Ads', '/ai-commercials', 'video', ['/ai-commercials'].includes(location.pathname)),
-    item('quick-ads', 'Quick Ads', quickAdsPath, 'star',
-      ['/company/quick-ads', '/promoter/quick-ads', '/quick-ad', '/quickads'].includes(location.pathname.replace(/\/+$/, ''))),
+    item('create-ads', 'Create', '/create', 'video', location.pathname === '/create' || location.pathname.startsWith('/studios/') || location.pathname.includes('quick-ad') || location.pathname === '/ai-commercials'),
     item('my-ads', 'My Ads', '/my-ads', 'image', location.pathname === '/my-ads'),
     item('credits', 'Credits', '/quickads/credits', 'wallet', location.pathname === '/quickads/credits'),
   ];
   navigation.push({ id: 'profile', label: 'Profile', onClick: openProfile, icon: <UiIcon name="user" /> });
   const footerItems = [
-    { id: 'settings', label: 'Settings', onClick: openProfile, icon: <UiIcon name="settings" /> },
     { id: 'logout', label: 'Log out', onClick: handleLogout, icon: <UiIcon name="logout" /> },
   ];
 
@@ -35,7 +32,7 @@ export default function DashboardShell({ children }) {
     const target = ['#company-campaigns', '#create-campaign'].includes(location.hash)
       ? document.getElementById(location.hash.slice(1)) : null;
     if (target) { target.scrollIntoView({ block: 'start' }); target.focus({ preventScroll: true }); }
-    else if (location.pathname === '/company' && !location.hash) window.scrollTo({ top: 0 });
+    else if (!location.hash) window.scrollTo({ top: 0 });
   }, [location.pathname, location.hash, location.key]);
 
   const brand = <Link to="/" aria-label="SpreadFast home" className="sf-dashboard-logo">

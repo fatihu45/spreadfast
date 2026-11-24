@@ -1,10 +1,11 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Button, Card } from '../components/ui';
+import GenerationProgress from '../components/GenerationProgress';
 import UiIcon from '../components/ui/UiIcon';
-import { quickAdsHome } from '../utils/quickAdsApi';
 import './AICommercials.css';
+import './StudioPolish.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const TIER_COST = { standard: 4, premium: 7 };
@@ -56,6 +57,9 @@ function validateImageFile(file, label = 'Image') {
 export default function AICommercials({ initialTab = 'create' }) {
   const { token, user } = useContext(AuthContext);
   const [tab, setTab] = useState(initialTab);
+  const [searchParams] = useSearchParams();
+  const resumeId = searchParams.get('job');
+  const [resumePending, setResumePending] = useState(!!resumeId);
   const [brandingEnabled, setBrandingEnabled] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const creditsDialogRef = useRef(null);
@@ -101,8 +105,9 @@ export default function AICommercials({ initialTab = 'create' }) {
     return () => window.clearInterval(interval);
   }, [isSubmitting, retryingId, activeJob?.stage, activeJob?.completedScenes]);
 
-  const requiredCredits = useMemo(() => TIER_COST[tier] || TIER_COST.standard, [tier]);
+  const requiredCredits = useMemo(() => balance.tierCredits?.[tier] || TIER_COST[tier], [tier, balance.tierCredits]);
   const canAfford = Number(balance.quickAdCredits || 0) >= requiredCredits;
+  const tierAvailable = balance.tierAvailability?.[tier] !== false;
 
   useEffect(() => {
     if (!showCredits) return undefined;
@@ -353,6 +358,30 @@ export default function AICommercials({ initialTab = 'create' }) {
     return () => { stopped = true; window.clearInterval(timer); };
   }, [isSubmitting, token]);
 
+  useEffect(() => {
+    if (!resumeId || !token) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const check = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/quick-ads/generations/${encodeURIComponent(resumeId)}`, {
+          headers: { Authorization: `Bearer ${token}` }, credentials: 'include', signal: controller.signal
+        });
+        const job = await response.json();
+        if (controller.signal.aborted) return;
+        if (!response.ok || !job.success) throw new Error('Could not load this commercial.');
+        setActiveJob(job);
+        setResumePending(job.status === 'pending');
+        if (job.status === 'pending') timer = window.setTimeout(check, 3000);
+        else setTab('history');
+      } catch (error) {
+        if (!controller.signal.aborted) { setError('Could not load saved progress. Open My Ads to try again.'); setResumePending(false); }
+      }
+    };
+    check();
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [resumeId, token]);
+
   const handleLogoChange = (input) => {
     const file = input?.files?.[0] || null;
     const validation = file?.size > 2 * 1024 * 1024 ? 'Logo must be 2 MB or smaller.' : validateImageFile(file, 'Logo');
@@ -366,7 +395,7 @@ export default function AICommercials({ initialTab = 'create' }) {
   };
 
   const handleSubmit = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || resumePending) return;
     if (!token) {
       setError('Please log in before generating a commercial.');
       return;
@@ -435,8 +464,8 @@ export default function AICommercials({ initialTab = 'create' }) {
       }
 
       submissionKeyRef.current = null;
-      setStatus('Commercial ready');
-      setNotice('Your AI commercial is ready to review.');
+      setStatus(data.status === 'pending' ? 'Commercial queued' : 'Commercial ready');
+      setNotice(data.status === 'pending' ? 'Your commercial is saved and processing. You can return through My Ads.' : 'Your AI commercial is ready to review.');
       setTab('history');
       await loadCredits();
       await loadHistory();
@@ -456,6 +485,7 @@ export default function AICommercials({ initialTab = 'create' }) {
 
 
   return <main className="sf-commercials">
+    {resumeId && <section aria-label="Saved commercial progress">{resumePending && activeJob && <GenerationProgress job={activeJob} />}<Link to="/my-ads">Back to My Ads</Link></section>}
     <header className="sf-commercials__header">
       <div>
         <span className="sf-commercials__eyebrow">SPREADFAST AI STUDIO</span>
@@ -463,7 +493,7 @@ export default function AICommercials({ initialTab = 'create' }) {
         <p>Product photos and a few words. We handle the story, visuals and finishing.</p>
       </div>
       <div className="sf-commercials__actions">
-        <Link to={quickAdsHome(user?.role)} className="sf-commercials__secondary">Quick Ads <UiIcon name="arrow-right" /></Link>
+        <Link to="/create" className="sf-commercials__secondary">← All studios</Link>
         <Link to="/quickads/credits" className="sf-commercials__credit"><UiIcon name="wallet" /> Buy credits</Link>
       </div>
     </header>
@@ -533,7 +563,7 @@ export default function AICommercials({ initialTab = 'create' }) {
                       {isCompleted && job.downloadable
                         ? <button type="button" className="sf-commercials__icon-button" onClick={() => downloadJob(job)} aria-label={`Download ${title}`} title="Download"><UiIcon name="download" /></button>
                         : <button type="button" className="sf-commercials__icon-button" disabled aria-label="Download unavailable" title="Download unavailable"><UiIcon name="download" /></button>}
-                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => isCommercial ? editJob(job) : window.location.assign(`${quickAdsHome(user?.role)}#quick-ad-history-title`)} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
+                      <button type="button" className="sf-commercials__icon-button" disabled={rawStatus === 'pending'} onClick={() => isCommercial ? editJob(job) : window.location.assign('/my-ads')} aria-label={`Edit details for ${title}`} title="Edit details"><UiIcon name="edit" /></button>
                       <button type="button" className="sf-commercials__icon-button sf-commercials__icon-button--danger" disabled={rawStatus === 'pending'} onClick={() => deleteJob(job)} aria-label={`Delete ${title}`} title="Delete"><UiIcon name="trash" /></button>
                     </div>
                     {(job.commercialRetryAvailable || job.finalizationRetryAvailable) && <button type="button" className="sf-commercials__retry-button" disabled={!!retryingId || isSubmitting} onClick={() => retryFinalization(job)}>
@@ -597,8 +627,8 @@ export default function AICommercials({ initialTab = 'create' }) {
             <section className="sf-commercials__panel">
               <div className="sf-commercials__step"><span>2</span><div><h2>Video quality</h2><p>Choose the generation tier for your commercial.</p></div></div>
               <div className="sf-commercials__tiers">
-                <button type="button" onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>4 credits</b></button>
-                <button type="button" onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>7 credits</b></button>
+                <button type="button" aria-pressed={tier === 'standard'} onClick={() => setTier('standard')} className={tier === 'standard' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'standard' ? '✓' : ''}</span><strong>Standard</strong><span>Balanced quality for everyday campaigns</span><b>{balance.tierCredits?.standard || TIER_COST.standard} credits</b></button>
+                <button type="button" aria-pressed={tier === 'premium'} onClick={() => setTier('premium')} className={tier === 'premium' ? 'is-selected' : ''}><span className="sf-commercials__tier-check">{tier === 'premium' ? '✓' : ''}</span><strong>Premium</strong><span>Enhanced motion and cinematic detail</span><b>{balance.tierCredits?.premium || TIER_COST.premium} credits</b></button>
               </div>
             </section>
 
@@ -608,17 +638,19 @@ export default function AICommercials({ initialTab = 'create' }) {
               <small>{user?.role ? `Available credits: ${balance.quickAdCredits || 0}` : 'Log in to view your credit balance'}</small>
             </div>
 
-            <Button fullWidth size="lg" disabled={isSubmitting} onClick={handleSubmit}>
+            <Button fullWidth size="lg" disabled={isSubmitting || resumePending || !tierAvailable} onClick={handleSubmit}>
               <UiIcon name="sparkles" /> {isSubmitting ? 'Generating...' : `Generate commercial · ${requiredCredits} credits`}
             </Button>
             {isSubmitting && activeJob?.status === 'pending' && <button type="button" className="sf-commercials__secondary" disabled={!!cancellingId || activeJob.cancellationRequested} onClick={() => cancelJob(activeJob)}>{activeJob.cancellationRequested ? 'Cancelling...' : 'Cancel generation'}</button>}
-            <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed: 4 for Standard or 7 for Premium.</p>
+            {!tierAvailable && <p role="status">This tier is awaiting pricing or provider configuration.</p>}
+            {!canAfford && <p className="sf-commercials__footnote">You have {balance.quickAdCredits || 0} credits available. Buy more to generate this ad.</p>}
+            <p className="sf-commercials__footnote">Credits are only used when a generation is successfully completed. Your selected tier’s current cost is shown above.</p>
           </div>
 
           <aside className="sf-commercials__preview">
             <div className="sf-commercials__preview-top"><span>YOUR PRODUCT</span><span className="sf-commercials__live"><i/> {isSubmitting ? 'Creating commercial' : 'Ad details'}</span></div>
             <div className={`sf-commercials__preview-stage${isSubmitting ? ' is-generating' : ''}`}>
-              {photo ? <img src={photo} alt="Product preview" /> : <div className="sf-commercials__preview-placeholder"><span><UiIcon name="video" /></span><strong>Your commercial starts here</strong><p>Upload a photo and tell us what you want to advertise.</p></div>}
+              {photo ? <img src={photo} alt="Product preview" /> : <figure className="sf-example-preview"><img src="/studios/commercial-story.webp" alt="Illustrative video commercial with a Nigerian presenter introducing a drink" /><figcaption><strong>Your commercial starts here</strong><span>Illustrative concept · Upload a photo to tell your story.</span></figcaption></figure>}
               {isSubmitting ? (
                 <div className="sf-commercials__progress-overlay" role="status" aria-live="off" aria-label={`Estimated commercial progress ${displayProgress} percent. ${status || 'Preparing your commercial'}`}>
                   <div className="sf-commercials__progress-orbit" aria-hidden="true"><span /></div>
@@ -628,12 +660,12 @@ export default function AICommercials({ initialTab = 'create' }) {
                   <div className="sf-commercials__progress-track" aria-hidden="true"><div style={{ width: `${displayProgress}%` }} /></div>
                   <small className="sf-commercials__progress-disclaimer">Estimated progress · final video will appear in My Ads</small>
                 </div>
-              ) : <span className="sf-commercials__duration">22 sec commercial</span>}
+              ) : <span className="sf-commercials__duration">Up to 24 sec commercial</span>}
             </div>
             <div className="sf-commercials__preview-details">
               <div><span>PRODUCT</span><strong>{(brandingEnabled && productName) || 'Your product'}</strong></div>
               <div><span>BRAND</span><strong>{(brandingEnabled && brandName) || 'Your brand'}</strong></div>
-              <div><span>QUALITY</span><strong>{tier === 'standard' ? `Standard · 4 credits` : `Premium · 7 credits`}</strong></div>
+              <div><span>QUALITY</span><strong>{`${tier === 'standard' ? 'Standard' : 'Premium'} · ${requiredCredits} credits`}</strong></div>
             </div>
             {brandingEnabled && logo && <div className="sf-commercials__logo-preview"><span>Logo uploaded</span><img src={logo} alt="Brand logo preview" /></div>}
             {photoFiles.length > 0 && <small className="sf-commercials__file-meta">{photoFiles.length} product photo{photoFiles.length > 1 ? 's' : ''} · {toFileSizeLabel(photoFiles.reduce((sum, file) => sum + file.size, 0))}</small>}

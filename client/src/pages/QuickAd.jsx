@@ -1,29 +1,33 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Alert, Button } from '../components/ui';
 import UiIcon from '../components/ui/UiIcon';
 import { quickAdsUrl, quickAdsAuth, generationVideoUrl, newGenerationKey, canUseQuickAds } from '../utils/quickAdsApi';
-import QuickAdBranding, { appendBranding } from '../components/QuickAdBranding';
+import QuickAdBranding, { BrandingSwitch, appendBranding } from '../components/QuickAdBranding';
+import CreditPurchaseDialog from '../components/CreditPurchaseDialog';
 import QuickAdHistoryVideo from '../components/QuickAdHistoryVideo';
 import './QuickAd.css';
 import './QuickAdCredits.css';
+import './StudioPolish.css';
 
 const styles = [
-  { id: 'food', name: 'Food Burst', description: 'Make food look fresh and irresistible.', image: '/dynamic_grilled_salmon_bowl_with_lemon_splash.png', caption: 'Fresh energy' },
-  { id: 'reveal', name: 'Product Reveal', description: 'A cinematic product reveal.', image: '/luxury_amber_perfume_spotlight.png', caption: 'In the spotlight' },
-  { id: 'studio', name: 'Clean Studio', description: 'Simple, premium product motion.', image: '/luxury_skincare_bottle_in_soft_beige_studio.png', caption: 'Less. But better.' },
-  { id: 'social', name: 'Attention Grabber', description: 'Fast movement made for social media.', image: '/energetic_citrus_juice_splash.png', caption: 'Make them look.' },
-  { id: 'fashion_studio', name: 'Fashion Studio', description: 'Front & back photos into a clean fashion ad.', image: '/fashion-studio-kaftan.png', caption: 'Front to back.' },
+  { id: 'food', name: 'Food Burst', description: 'Make food look fresh and irresistible.', image: '/studios/quick.webp', caption: 'Fresh energy' },
+  { id: 'reveal', name: 'Product Reveal', description: 'A cinematic product reveal.', image: '/studios/commercial.webp', caption: 'In the spotlight' },
+  { id: 'studio', name: 'Clean Studio', description: 'Simple, premium product motion.', image: '/studios/product.webp', caption: 'Less. But better.' },
+  { id: 'social', name: 'Attention Grabber', description: 'Fast movement made for social media.', image: '/studios/social.webp', caption: 'Make them look.' },
+  { id: 'fashion_studio', name: 'Fashion Studio', description: 'Front & back photos into a clean fashion ad.', image: '/studios/mannequin.webp', caption: 'Front to back.' },
 ];
 const GENERATION_ERROR = "We couldn't generate your advert. Please try again.";
 
-export default function QuickAd() {
+export default function QuickAd({ dedicatedFashion = false, embedded = false }) {
   const location = useLocation();
   const { token, user } = useContext(AuthContext);
   const canGenerate = canUseQuickAds(user?.role);
-  const navigate = useNavigate();
+  const [showCredits, setShowCredits] = useState(false);
+  const [creditRevision, setCreditRevision] = useState(0);
+  const resumeId = new URLSearchParams(location.search).get('job');
   const [historyPage, setHistoryPage] = useState(1);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [recoveringId, setRecoveringId] = useState(null);
@@ -36,7 +40,7 @@ export default function QuickAd() {
   const [product, setProduct] = useState(null);
   const [frontPhoto, setFrontPhoto] = useState(null);
   const [backPhoto, setBackPhoto] = useState(null);
-  const [styleId, setStyleId] = useState('food');
+  const [styleId, setStyleId] = useState(dedicatedFashion ? 'fashion_studio' : 'food');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState('');
@@ -64,8 +68,9 @@ export default function QuickAd() {
   const generating = phase === 'generating';
   const ready = phase === 'ready';
   const downloadable = ready && result?.downloadable === true;
-  const outOfCredits = balance && !balance.freePreviewAvailable && balance.quickAdCredits < 1;
-  const buyCredits = () => navigate('/quickads/credits', { state: { outOfCredits } });
+  const freePreviewAvailable = balance?.freePreviewAvailable && !isFashionStyle;
+  const outOfCredits = balance && !freePreviewAvailable && balance.quickAdCredits < 1;
+  const buyCredits = () => setShowCredits(true);
   const stageSteps = [
     { key: 'preparing_image', label: 'Preparing your product' },
     { key: 'creating_scene', label: 'Building your commercial scene' },
@@ -73,7 +78,7 @@ export default function QuickAd() {
     { key: 'finalizing', label: 'Finishing your Quick Ad' },
     { key: 'completed', label: 'Your Quick Ad is ready' },
   ];
-  const normalizedStage = generationStage === 'queued' ? 'preparing_image' : generationStage;
+  const normalizedStage = ({queued:'preparing_image',preparing_images:'preparing_image',generating_images:'creating_scene',generating_video:'creating_video',assembling_video:'finalizing',applying_branding:'finalizing'})[generationStage] || generationStage;
   const currentStageIndex = Math.max(0, stageSteps.findIndex(step => step.key === normalizedStage));
   const stageLabel = stageSteps.find(step => step.key === normalizedStage)?.label || stageSteps[0].label;
   const previewImage = stageImage || (isFashionStyle ? frontPhoto?.url : product?.url) || null;
@@ -98,7 +103,30 @@ export default function QuickAd() {
       catch { if (!controller.signal.aborted) setError('Could not load your credits. Refresh this page to try again.'); }
     })();
     return () => controller.abort();
-  }, [canGenerate, token]);
+  }, [canGenerate, token, creditRevision]);
+  useEffect(() => {
+    const refresh = () => setCreditRevision(value => value + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
+  useEffect(() => {
+    if (!resumeId || !token) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const check = async () => {
+      try {
+        const { data } = await axios.get(quickAdsUrl(`/generations/${encodeURIComponent(resumeId)}`), { headers: quickAdsAuth(token), signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (data.status === 'completed') showResult(data);
+        else if (data.status === 'pending') {
+          setPhase('generating'); setGenerationStage(data.stage); setStageImage(data.imageUrl || '');
+          timer = setTimeout(check, 2500);
+        } else { setPhase('idle'); setError('This ad could not finish. Open My Ads to retry saved work.'); }
+      } catch { if (!controller.signal.aborted) setError('Could not open this saved ad. Please try again from My Ads.'); }
+    };
+    check();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [resumeId, token]); // eslint-disable-line react-hooks/exhaustive-deps
   function rememberKey(key) {
     setPendingKey(key);
     try { if (key) sessionStorage.setItem(storageKey, key); else sessionStorage.removeItem(storageKey); } catch { /* Current-page duplicate protection remains active. */ }
@@ -375,7 +403,8 @@ export default function QuickAd() {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      showResult(data);
+      if (data.status === 'pending') { setGenerationStage(data.stage || 'queued'); setNotice('Your ad is saved and processing. You can return through My Ads.'); }
+      else showResult(data);
     } catch (failure) {
       if (!controller.signal.aborted) {
         const status = failure.response?.status;
@@ -384,7 +413,7 @@ export default function QuickAd() {
         // idempotency key so the user can retry with the same selected product/logo.
         // Keep it on timeouts/network drops because the server may still be working.
         if (!timedOut && [400, 401, 403, 413, 422, 502, 503].includes(status)) rememberKey('');
-        if (failure.response?.data?.code === 'NO_QUICK_AD_CREDITS') { navigate('/quickads/credits', { state: { outOfCredits: true } }); }
+        if (failure.response?.data?.code === 'NO_QUICK_AD_CREDITS') { setShowCredits(true); setCreditRevision(value => value + 1); }
         setError(timedOut
           ? 'Your advert is taking longer than expected and may still be processing. Please check its status before trying again to avoid creating a duplicate advert.'
           : GENERATION_ERROR);
@@ -440,25 +469,26 @@ export default function QuickAd() {
     }
   }
 
-  return <section className="quick-ad" aria-labelledby="quick-ad-title">
-    <header className="quick-ad-heading">
+  return <section className={`quick-ad${embedded ? " is-embedded" : ""}`} aria-label={embedded ? "Create your video" : undefined} aria-labelledby={embedded ? undefined : "quick-ad-title"}>
+    {!dedicatedFashion && <Link className="sf-studio-back" to="/create">← All studios</Link>}
+    {!embedded && <header className="quick-ad-heading">
       <div className="quick-ad-heading-line">
-        <h1 id="quick-ad-title">Quick Ads</h1>
+        <h1 id="quick-ad-title">{dedicatedFashion ? 'Invisible Mannequin' : 'Quick Ads'}</h1>
         <span className="quick-ad-studio-badge">AI studio</span>
       </div>
       <p>Turn your product photos into an ad.</p>
       {isFashionStyle && <p className="quick-ad-fashion-hint">Photograph the same outfit from the front and back, fully visible in good lighting.</p>}
-    </header>
+    </header>}
     {canGenerate && <div className="quick-ad-credit-summary">
       <div className="quick-ad-credit-copy">
         <span className="quick-ad-credit-icon"><UiIcon name="wallet" /></span>
         <div><strong>{balance ? `${balance.quickAdCredits} credits available` : 'Loading credits...'}</strong>
-          {balance?.freePreviewAvailable && <span className="quick-ad-free-preview">1 free preview available</span>}
+          {freePreviewAvailable && <span className="quick-ad-free-preview">1 free preview available</span>}
         </div>
       </div>
       <Button variant="secondary" onClick={buyCredits}>Buy Credits</Button>
     </div>}
-    {balance?.freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Buy any credit plan to unlock its download.</p>}
+    {freePreviewAvailable && <p className="quick-ad-credit-note">Your first Quick Ad is free to preview. Buy any credit plan to unlock its download.</p>}
     {pendingKey && !generating && <Alert>Your last generation needs confirmation. <Button variant="secondary" disabled={saving} onClick={recover}>Check generation</Button></Alert>}
     <div className="quick-ad-layout">
       <div className="quick-ad-editor">
@@ -499,35 +529,35 @@ export default function QuickAd() {
             </label>
             <p id="quick-ad-file-hint">JPG, PNG, WEBP · Up to 8 MB</p>
           </div>}
-          <QuickAdBranding value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
-          <div className="quick-ad-specifications">
+          <BrandingSwitch value={branding} onChange={setBranding} disabled={generating || !!pendingKey || brandingSaving} />
+          <details className="quick-ad-specifications sf-studio-extras"><summary>More options</summary>
             <label htmlFor="quick-ad-additional-instructions">Additional instructions <span>Optional</span></label>
             <p id="quick-ad-instructions-hint">Tell the AI what to preserve or pay attention to, such as exact fabric details, product features, colours, or styling. Your uploaded photos remain the source of truth.</p>
             <textarea id="quick-ad-additional-instructions" value={additionalInstructions} onChange={event => setAdditionalInstructions(event.target.value.slice(0, 500))} maxLength={500} rows={3} placeholder="e.g. Keep the exact embroidery and button placement. Do not add pockets or change the sleeve shape." disabled={generating || !!pendingKey || brandingSaving} aria-describedby="quick-ad-instructions-hint quick-ad-instructions-count" />
             <div className="quick-ad-specifications-footer"><span>Works with every ad style</span><span id="quick-ad-instructions-count">{additionalInstructions.length}/500</span></div>
-          </div>
+          </details>
           {error && <Alert tone="error">{error}</Alert>}
         </section>
-        <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
+        {!dedicatedFashion && <section className="quick-ad-panel" aria-labelledby="quick-ad-style-title">
           <div className="quick-ad-step"><span aria-hidden="true">2</span><div><h2 id="quick-ad-style-title">Choose your style</h2><p>Find the feeling that fits your product.</p></div></div>
           <fieldset className="quick-ad-templates" disabled={generating || brandingSaving}>
             <legend className="sr-only">Ad style</legend>
-            {styles.map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
+            {styles.filter(style => dedicatedFashion ? style.id === 'fashion_studio' : style.id !== 'fashion_studio').map(style => <label key={style.id} className={'quick-ad-template' + (styleId === style.id ? ' is-selected' : '')}>
               <input type="radio" name="quick-ad-style" value={style.id} checked={styleId === style.id} onChange={() => { setStyleId(style.id); reset(); }} />
               <span className={'quick-ad-art' + (style.id === 'fashion_studio' ? ' is-fashion' : '')} aria-hidden="true"><img className="quick-ad-style-image" src={style.image} alt="" draggable={false} /></span>
               <span className="quick-ad-template-copy"><strong>{style.name}</strong><span>{style.description}</span></span>
               {styleId === style.id && <span className="quick-ad-selected" aria-hidden="true"><UiIcon name="check" /></span>}
             </label>)}
           </fieldset>
-        </section>
+        </section>}
         <div className="quick-ad-generate">
           <Button fullWidth size="lg" disabled={!canGenerate || !balance || (!hasRequiredPhotos && !outOfCredits) || generating || saving || brandingSaving || !!pendingKey} onClick={outOfCredits ? buyCredits : generate} aria-describedby="quick-ad-generation-note">
-            {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{outOfCredits ? 'Buy Credits' : balance?.freePreviewAvailable ? 'Create Free Preview' : 'Generate Quick Ad'} <UiIcon name="star" /></>}
+            {generating ? <><span className="quick-ad-spinner" aria-hidden="true" /> Creating your Quick Ad...</> : <>{freePreviewAvailable ? 'Create Free Preview' : dedicatedFashion ? 'Generate video · 1 credit' : 'Generate Quick Ad · 1 credit'} <UiIcon name="star" /></>}
           </Button>
           <p id="quick-ad-generation-note">{canGenerate ? 'Generation can take a few minutes. Keep this page open.' : 'A company or promoter account is required to generate Quick Ads.'}</p>
         </div>
       </div>
-      <aside ref={previewPanel} className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
+      {(!embedded || previewImage || generating || ready) && <aside ref={previewPanel} className="quick-ad-preview-panel" aria-labelledby="quick-ad-preview-title">
         <div className="quick-ad-preview-heading">
           <div><h2 id="quick-ad-preview-title">Your creative preview</h2><p>See your product take the spotlight.</p></div>
           <span className={'quick-ad-processing-status' + (generating ? ' is-active' : '')}><i aria-hidden="true" />{generating ? 'Processing' : ready ? 'Ready' : 'Preview'}</span>
@@ -538,7 +568,7 @@ export default function QuickAd() {
             onError={() => setNotice(!downloadable ? 'Choose Preview Again to reload your preview.' : 'The preview could not play. Open the video below to watch or save it.')} />
             : previewImage ? <img className="quick-ad-stage-image" src={previewImage} alt={stageImage ? 'Commercial scene preview' : 'Selected product preview'}
               onError={() => { if (stageImage) setStageImage(''); }} />
-              : <div className="quick-ad-placeholder"><span className="quick-ad-round-icon"><UiIcon name="image" /></span><strong>Your preview starts here</strong><p>Upload a product photo to see it in your creative workspace.</p></div>}
+              : <figure className="sf-example-preview"><img src={styles.find(style=>style.id===styleId)?.image} alt={isFashionStyle ? "Illustrative invisible mannequin garment presentation" : "Illustrative product campaign concept"} /><figcaption><strong>Your preview starts here</strong><span>Illustrative concept · Upload your photo to make it yours.</span></figcaption></figure>}
           {stageImage && !ready && <span className="quick-ad-scene-tag">Commercial scene</span>}
           {generating && <div className="quick-ad-processing-label"><span className="quick-ad-processing-sparkle"><UiIcon name="star" /></span><span>{stageLabel}</span></div>}
         </div>
@@ -570,9 +600,9 @@ export default function QuickAd() {
         </div>
         {notice && <Alert>{notice}</Alert>}
         {downloadable && videoUrl && <a className="quick-ad-open-video" href={videoUrl} target="_blank" rel="noopener noreferrer">Open video to watch or save</a>}
-      </aside>
+      </aside>}
     </div>
-    <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
+    {!embedded && <section className="quick-ad-history" aria-labelledby="quick-ad-history-title">
       <div className="quick-ad-history-header">
         <h2 id="quick-ad-history-title">My Quick Ads</h2><div><Button variant="secondary" disabled={historyPage === 1} onClick={() => loadHistory(historyPage - 1)}>Previous</Button><span> Page {historyPage} </span><Button variant="secondary" disabled={!historyHasMore} onClick={() => loadHistory(historyPage + 1)}>Next</Button></div>
         {historyStatus === 'loading' && history.length > 0 && <span className="quick-ad-history-loading" role="status">Refreshing...</span>}
@@ -603,7 +633,8 @@ export default function QuickAd() {
             </article>
           ))}
         </div>}
-    </section>
-    <footer className="quick-ad-footer"><span className="quick-ad-round-icon"><UiIcon name="sun" /></span><div><strong>A little inspiration. A bigger impression.</strong><p>Give your product a moment in the spotlight.</p></div></footer>
+    </section>}
+    {embedded && <Link className="sf-library-primary" to="/my-ads">View your ads</Link>}
+    <CreditPurchaseDialog open={showCredits} onClose={() => setShowCredits(false)} balance={balance?.quickAdCredits || 0} requiredCredits={1} />
   </section>;
 }

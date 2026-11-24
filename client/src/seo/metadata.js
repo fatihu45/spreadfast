@@ -9,7 +9,7 @@ export const APP_PATHS = [
   '/dashboard', '/company', '/wallet', '/company/quick-ads', '/promoter/quick-ads',
   '/quick-ad', '/quickads', '/quickads/credits', '/promoter-dashboard',
   '/available-campaigns', '/submit-proof', '/admin-portal', '/campaigns',
-  '/ai-commercials', '/my-ads', '/email-preferences',
+  '/create', '/studios/fashion', '/studios/auto', '/studios/product', '/ai-commercials', '/my-ads', '/email-preferences',
 ];
 export function metadataForPath(pathname) {
   const path = pathname.replace(/\/+$/, '') || '/';

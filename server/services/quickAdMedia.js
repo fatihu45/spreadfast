@@ -61,7 +61,7 @@ async function assembleVideos(cloudinary, clips, generationId, endCardText = '')
     );
   }
   if (endCardText) {
-    const durations = clips.map(clip => [4, 6, 8].includes(clip.durationSeconds) ? clip.durationSeconds : 8);
+    const durations = clips.map(clip => [4, 5, 6, 8, 10].includes(clip.durationSeconds) ? clip.durationSeconds : 8);
     const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
     transformations.push(
       { overlay: { font_family: 'Arial', font_size: 42, font_weight: 'bold', text: endCardText.slice(0, 120) },
@@ -111,7 +111,13 @@ function canDownloadGeneration(generation, user) {
 }
 function publicGeneration(generation, user) {
   const recoveryAvailable = require('./quickAdRecovery').recoverable(generation);
-  const result = { success: true, recoveryAvailable, provider: generation.provider || 'fal', creditsUsed: generation.creditsUsed || (generation.creditUsed ? generation.creditCost || 1 : 0), generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+  const result = { success: true, recoveryAvailable, provider: generation.provider || 'fal', generationId: generation.id, style: generation.style, status: generation.status, stage: generation.stage || (generation.status === 'completed' ? 'completed' : 'queued'),
+    studioType: generation.studioType || (generation.provider === 'ai-commercials' ? 'commercial' : generation.style === 'fashion_studio' ? 'fashion' : 'quick'),
+    generationMode: generation.generationMode,
+    studioRetryAvailable: generation.provider === 'studios' && generation.status === 'failed' && !generation.deletedAt && !!generation.media?.publicId && (generation.finalizationRetries || 0) < 2 && (generation.generationMode !== 'auto_voiceover' || generation.studioAssets?.voice?.applied === true),
+    title: generation.title || generation.commercialDetails?.title || 'Your advertisement',
+    duration: generation.outputDurationSeconds || (generation.provider === 'ai-commercials' ? (generation.sceneAssets || []).reduce((sum, s) => sum + (s.durationSeconds || 0), 0) : 5),
+    creditCost: generation.creditCost || 1, creditsUsed: generation.creditsUsed || (generation.creditUsed ? generation.creditCost || 1 : 0),
     createdAt: generation.createdAt, completedAt: generation.completedAt,
     freePreview: generation.freePreview, creditUsed: generation.creditUsed,
     branding: publicBranding(generation.branding),
@@ -134,7 +140,7 @@ function publicGeneration(generation, user) {
     result.specifications = generation.commercialDetails.specifications;
     result.tier = generation.commercialDetails.tier;
     result.requiredCredits = generation.commercialDetails.requiredCredits;
-    result.title = generation.commercialDetails.title;
+    result.title = generation.title || generation.commercialDetails.title || 'Your advertisement';
     result.voiceover = generation.commercialDetails.voiceover;
     result.endCard = generation.commercialDetails.endCard;
     result.sceneImages = (generation.sceneAssets || []).map(scene => ({
